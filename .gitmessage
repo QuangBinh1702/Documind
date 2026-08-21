@@ -1,0 +1,23 @@
+# <type>(<scope>): <description>
+# |<---- toi da 50 ky tu ---------------------->|
+#
+# <body — giai thich CAI GI va TAI SAO, khong giai thich BANG CACH NAO>
+# |<---- goi dong o 72 ky tu ------------------------------------------>|
+#
+# Refs: US-xxx
+#
+# ─────────────────────────────────────────────────────────────────────
+# type   : feat fix docs refactor test build ci perf chore revert
+# scope  : auth notebook source extract ocr chunker text embed
+#          retrieval rerank answer citation cache chat worker api
+#          ui db eval spec docker
+#
+# Dong tieu de:
+#   - thuc menh lenh: "add" khong phai "added" hay "adds"
+#   - chu thuong sau dau hai cham
+#   - khong co dau cham cuoi cau
+#   - doc thu: "If applied, this commit will <description>"
+#
+# Mot commit lam MOT viec. Phai viet "and" nghia la hai commit.
+#
+# Day du: docs/COMMIT-CONVENTION.md
