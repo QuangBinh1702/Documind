@@ -21,7 +21,7 @@ def _timed(fn: Callable[[], None]) -> ComponentHealth:
     start = time.perf_counter()
     try:
         fn()
-    except Exception as exc:  # noqa: BLE001 — health check phải bắt hết
+    except Exception as exc:
         return ComponentHealth(
             status="down",
             detail=f"{type(exc).__name__}: {exc}"[:200],
@@ -87,7 +87,7 @@ def _probe_gpu() -> ComponentHealth:
             status="ok",
             detail=f"{name} — {used_gb:.1f}/{total_gb:.1f} GB",
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return ComponentHealth(status="down", detail=f"{type(exc).__name__}: {exc}"[:200])
 
 
