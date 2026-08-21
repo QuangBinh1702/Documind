@@ -528,7 +528,7 @@ LIMIT  :top_n;                          -- mặc định 50
 SELECT id, source_id, page_no, content,
        ts_rank_cd(tsv, query) AS score
 FROM   source_chunks,
-       to_tsquery('vi', :segmented_query) AS query   -- ĐÃ tách từ, cùng hàm với lúc index
+       CAST(:tsquery_text AS tsquery) AS query   -- dựng ở tầng ứng dụng, xem dưới
 WHERE  notebook_id = :notebook_id
   AND  (:source_ids IS NULL OR source_id = ANY(:source_ids))
   AND  tsv @@ query
@@ -536,13 +536,52 @@ ORDER  BY score DESC
 LIMIT  :top_n;
 ```
 
-**Bất đối xứng tách từ là lỗi im lặng nguy hiểm nhất ở bước này.** Cùng một hàm `segment()` phải dùng cho cả lúc index và lúc truy vấn. Có unit test khẳng định điều đó.
-
-Sinh `tsv` lúc index:
+### Index: KHÔNG tách từ
 
 ```python
-tsv = func.to_tsvector('vi', segment(chunk.content))   # "cơ_sở_dữ_liệu quan_hệ ..."
+tsv = func.to_tsvector("vi", chunk.content)   # văn bản gốc, đã chuẩn hoá NFC
 ```
+
+> 🔴 **Đừng nối từ ghép bằng gạch dưới.** Đã đo thật trên Postgres 17: bộ phân
+> tích coi `_` là ký tự phân tách, nên `to_tsvector('vi','cơ_sở_dữ_liệu')` cho
+> ra `'co' 'so' 'du' 'lieu'` rời rạc. Toàn bộ tách từ bị vô hiệu, và **hỏng im
+> lặng**. Xem `docs/decisions/0001-truy-xuat-tu-khoa-tieng-viet.md`.
+
+### Query: tách từ rồi dựng truy vấn cụm
+
+Việc giữ cụm từ ghép chuyển sang đường truy vấn, bằng toán tử liền kề `<->`:
+
+```python
+def build_tsquery(question: str) -> str:
+    """Cụm từ ghép -> phraseto_tsquery; từ đơn -> plainto_tsquery; nối bằng &&."""
+    parts = []
+    for token in segment(question):          # underthesea
+        if "_" in token:                     # từ ghép
+            phrase = token.replace("_", " ")
+            parts.append(f"phraseto_tsquery('vi', {literal(phrase)})")
+        else:
+            parts.append(f"plainto_tsquery('vi', {literal(token)})")
+    return " && ".join(parts)
+```
+
+Kết quả đo được, giải thích vì sao phải dùng truy vấn cụm:
+
+| Tài liệu | Truy vấn | `plainto_tsquery` | `phraseto_tsquery` |
+|---|---|---|---|
+| *"giáo trình cơ sở dữ liệu quan hệ"* | "cơ sở dữ liệu" | khớp ✓ | khớp ✓ |
+| *"cơ sở vật chất và dữ liệu thống kê"* | "cơ sở dữ liệu" | **khớp sai ✗** | không khớp ✓ |
+| *"Theo TCVN 5945:2005 thì nước thải…"* | "TCVN 5945:2005" | khớp ✓ | khớp ✓ |
+
+Ca thứ ba là US-010 AC-3 — trường hợp vector search thuần thường thất bại.
+`phraseto_tsquery('vi','TCVN 5945:2005')` sinh `'tcvn' <-> '5945' <-> '2005'`.
+
+Ca người dùng gõ **không dấu** cũng khớp tài liệu có dấu, nhờ `unaccent` trong
+cấu hình `vi` — không cần làm gì thêm.
+
+> ⚠ **Cần theo dõi ở M2.** `ts_rank_cd` trả về cùng giá trị `0.1` cho hai tài
+> liệu khác nhau trong phép thử. Nếu điểm hoà nhiều thì thứ hạng trở nên tuỳ
+> tiện — mà RRF **chỉ dùng thứ hạng**. Đo phân bố điểm trên dữ liệu thật; nếu
+> hoà nhiều, cân nhắc `setweight` theo vùng văn bản hoặc đổi sang `ts_rank`.
 
 ## 5.3 RRF
 

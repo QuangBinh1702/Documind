@@ -302,7 +302,8 @@ Story ưu tiên **S**/**C** chưa xong **không chặn** cổng ra; chuyển ch�
 
 **AC**
 1. **Given** danh sách chunk, **When** sinh embedding bằng `BAAI/bge-m3` trên GPU, **Then** mỗi chunk có vector **1024 chiều** lưu ở cột `embedding`.
-2. **Given** mỗi chunk, **When** lưu, **Then** cột `tsv` chứa `tsvector` được tạo từ nội dung **đã tách từ tiếng Việt** (từ ghép nối bằng `_`, ví dụ `cơ_sở_dữ_liệu`).
+2. **Given** mỗi chunk, **When** lưu, **Then** cột `tsv` chứa `to_tsvector('vi', content)` trên **văn bản gốc đã chuẩn hoá NFC** — **không tách từ, không nối bằng gạch dưới**.
+   > Đã kiểm chứng thật trên Postgres 17: bộ phân tích coi `_` là **ký tự phân tách**, nên `cơ_sở_dữ_liệu` bị vỡ thành `co so du lieu` rời rạc và toàn bộ công sức tách từ ở bước index bị vô hiệu — **hỏng im lặng, không báo lỗi**. Việc giữ cụm từ ghép được chuyển sang đường truy vấn bằng `phraseto_tsquery` (US-010 AC-2b). Xem `docs/decisions/0001-truy-xuat-tu-khoa-tieng-viet.md`.
 3. **Given** bảng `source_chunks`, **When** kiểm tra chỉ mục, **Then** tồn tại index **HNSW** trên `embedding` và index **GIN** trên `tsv`.
 4. **Given** một PDF 50 trang có sẵn text, **When** xử lý toàn bộ, **Then** hoàn tất trong **< 30 giây**.
 5. **Given** embedding được sinh theo lô (batch), **When** xử lý tài liệu 500 trang, **Then** VRAM sử dụng không vượt 4 GB (batch size được cấu hình).
@@ -326,10 +327,18 @@ Story ưu tiên **S**/**C** chưa xong **không chặn** cổng ra; chuyển ch�
 > **Là** Minh, **tôi muốn** hệ thống tìm được đoạn liên quan cả khi tôi diễn đạt khác tài liệu lẫn khi tôi gõ đúng thuật ngữ chuyên ngành, **để** không bị bỏ sót thông tin.
 
 **AC**
-1. **Given** một câu hỏi, **When** thực hiện retrieval, **Then** hệ thống chạy **song song** hai nhánh: vector similarity (pgvector, khoảng cách cosine) và **full-text search của PostgreSQL** (`ts_rank_cd` trên `tsvector` sinh từ text đã tách từ, dùng cấu hình `vi` = `simple` + `unaccent`).
+1. **Given** một câu hỏi, **When** thực hiện retrieval, **Then** hệ thống chạy **song song** hai nhánh: vector similarity (pgvector, khoảng cách cosine) và **full-text search của PostgreSQL** (`ts_rank_cd` trên `tsvector` sinh từ văn bản gốc, dùng cấu hình `vi` = `simple` + `unaccent`).
    > ⚠ **Gọi đúng tên trong báo cáo.** PostgreSQL **không có BM25** — `ts_rank_cd` là hàm xếp hạng khác, không có tham số `k1`/`b`. Điều này không ảnh hưởng kết quả hợp nhất vì **RRF chỉ dùng thứ hạng, không dùng điểm gốc** — và đó chính là câu trả lời khi hội đồng hỏi về thang điểm của hai nhánh.
 2. **Given** kết quả hai nhánh, **When** hợp nhất, **Then** dùng **Reciprocal Rank Fusion** với `k = 60`, khử trùng lặp theo `chunk_id`, trả về **top 50**.
-2b. **Given** một câu hỏi, **When** xây `tsquery`, **Then** câu hỏi được tách từ bằng **đúng cùng một hàm** đã dùng lúc index; có unit test khẳng định `segment()` cho cùng chuỗi token ở cả hai đường. *(Bất đối xứng tách từ là lỗi im lặng: nhánh từ khoá gần như vô dụng nhưng không báo lỗi, và bạn sẽ đổ tội nhầm cho BM25 trong ablation US-046.)*
+2b. **Given** một câu hỏi, **When** xây `tsquery`, **Then** câu hỏi được tách từ bằng `underthesea`, rồi dựng **truy vấn hỗn hợp**: `phraseto_tsquery` cho mỗi **cụm từ ghép** (yêu cầu các âm tiết liền kề), `plainto_tsquery` cho từ đơn, nối bằng `&&`.
+   Đã đo trên Postgres 17 — đây là lý do phải dùng truy vấn cụm thay vì AND thường:
+
+   | Tài liệu | Truy vấn | `plainto_tsquery` | `phraseto_tsquery` |
+   |---|---|---|---|
+   | *"giáo trình cơ sở dữ liệu quan hệ"* | "cơ sở dữ liệu" | khớp ✓ | khớp ✓ |
+   | *"cơ sở vật chất và dữ liệu thống kê"* | "cơ sở dữ liệu" | **khớp sai ✗** | không khớp ✓ |
+
+2c. **Given** người dùng gõ câu hỏi **không dấu** (*"co so du lieu"*), **When** tìm kiếm, **Then** vẫn khớp tài liệu viết có dấu — nhờ `unaccent` trong cấu hình `vi`. Có test cho ca này.
 3. **Given** một câu hỏi chứa thuật ngữ hiếm xuất hiện đúng nguyên văn trong tài liệu (ví dụ mã hiệu "TCVN 5945:2005"), **When** tìm kiếm, **Then** chunk chứa thuật ngữ đó nằm trong top 10 — trường hợp mà vector search thuần thường thất bại.
 4. **Given** một câu hỏi diễn đạt hoàn toàn khác tài liệu nhưng cùng ý nghĩa, **When** tìm kiếm, **Then** chunk đúng vẫn nằm trong top 10.
 5. **Given** tham số `rrf_k`, số lượng top-N mỗi nhánh, **When** kiểm tra code, **Then** tất cả nằm trong config, không hardcode.
