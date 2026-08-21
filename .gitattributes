@@ -1,0 +1,40 @@
+# Chuẩn hoá xuống dòng.
+# Bạn phát triển trên Windows nhưng triển khai trên server Linux — CRLF lọt vào
+# shell script, Dockerfile hay entrypoint sẽ gây lỗi khó hiểu kiểu
+# "/bin/sh^M: bad interpreter". Ép LF cho mọi thứ chạy trong container.
+
+* text=auto eol=lf
+
+# Kịch bản và cấu hình chạy trong container: BẮT BUỘC LF
+*.sh            text eol=lf
+*.py            text eol=lf
+*.sql           text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.toml          text eol=lf
+*.env           text eol=lf
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+Makefile        text eol=lf
+*.mk            text eol=lf
+
+# Tệp chỉ chạy trên Windows: giữ CRLF
+*.ps1           text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# Nhị phân: không đụng vào
+*.pdf           binary
+*.docx          binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.webp          binary
+*.mp4           binary
+*.gguf          binary
+*.safetensors   binary
+*.onnx          binary
+
+# Không tính vào thống kê ngôn ngữ và không hiện diff dài vô ích
+docs/**         linguist-documentation
+*.md            diff=markdown
