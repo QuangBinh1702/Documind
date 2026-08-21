@@ -1,0 +1,64 @@
+# Harness core maintenance binary
+scripts/bin/harness
+scripts/bin/harness.exe
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# ── Node / Next.js ────────────────────────────────────────
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.eslintcache
+
+# ── Bí mật & cấu hình cục bộ ──────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ── Dữ liệu chạy ──────────────────────────────────────────
+data/
+minio-data/
+postgres-data/
+*.db
+*.sqlite3
+
+# ── Cache mô hình (KHÔNG commit — ~10 GB) ─────────────────
+models/
+.cache/
+*.gguf
+*.safetensors
+*.onnx
+
+# ── Kết quả spike & đánh giá ──────────────────────────────
+spikes/out/
+eval/results/*.json
+eval/results/*.csv
+!eval/results/.gitkeep
+
+# ── Bằng chứng: giữ file .md, bỏ ảnh/video nặng ───────────
+docs/evidence/**/*.mp4
+docs/evidence/**/*.mov
+
+# ── Tài liệu nguồn có bản quyền ───────────────────────────
+eval/dataset/documents/
+!eval/dataset/documents/.gitkeep
+
+# ── Hệ điều hành / IDE ────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json

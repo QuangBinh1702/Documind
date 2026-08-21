@@ -1,0 +1,8 @@
+# Phụ thuộc cho spike M0. KHÔNG phải phụ thuộc của sản phẩm.
+PyMuPDF>=1.24
+regex>=2024.0
+
+# s2_vram.py cần thêm — cài trên server, bỏ qua trên laptop:
+#   torch (bản CUDA đúng với driver)
+#   FlagEmbedding>=1.3
+#   sentence-transformers>=3.0
