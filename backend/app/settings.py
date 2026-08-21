@@ -87,10 +87,28 @@ class Settings(BaseSettings):
     # `fake` ghép câu trả lời từ ngữ cảnh thay vì sinh ngôn ngữ — dùng để test
     # đường xử lý mà không cần khoá API, quota hay mạng.
     llm_provider: Literal["real", "fake"] = "real"
+
+    # Fast Mode nghĩa là **dữ liệu rời khỏi máy**, không phải "dùng Gemini".
+    # Cờ này chọn nhà cung cấp phía sau mà không đổi ngữ nghĩa đó, nên nhãn
+    # cảnh báo quyền riêng tư vẫn đúng ở cả hai lựa chọn.
+    fast_backend: Literal["gemini", "ollama-cloud"] = "gemini"
+
     local_llm_model: str = "qwen3-8b-q4"
     # Máy chủ tương thích OpenAI chạy cục bộ: Ollama, vLLM hay llama.cpp.
     # Runtime cụ thể chốt ở spike S2 và không ảnh hưởng tới mã nguồn.
     local_llm_base_url: str = "http://localhost:11434/v1"
+    # ── Ollama Cloud ────────────────────────────────────
+    # Trọng số mở nhưng chạy trên máy của Ollama, nên **dữ liệu vẫn rời khỏi
+    # máy** — đây là một lựa chọn của Fast Mode, không phải của Privacy Mode.
+    #
+    # `gemma4:31b` lượng tử q4 cần ~18–20 GB VRAM. Máy đích 16 GB còn phải giữ
+    # bge-m3 và bge-reranker, nên mô hình này KHÔNG chạy được cục bộ ở đó. Số
+    # đo bằng nó thuộc về cột "cloud" của bảng so sánh, không thay được số đo
+    # Privacy Mode.
+    ollama_cloud_base_url: str = "https://ollama.com/v1"
+    ollama_cloud_model: str = "gemma4:31b"
+    ollama_cloud_api_key: str | None = None
+
     gemini_api_key: str | None = None
     # Ghim một phiên bản cụ thể, không dùng bí danh `-latest`. Bí danh trỏ vào
     # mô hình đông người dùng nhất nên hay trả 503, và tệ hơn: nó âm thầm đổi
@@ -166,7 +184,8 @@ class Settings(BaseSettings):
 
     @field_validator(
         "embedding_device", "rerank_device", "ocr_device",
-        "embedding_revision", "rerank_revision", "gemini_api_key",
+        "embedding_revision", "rerank_revision",
+        "gemini_api_key", "ollama_cloud_api_key",
         mode="before",
     )
     @classmethod
@@ -219,8 +238,15 @@ class Settings(BaseSettings):
         out: list[str] = []
         if self.is_production and self.secret_key.startswith("doi-gia-tri-nay"):
             out.append("SECRET_KEY vẫn là giá trị mẫu — phải đổi trước khi triển khai.")
-        if self.default_mode == "fast" and not self.gemini_api_key:
-            out.append("DEFAULT_MODE=fast nhưng chưa có GEMINI_API_KEY.")
+        thieu_khoa = (
+            self.fast_backend == "gemini" and not self.gemini_api_key
+        ) or (self.fast_backend == "ollama-cloud" and not self.ollama_cloud_api_key)
+
+        if self.default_mode == "fast" and thieu_khoa:
+            out.append(
+                f"DEFAULT_MODE=fast với FAST_BACKEND={self.fast_backend} "
+                f"nhưng chưa có khoá API tương ứng."
+            )
         elif self.default_mode == "fast":
             # SPEC-REVIEW.md §A.4: ở Fast Mode, câu hỏi VÀ các đoạn tài liệu
             # được chọn đều rời khỏi máy. Đề tài lấy "tự triển khai, dữ liệu

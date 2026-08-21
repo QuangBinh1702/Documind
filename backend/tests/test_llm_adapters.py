@@ -18,6 +18,7 @@ import pytest
 from app.adapters.llm import gemini as G
 from app.adapters.llm.gemini import GeminiLLMProvider
 from app.adapters.llm.local import LocalLLMProvider
+from app.adapters.llm.ollama_cloud import OllamaCloudLLMProvider
 
 
 def _sse(*events: dict) -> bytes:
@@ -317,6 +318,70 @@ async def test_khong_phai_mo_hinh_cuc_bo() -> None:
 # ══════════════════════════════════════════════════════
 # Mô hình cục bộ — US-029
 # ══════════════════════════════════════════════════════
+
+
+async def test_ollama_cloud_gui_khoa_qua_bearer(monkeypatch) -> None:
+    seen = _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_openai_sse("x")))
+    await _collect(OllamaCloudLLMProvider(model="gemma4:31b", api_key="bi-mat"))
+
+    assert seen[0].headers["authorization"] == "Bearer bi-mat"
+    assert json.loads(seen[0].content)["model"] == "gemma4:31b"
+
+
+async def test_mo_hinh_cuc_bo_khong_gui_khoa(monkeypatch) -> None:
+    """Ollama chạy máy mình không cần xác thực, và gửi khoá đi là gửi thừa."""
+    seen = _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_openai_sse("x")))
+    await _collect(LocalLLMProvider())
+    assert "authorization" not in seen[0].headers
+
+
+async def test_ollama_cloud_khong_phai_cuc_bo() -> None:
+    """Đây là cả lý do adapter này tồn tại riêng.
+
+    Ollama Cloud nói đúng cùng giao thức với Ollama chạy máy mình, nên chỉ cần
+    đổi `LOCAL_LLM_BASE_URL` là chạy được. Nhưng khi đó `is_local` nói dối:
+    US-032 AC-2 dựa vào cờ này để biết một lượt gọi có rời khỏi máy không, và
+    giao diện dựa vào nó để hiện cảnh báo. Một hệ thống lấy "dữ liệu không rời
+    khỏi máy" làm luận điểm mà im lặng gửi tài liệu đi là hỏng ở chỗ tệ nhất.
+    """
+    assert OllamaCloudLLMProvider(api_key="k").is_local is False
+    assert LocalLLMProvider().is_local is True
+
+
+async def test_thieu_khoa_ollama_cloud_thi_chi_duong(monkeypatch) -> None:
+    _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_openai_sse("x")))
+    with pytest.raises(RuntimeError, match="OLLAMA_CLOUD_API_KEY"):
+        await _collect(OllamaCloudLLMProvider(api_key=""))
+
+
+@pytest.mark.parametrize(
+    ("mode", "backend", "mong_doi", "cuc_bo"),
+    [
+        ("privacy", "gemini", "local:", True),
+        ("privacy", "ollama-cloud", "local:", True),
+        ("fast", "gemini", "gemini:", False),
+        ("fast", "ollama-cloud", "ollama-cloud:", False),
+    ],
+)
+def test_chon_nha_cung_cap_theo_che_do(monkeypatch, mode, backend, mong_doi, cuc_bo) -> None:
+    """Chế độ nói về DỮ LIỆU ĐI ĐÂU; `FAST_BACKEND` chỉ chọn nhà cung cấp.
+
+    Privacy Mode phải cho ra mô hình cục bộ bất kể `FAST_BACKEND` đặt gì —
+    nếu không thì một cờ vốn chỉ để chọn nhà cung cấp lại đổi được cả cam kết
+    về quyền riêng tư.
+    """
+    from app.adapters import llm as mod
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "llm_provider", "real")
+    monkeypatch.setattr(settings, "default_mode", mode)
+    monkeypatch.setattr(settings, "fast_backend", backend)
+    monkeypatch.setattr(settings, "ollama_cloud_api_key", "k")
+    mod._cache.clear()
+
+    p = mod.get_llm_provider()
+    assert p.name.startswith(mong_doi)
+    assert p.is_local is cuc_bo
 
 
 def _openai_sse(*texts: str) -> bytes:
