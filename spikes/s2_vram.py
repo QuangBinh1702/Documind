@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import gc
 import subprocess
-import sys
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent / "out"
@@ -101,7 +100,7 @@ def main() -> int:
         after = vram_reserved_gb()
         rows.append(("bge-m3 (fp16)", f"{after - before:.2f}", f"tổng {after:.2f}"))
         print(f"  +{after - before:.2f} GB (tổng {after:.2f} GB)")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         rows.append(("bge-m3 (fp16)", "LỖI", str(e)[:80]))
         notes.append(f"bge-m3 không nạp được: {e}")
         emb = None
@@ -122,7 +121,7 @@ def main() -> int:
         print(f"  +{after - before:.2f} GB (tổng {after:.2f} GB)")
         print(f"  điểm đã sigmoid: {score} — phải nằm trong [0,1]")
         notes.append(f"Điểm rerank với normalize=True: {score}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         rows.append(("bge-reranker-v2-m3", "LỖI", str(e)[:80]))
         notes.append(f"reranker không nạp được: {e}")
 
@@ -177,7 +176,8 @@ def main() -> int:
         "",
         "## Việc tiếp theo",
         "",
-        "1. Chạy thử LLM cục bộ thật (Ollama hoặc vLLM) SONG SONG với script này còn đang giữ model,",
+        "1. Chạy thử LLM cục bộ thật (Ollama hoặc vLLM) SONG SONG với script "
+        "này còn đang giữ model,",
         "   để đo đỉnh thật thay vì cộng ước lượng.",
         "2. Ghi quyết định runtime vào `docs/decisions/` — đây là quyết định chặn của M3 và M4.",
         "3. Cập nhật bảng ngân sách ở `SPEC-v1.md` §10.1 bằng số đo thật.",

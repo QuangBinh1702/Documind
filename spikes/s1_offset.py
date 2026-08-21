@@ -209,9 +209,12 @@ def main() -> int:
     lines += [
         "## Việc tiếp theo",
         "",
-        "- Nếu ĐẠT: ghi quyết định vào `docs/decisions/`, giữ nguyên thiết kế `source_texts` ở SPEC-v1 §4.2.",
-        "- Nếu offset lệch: xem lại thứ tự ghép/chuẩn hoá trong `extract()` — đây là chỗ hỏng phổ biến nhất.",
-        "- Nếu tỉ lệ dấu < 0.01 trên tệp lẽ ra có text: đó là ca mã cũ TCVN3/VNI ở SPEC §US-007 AC-8.",
+        "- Nếu ĐẠT: ghi quyết định vào `docs/decisions/`, giữ nguyên thiết kế "
+        "`source_texts` ở SPEC-v1 §4.2.",
+        "- Nếu offset lệch: xem lại thứ tự ghép/chuẩn hoá trong `extract()` — "
+        "đây là chỗ hỏng phổ biến nhất.",
+        "- Nếu tỉ lệ dấu < 0.01 trên tệp lẽ ra có text: đó là ca mã cũ "
+        "TCVN3/VNI ở SPEC §US-007 AC-8.",
     ]
 
     report = OUT / "s1_offset.md"

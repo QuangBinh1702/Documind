@@ -1,0 +1,27 @@
+# Cấu hình lint cho phần Python NGOÀI `backend/` — tức `eval/` và `spikes/`.
+#
+# `backend/pyproject.toml` có cấu hình riêng và ruff dùng cấu hình gần nhất, nên
+# tệp này không ảnh hưởng tới backend. Nó tồn tại vì trước đó `eval/` và
+# `spikes/` rơi ra ngoài mọi cấu hình: chạy `ruff check` ở thư mục gốc thì chúng
+# bị soi bằng bộ quy tắc mặc định, vốn khác hẳn bộ quy tắc của dự án.
+#
+# Chạy toàn repo:  ruff check backend eval spikes
+
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    # Xem chú thích ở backend/pyproject.toml: RUF001/002/003 báo động liên tục
+    # trên nội dung tiếng Việt hoàn toàn có chủ ý.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[lint.per-file-ignores]
+# Script trong `eval/` và `spikes/` phải chèn `backend/` vào sys.path trước khi
+# import được `app.*`, nên import không thể nằm hết ở đầu tệp.
+"eval/*" = ["E402"]
+"spikes/*" = ["E402"]

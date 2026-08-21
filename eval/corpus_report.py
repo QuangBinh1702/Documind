@@ -27,9 +27,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.adapters.extract import ExtractionError, extract  # noqa: E402
-from app.settings import settings  # noqa: E402
-from app.text.chunker import _find_headings  # noqa: E402
+from app.adapters.extract import ExtractionError, extract
+from app.settings import settings
+from app.text.chunker import _find_headings
 
 DOCS = ROOT / "eval" / "dataset" / "documents"
 SUFFIXES = {".pdf": "pdf", ".docx": "docx", ".txt": "txt", ".md": "md"}
