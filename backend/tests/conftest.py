@@ -11,6 +11,35 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _khong_cham_mang(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Chặn mọi lượt gọi mạng thật trong bộ test.
+
+    Không phải phòng xa. Một test viết ra để kiểm ca "thiếu khoá API" đã thật
+    sự gọi tới Google, vì adapter rơi về khoá trong `.env` và không có gì chặn
+    lại. Hậu quả của loại lỗi này rất khó nhìn ra: test vẫn xanh, chỉ là nó
+    đang đo dịch vụ của người khác, tiêu hạn mức, và gửi bất cứ thứ gì nằm
+    trong payload ra ngoài.
+
+    Test nào cần HTTP thì tự gắn `httpx.MockTransport` của mình — bản vá này
+    chỉ chặn tầng kết nối thật bên dưới.
+    """
+    try:
+        import httpcore
+    except ImportError:  # pragma: no cover - httpx luôn kéo theo httpcore
+        return
+
+    def chan(*args, **kwargs):
+        raise RuntimeError(
+            "Bộ test vừa cố mở một kết nối mạng thật. Hãy gắn httpx.MockTransport "
+            "cho lượt gọi này thay vì để nó ra ngoài."
+        )
+
+    monkeypatch.setattr(httpcore.AsyncConnectionPool, "handle_async_request", chan)
+    monkeypatch.setattr(httpcore.ConnectionPool, "handle_request", chan)
+
+
 # Nội dung tiếng Việt có đủ dấu, dùng chung cho nhiều test.
 VI_PARAGRAPHS = [
     "Điều 5. Phạm vi áp dụng",

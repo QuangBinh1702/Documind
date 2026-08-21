@@ -40,6 +40,12 @@ dependencies = [
 
     # ── Tiếng Việt ─────────────────────────────────────
     "underthesea>=6.8",
+
+    # ── Mô hình ngôn ngữ ───────────────────────────────
+    # Cả hai adapter LLM đều gọi HTTP thẳng thay vì qua SDK riêng: Ollama và
+    # vLLM nói giao thức OpenAI, Gemini có REST endpoint. Một phụ thuộc thay
+    # cho hai SDK, và không phải chạy theo vòng đời phát hành của ai cả.
+    "httpx>=0.28",
 ]
 
 [project.optional-dependencies]
@@ -54,7 +60,6 @@ ml = [
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "httpx>=0.28",
     "ruff>=0.8",
     "mypy>=1.13",
 ]

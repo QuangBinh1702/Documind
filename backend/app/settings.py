@@ -175,6 +175,16 @@ class Settings(BaseSettings):
             out.append("SECRET_KEY vẫn là giá trị mẫu — phải đổi trước khi triển khai.")
         if self.default_mode == "fast" and not self.gemini_api_key:
             out.append("DEFAULT_MODE=fast nhưng chưa có GEMINI_API_KEY.")
+        elif self.default_mode == "fast":
+            # SPEC-REVIEW.md §A.4: ở Fast Mode, câu hỏi VÀ các đoạn tài liệu
+            # được chọn đều rời khỏi máy. Đề tài lấy "tự triển khai, dữ liệu
+            # không ra ngoài" làm luận điểm, nên đánh đổi này phải nhìn thấy
+            # được ngay trên giao diện chứ không nằm im trong một tệp cấu hình.
+            out.append(
+                "DEFAULT_MODE=fast — câu hỏi và nội dung các đoạn tài liệu được "
+                "chọn sẽ được gửi tới Google. Đổi sang privacy để chạy hoàn toàn "
+                "trên máy bạn."
+            )
         if self.device == "cuda" and not self.perf_assertions_enabled:
             out.append(
                 "DEVICE=cuda nhưng PERF_ASSERTIONS_ENABLED=false — "
