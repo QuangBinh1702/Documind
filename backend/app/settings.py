@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     ocr_dpi: int = 300
 
     # ── Mô hình ─────────────────────────────────────────
+    # `fake` dùng adapter băm tất định: chạy được trên laptop không GPU, nhưng
+    # chỉ nắm trùng lặp từ vựng chứ không nắm ngữ nghĩa. Mặc định là mô hình
+    # thật để không ai vô tình đưa số đo của bản giả vào báo cáo.
+    embedding_provider: Literal["bge-m3", "fake"] = "bge-m3"
     embedding_model: str = "BAAI/bge-m3"
     embedding_revision: str | None = None
     embedding_dim: int = 1024
@@ -171,6 +175,12 @@ class Settings(BaseSettings):
             out.append(
                 "DEVICE=cpu nhưng PERF_ASSERTIONS_ENABLED=true — "
                 "các mốc hiệu năng sẽ đỏ mà không mang ý nghĩa (US-057 AC-8)."
+            )
+        if self.embedding_provider == "fake":
+            out.append(
+                "EMBEDDING_PROVIDER=fake — vector sinh bằng băm, chỉ nắm trùng lặp "
+                "từ vựng. Dùng được để phát triển và test logic, KHÔNG dùng được "
+                "cho bất kỳ số liệu nào trong báo cáo."
             )
         return out
 
