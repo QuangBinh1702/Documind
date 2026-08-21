@@ -1,4 +1,4 @@
-# Harness core maintenance binary
+﻿# Harness core maintenance binary
 scripts/bin/harness
 scripts/bin/harness.exe
 
@@ -47,13 +47,19 @@ eval/results/*.json
 eval/results/*.csv
 !eval/results/.gitkeep
 
+# ── Danh sách tải: sinh lại được từ nguon.csv ─────────────
+eval/dataset/da_tai.csv
+
 # ── Bằng chứng: giữ file .md, bỏ ảnh/video nặng ───────────
 docs/evidence/**/*.mp4
 docs/evidence/**/*.mov
 
-# ── Tài liệu nguồn có bản quyền ───────────────────────────
-eval/dataset/documents/
-!eval/dataset/documents/.gitkeep
+# ── Tài liệu nguồn: không commit tệp gốc, giữ cấu trúc thư mục ────
+# Xuất xứ từng tệp ghi ở eval/dataset/NGUON.md — đó mới là thứ vào báo cáo,
+# và nó đủ để người khác tải lại đúng bộ dữ liệu.
+eval/dataset/documents/**/*
+!eval/dataset/documents/**/
+!eval/dataset/documents/**/.gitkeep
 
 # ── Hệ điều hành / IDE ────────────────────────────────────
 .DS_Store

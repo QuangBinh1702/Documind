@@ -1014,6 +1014,17 @@ Các story dưới đây bổ sung sau khi rà soát đối chiếu (`SPEC-REVIE
 
 **Tổng bổ sung: ~12.5 pd** (nhóm **M**: ~6 pd).
 
+> **Vì sao không có story fine-tune mô hình.** Hệ thống **không huấn luyện mô
+> hình nào** — `bge-m3`, `bge-reranker-v2-m3`, Qwen3-8B và PaddleOCR đều dùng
+> bản pre-trained tải về nguyên trạng. Giá trị của đồ án nằm ở cách ghép chúng
+> lại: truy xuất lai, RRF, rerank, cổng ngưỡng τ, trích dẫn tới toạ độ, tách
+> namespace cache.
+>
+> Fine-tune embedding/reranker trên miền tài liệu là một hướng hợp lý và có
+> server 16 GB để làm, nhưng nó **phụ thuộc bộ dữ liệu của US-044** vốn thuộc
+> M6, và với dữ liệu ít thì nhiều khả năng chỉ gây quá khớp. Giữ ở Backlog
+> (**US-108**); xem lại ở M6 nếu tiến độ tốt và có đủ ~30 tài liệu cùng miền.
+
 ---
 
 ### US-055 · Chuẩn hoá Unicode NFC toàn hệ thống · `E3` · **M** · 0.5 pd
