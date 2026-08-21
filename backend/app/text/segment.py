@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
-from app.text.normalize import normalize
+from app.text.normalize import normalize, strip_accents
 
 __all__ = ["Span", "build_tsquery_parts", "segment_words", "split_sentences"]
 
@@ -190,6 +190,30 @@ def segment_words(text: str) -> list[str]:
 # dấu hai chấm và chấm — chúng nằm trong mã hiệu văn bản kiểu "TCVN 5945:2005".
 _QUERY_NOISE = re.compile(r"[^\w\s:.\-/]", re.UNICODE)
 
+# Từ dừng tiếng Việt cho đường TRUY VẤN.
+#
+# Không dùng khi lập chỉ mục — chỉ mục giữ nguyên mọi từ. Ở đây chúng bị loại
+# vì các mảnh truy vấn được nối bằng OR: giữ lại "được", "theo", "nào" thì
+# gần như mọi chunk trong notebook đều khớp và thứ hạng mất hết ý nghĩa.
+#
+# So khớp ở dạng KHÔNG DẤU để bắt cả câu hỏi người dùng gõ thiếu dấu.
+# fmt: off
+_VI_STOPWORDS = frozenset([
+    "la", "va", "cua", "co", "duoc", "cho", "voi", "trong", "tren", "duoi",
+    "den", "tu", "theo", "boi", "vi", "nen", "ra", "vao", "ve", "tai",
+    "nay", "do", "kia", "ay", "nao", "gi", "sao", "dau", "ai",
+    "mot", "cac", "nhung", "moi", "ca",
+    # Loại từ chỉ loại, không mang nội dung. KHÔNG đưa "điều", "khoản",
+    # "chương" vào đây — trong văn bản pháp quy chúng là từ khoá thật.
+    "cai", "chiec", "viec",
+    "thi", "ma", "neu", "khi", "de", "hay", "hoac", "nhung_ma",
+    "se", "da", "dang", "cung", "van", "con", "chi", "deu",
+    "khong", "chua", "phai", "can", "nen_lam",
+    "toi", "ban", "minh", "ho", "no",
+    "the", "nhu", "rang", "a", "u", "o",
+])
+# fmt: on
+
 
 def build_tsquery_parts(question: str) -> list[tuple[str, str]]:
     """Chuẩn bị các mảnh để dựng ``tsquery`` theo quyết định 0001.
@@ -205,14 +229,24 @@ def build_tsquery_parts(question: str) -> list[tuple[str, str]]:
     """
     cleaned = _QUERY_NOISE.sub(" ", normalize(question))
     parts: list[tuple[str, str]] = []
+    dropped: list[tuple[str, str]] = []
 
     for token in segment_words(cleaned):
         token = token.strip("_-:./")
         if not token:
             continue
-        if "_" in token:
-            parts.append(("phrase", token.replace("_", " ")))
-        else:
-            parts.append(("plain", token))
 
-    return parts
+        part = (
+            ("phrase", token.replace("_", " ")) if "_" in token else ("plain", token)
+        )
+
+        # Từ ghép luôn được giữ: chúng mang nghĩa kể cả khi từng âm tiết là từ
+        # dừng. Chỉ lọc từ đơn.
+        if part[0] == "plain" and strip_accents(token).lower() in _VI_STOPWORDS:
+            dropped.append(part)
+        else:
+            parts.append(part)
+
+    # Câu hỏi toàn từ dừng ("cái này là gì?") thì thà tìm bằng chúng còn hơn
+    # không tìm gì. Nhánh vector sẽ gánh phần còn lại.
+    return parts or dropped
