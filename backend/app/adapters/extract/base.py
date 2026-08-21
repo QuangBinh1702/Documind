@@ -91,6 +91,35 @@ class ExtractResult:
     method: str
     quality: TextQuality
     page_count: int
+    page_char_counts: list[int] = field(default_factory=list)
+    """Số ký tự trích được trên từng trang, KHÔNG tính ký tự ngăn cách.
+
+    Đây là dữ liệu thô cho việc phát hiện bản scan (US-023). Đếm cả ký tự ngăn
+    cách thì một trang rỗng vẫn có độ dài khác không và không phân biệt được
+    với trang có nội dung thật.
+    """
+
+    def scanned_pages(self, chars_per_page: int) -> list[int]:
+        """Số hiệu những trang gần như không có ký tự nào."""
+        return [
+            p.page
+            for p, n in zip(self.pages, self.page_char_counts, strict=False)
+            if n < chars_per_page
+        ]
+
+    def looks_scanned(self, *, chars_per_page: int, page_ratio: float) -> bool:
+        """US-023 AC-1 — tài liệu này có phải bản scan không.
+
+        Xét theo **tỉ lệ trang** thiếu text chứ không theo tổng số ký tự: một
+        tài liệu 200 trang scan xen vài trang bìa có text vẫn cần OCR, còn một
+        tài liệu có text xen vài trang ảnh thì không.
+
+        Ngưỡng do tầng gọi truyền vào — module này không đọc cấu hình, để test
+        được trực tiếp mà không phải vá `settings`.
+        """
+        if not self.pages:
+            return False
+        return len(self.scanned_pages(chars_per_page)) / len(self.pages) >= page_ratio
 
     def page_of(self, pos: int) -> int:
         """Vị trí ký tự nằm ở trang nào."""
@@ -141,12 +170,15 @@ class TextBuilder:
     _blocks: list[TextBlock] = field(default_factory=list)
     _page_no: int | None = None
     _page_start: int = 0
+    _page_chars: list[int] = field(default_factory=list)
+    _chars_this_page: int = 0
 
     def start_page(self, page_no: int) -> None:
         if self._page_no is not None:
             raise RuntimeError("Trang trước chưa được đóng bằng end_page()")
         self._page_no = page_no
         self._page_start = self._cursor
+        self._chars_this_page = 0
 
     def add_block(self, raw: str, bbox: BBox | None = None) -> None:
         """Thêm một khối. Khối rỗng bị bỏ qua để không sinh khoảng trắng thừa."""
@@ -160,6 +192,7 @@ class TextBuilder:
         start = self._cursor
         self._parts.append(text)
         self._cursor += len(text)
+        self._chars_this_page += len(text.strip())
         self._blocks.append(
             TextBlock(page=self._page_no, char_start=start, char_end=self._cursor, bbox=bbox)
         )
@@ -175,6 +208,7 @@ class TextBuilder:
             self._parts.append(PAGE_SEP)
             self._cursor += len(PAGE_SEP)
         self._pages.append(PageSpan(self._page_no, self._page_start, self._cursor))
+        self._page_chars.append(self._chars_this_page)
         self._page_no = None
 
     def build(self, *, method: str) -> ExtractResult:
@@ -199,4 +233,5 @@ class TextBuilder:
             method=method,
             quality=assess(full_text),
             page_count=len(self._pages),
+            page_char_counts=list(self._page_chars),
         )

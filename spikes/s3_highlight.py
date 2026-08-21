@@ -21,8 +21,8 @@ Kết quả: spikes/out/s3_highlight.html  — mở bằng trình duyệt
 
 from __future__ import annotations
 
+import base64
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -39,12 +39,34 @@ PDFJS_CDN = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379"
 
 
 def find_pdf() -> Path | None:
+    """Chọn tệp có LỚP TEXT DÀY NHẤT, không phải tệp đầu bảng chữ cái.
+
+    Spike này cần một PDF có text để tìm cụm từ. Chọn theo tên là sai: tệp thật
+    người ta bỏ vào không bao giờ tên là `text.pdf`, và tệp đứng đầu bảng chữ
+    cái rất có thể là bản scan không có ký tự nào — lúc đó spike báo "không tìm
+    thấy" và trông như cụm từ sai, trong khi thực ra nó đang soi nhầm tệp.
+    """
     for name in ("text.pdf", "sample.pdf"):
         p = SAMPLES / name
         if p.exists():
             return p
-    pdfs = sorted(SAMPLES.glob("*.pdf"))
-    return pdfs[0] if pdfs else None
+
+    best: tuple[int, Path] | None = None
+    for p in sorted(SAMPLES.glob("*.pdf")):
+        doc = fitz.open(p)
+        chars = sum(len(page.get_text("text")) for page in doc)
+        doc.close()
+        print(f"  {p.name}: {chars:,} ký tự trong lớp text")
+        if best is None or chars > best[0]:
+            best = (chars, p)
+
+    if best is None:
+        return None
+    if best[0] == 0:
+        print("\n[!] Không tệp nào có lớp text — mọi tệp đều là bản scan.")
+        print("    S3 kiểm chứng toạ độ trên text layer, nên cần ít nhất một PDF có text.")
+        return None
+    return best[1]
 
 
 def locate(pdf: Path, needle: str) -> tuple[list[dict], list[str]]:
@@ -188,7 +210,13 @@ function go(d) {{
   if (n >= 1 && n <= pdfDoc.numPages) {{ pageNum = n; render(); }}
 }}
 
-pdfjsLib.getDocument("{pdf_file}").promise.then(doc => {{
+// PDF nhúng thẳng vào trang dưới dạng base64. Trỏ tới tệp bên cạnh thì
+// Chrome chặn vì chính sách CORS của giao thức file://, và tên tệp thật
+// thường có dấu cách với dấu ngoặc làm hỏng URL. Nhúng vào thì mở bằng
+// hai lần bấm chuột là chạy, không cần dựng máy chủ.
+const PDF_BYTES = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
+
+pdfjsLib.getDocument({{ data: PDF_BYTES }}).promise.then(doc => {{
   pdfDoc = doc;
   document.getElementById("np").textContent = doc.numPages;
   render();
@@ -215,7 +243,7 @@ def main() -> int:
 
     if not hits:
         print("\nKhông có kết quả nào. Thử cụm từ khác:")
-        print(f'  python spikes/s3_highlight.py "cụm từ có thật trong tệp"')
+        print('  python spikes/s3_highlight.py "cụm từ có thật trong tệp"')
         return 1
 
     for w in dict.fromkeys(warnings):
@@ -227,8 +255,6 @@ def main() -> int:
             f"trên khổ {h['page_w']}×{h['page_h']}"
         )
 
-    shutil.copy(pdf, OUT / pdf.name)
-
     warn_html = ""
     if warnings:
         items = "".join(f"<div>{w}</div>" for w in dict.fromkeys(warnings))
@@ -236,7 +262,7 @@ def main() -> int:
 
     html = HTML.format(
         pdf_name=pdf.name,
-        pdf_file=pdf.name,
+        pdf_b64=base64.b64encode(pdf.read_bytes()).decode("ascii"),
         needle=needle,
         n_hits=len(hits),
         hits_json=json.dumps(hits, ensure_ascii=False),

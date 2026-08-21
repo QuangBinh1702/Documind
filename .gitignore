@@ -68,3 +68,11 @@ desktop.ini
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# ── Tài liệu nguồn ────────────────────────────────────────
+# PDF là tệp nhị phân lớn và thường là tài liệu của người khác. Chúng không
+# vào lịch sử git; tệp mẫu cho spike và bộ đánh giá nằm ngoài repo, được mô tả
+# lại bằng `eval/dataset/NGUON.md` để người khác tải về đúng bộ.
+# Dùng `*.pdf` chứ không phải `*pdf`: thiếu dấu chấm thì mẫu này khớp cả một
+# thư mục tên `pdf` hay một tệp tên `mypdf`.
+*.pdf

@@ -267,6 +267,55 @@ def test_van_ban_bang_ma_cu_bi_chan(tmp_path: Path, emb) -> None:
         assert s.scalar(_OWNED_CHUNKS) == 0
 
 
+def test_ban_scan_bi_chan_voi_chan_doan_dung(scanned_pdf: Path, emb) -> None:
+    """US-023 — bản scan phải nhận đúng tên gọi của nó.
+
+    Bản scan cũng rớt cổng chất lượng vì không có ký tự nào, nhưng lý do ghi ra
+    khi đó là *"chỉ 0% ký tự là chữ cái, có thể là bảng biểu hoặc mục lục"* —
+    sai, và không cho người dùng biết phải làm gì. Mã lỗi cũng là thứ định
+    tuyến sang đường OCR ở US-024, nên nó phải phân biệt được.
+    """
+    with session_scope() as s, pytest.raises(ExtractionError) as exc:
+        ingest_file_sync(s, scanned_pdf, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+    assert exc.value.code == "SCAN_NO_TEXT_LAYER"
+    assert "OCR" in exc.value.message_vi
+
+    with session_scope() as s:
+        src = _own_source(s)
+        assert src is not None
+        assert src.status == "failed"
+        assert src.is_scanned is True
+        assert s.scalar(_OWNED_CHUNKS) == 0
+
+
+def test_pdf_co_text_khong_bi_danh_dau_la_scan(make_pdf, emb) -> None:
+    from tests.conftest import VI_PARAGRAPHS
+
+    _ingest(make_pdf([VI_PARAGRAPHS, VI_PARAGRAPHS]), emb)
+    with session_scope() as s:
+        assert _own_source(s).is_scanned is False
+
+
+def test_txt_ngan_khong_bi_nham_la_scan(tmp_path: Path, emb) -> None:
+    """Chỉ PDF mới xét tỉ lệ trang thiếu text.
+
+    TXT và DOCX không có khái niệm trang; `TextBuilder` gom chúng thành đúng
+    một "trang". Áp cùng luật vào đó thì mọi tệp văn bản ngắn đều bị coi là bản
+    scan — một kết luận vô nghĩa với định dạng vốn không thể là ảnh.
+    """
+    p = tmp_path / "ngan.txt"
+    p.write_text(
+        "Điều 1. Phạm vi. Quy định này áp dụng cho toàn bộ người học của nhà trường "
+        "trong các chương trình đào tạo được cấp phép.",
+        encoding="utf-8",
+    )
+    result = _ingest(p, emb)
+    assert result.chunk_count > 0
+
+    with session_scope() as s:
+        assert _own_source(s).is_scanned is None, "TXT không nên bị chấm là scan hay không"
+
+
 def test_pdf_that_di_het_duong_ong(make_pdf, emb) -> None:
     """Đường đi thật: PDF → trích xuất kèm bbox → chunk → nhúng → DB."""
     from tests.conftest import VI_PARAGRAPHS
@@ -278,10 +327,18 @@ def test_pdf_that_di_het_duong_ong(make_pdf, emb) -> None:
     assert result.page_count == 2
 
     with session_scope() as s:
+        src = _own_source(s)
         with_bbox = s.scalar(
-            select(func.count()).select_from(SourceChunk).where(SourceChunk.bbox.isnot(None))
+            select(func.count())
+            .select_from(SourceChunk)
+            .where(SourceChunk.source_id == src.id, SourceChunk.bbox.isnot(None))
         )
-        pages = {p for (p,) in s.execute(select(SourceChunk.page_no)).all()}
+        pages = {
+            p
+            for (p,) in s.execute(
+                select(SourceChunk.page_no).where(SourceChunk.source_id == src.id)
+            ).all()
+        }
     assert with_bbox > 0, "không chunk nào mang toạ độ — hỏng cầu nối tới US-015"
     assert pages == {1, 2}
 

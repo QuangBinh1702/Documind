@@ -117,6 +117,31 @@ async def ingest_file(
     source.page_count = result.page_count
     source.text_quality = quality.score
 
+    # ── Phát hiện bản scan (US-023) ─────────────────────
+    #
+    # Xét TRƯỚC cổng chất lượng, vì một bản scan không có ký tự nào cũng rớt
+    # cổng chất lượng — nhưng với chẩn đoán sai. "Chỉ 0% ký tự là chữ cái, có
+    # thể là bảng biểu" không giúp được người dùng; "tệp này là bản scan, cần
+    # OCR" thì có. Mã lỗi cũng là thứ định tuyến sang đường OCR ở US-024.
+    #
+    # Chỉ áp dụng cho PDF: DOCX và TXT không có khái niệm trang, nên tỉ lệ
+    # trang thiếu text ở đó không mang nghĩa gì.
+    if kind == "pdf":
+        source.is_scanned = result.looks_scanned(
+            chars_per_page=settings.scan_chars_per_page_threshold,
+            page_ratio=settings.scan_page_ratio_threshold,
+        )
+        if source.is_scanned:
+            empty = len(result.scanned_pages(settings.scan_chars_per_page_threshold))
+            source.status = "failed"
+            source.error_code = "SCAN_NO_TEXT_LAYER"
+            source.error_message = (
+                f"Tệp là bản scan: {empty}/{result.page_count} trang không có lớp "
+                f"văn bản. Cần nhận dạng ký tự (OCR) mới đọc được nội dung."
+            )
+            session.flush()
+            raise ExtractionError(source.error_code, source.error_message)
+
     # Cổng chất lượng US-056. Chặn TRƯỚC khi tốn công nhúng — văn bản rác vào
     # chỉ mục thì mọi câu trả lời về sau đều hỏng, và rất khó truy ra nguyên nhân.
     if quality.legacy_encoding is not None:

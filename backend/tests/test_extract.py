@@ -163,6 +163,48 @@ def test_dem_ky_tu_moi_trang(make_pdf, scanned_pdf: Path) -> None:
     assert all(c < 100 for c in count_chars_per_page(scanned_pdf))
 
 
+def test_dem_ky_tu_moi_trang_khong_tinh_ngan_cach(scanned_pdf: Path) -> None:
+    """Trang rỗng phải đếm ra 0, không phải 1.
+
+    `TextBuilder` chèn một ký tự xuống dòng cho trang rỗng để bản đồ trang vẫn
+    liên tục. Nếu đếm cả ký tự đó thì mọi trang đều có độ dài khác không, và
+    ngưỡng phát hiện scan mất đi tín hiệu rõ ràng nhất mà nó có.
+    """
+    r = extract_pdf(scanned_pdf)
+    assert r.page_char_counts == [0, 0, 0]
+    assert len(r.page_char_counts) == r.page_count
+
+
+def test_nhan_ra_ban_scan(scanned_pdf: Path) -> None:
+    """US-023 AC-1 — không trang nào có lớp text thì đó là bản scan."""
+    r = extract_pdf(scanned_pdf)
+    assert r.scanned_pages(chars_per_page=100) == [1, 2, 3]
+    assert r.looks_scanned(chars_per_page=100, page_ratio=0.5)
+
+
+def test_tai_lieu_co_text_khong_bi_coi_la_scan(make_pdf) -> None:
+    r = extract_pdf(make_pdf([VI_PARAGRAPHS, VI_PARAGRAPHS]))
+    assert r.scanned_pages(chars_per_page=100) == []
+    assert not r.looks_scanned(chars_per_page=100, page_ratio=0.5)
+
+
+def test_vai_trang_anh_xen_ke_khong_lam_ca_tai_lieu_thanh_scan(make_pdf) -> None:
+    """Xét theo TỈ LỆ trang, không theo tổng số ký tự.
+
+    Tài liệu có text xen vài trang ảnh vẫn đọc được bình thường; bắt nó đi qua
+    OCR chỉ tốn thời gian và làm hỏng phần text vốn đã sạch.
+    """
+    r = extract_pdf(make_pdf([VI_PARAGRAPHS, [], VI_PARAGRAPHS, VI_PARAGRAPHS]))
+    assert r.scanned_pages(chars_per_page=100) == [2]
+    assert not r.looks_scanned(chars_per_page=100, page_ratio=0.5)
+
+
+def test_phan_lon_trang_thieu_text_thi_van_la_scan(make_pdf) -> None:
+    """Ngược lại: bản scan kèm vài trang bìa có text vẫn cần OCR."""
+    r = extract_pdf(make_pdf([VI_PARAGRAPHS, [], [], []]))
+    assert r.looks_scanned(chars_per_page=100, page_ratio=0.5)
+
+
 def test_pdf_hong_bao_loi_tieng_viet(tmp_path: Path) -> None:
     """US-007 AC-5 — lỗi có mã ổn định và thông báo tiếng Việt."""
     bad = tmp_path / "hong.pdf"

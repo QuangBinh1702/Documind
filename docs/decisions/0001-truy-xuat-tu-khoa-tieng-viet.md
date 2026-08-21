@@ -88,14 +88,35 @@ Tradeoffs:
 - `underthesea` vẫn cần cho đường query, nên vẫn là phụ thuộc của hệ thống.
 - Tất cả lexeme đều bị bỏ dấu, nên hai từ chỉ khác nhau ở dấu sẽ không phân
   biệt được ở nhánh từ khoá. Nhánh vector bù lại phần này.
-- **Cần theo dõi:** `ts_rank_cd` trả về cùng giá trị `0.1` cho hai tài liệu
-  khác nhau trong phép thử. Nếu điểm bị hoà nhiều, thứ hạng trở nên tuỳ tiện —
-  mà RRF chỉ dùng thứ hạng. Phải kiểm tra lại ở M2 trên dữ liệu thật; nếu hoà
-  nhiều thì cân nhắc `setweight` theo vùng văn bản hoặc đổi sang `ts_rank`.
+- ~~**Cần theo dõi:** `ts_rank_cd` trả về cùng giá trị `0.1` cho hai tài liệu
+  khác nhau trong phép thử.~~ **Đã đo trên dữ liệu thật (2026-08-21), không có
+  vấn đề.** Xem mục dưới.
+
+## Bổ sung 2026-08-21 — phân bố điểm trên dữ liệu thật
+
+Mối lo hoà điểm ở trên xuất phát từ một bộ dữ liệu test tí hon: vài đoạn ngắn
+gần như giống hệt nhau, nên `ts_rank_cd` không có gì để phân biệt. Đo lại trên
+một tài liệu thật 85 trang (118 đoạn) cho kết quả khác hẳn:
+
+```sql
+WITH q AS (SELECT plainto_tsquery('vi','du lieu') AS tq)
+SELECT count(*), count(DISTINCT ts_rank_cd(c.tsv, q.tq))
+FROM source_chunks c, q WHERE c.tsv @@ q.tq;
+-- 101 đoạn khớp, 87 mức điểm khác nhau (86%), trải từ 0.0003 đến 1.2864
+```
+
+Quan trọng hơn con số tổng: **mười hai đoạn đầu bảng không có đoạn nào hoà
+điểm** — mỗi mức điểm đúng một đoạn. Vì RRF chỉ dùng thứ hạng, và chỉ vùng đầu
+bảng mới ảnh hưởng tới kết quả cuối, đây chính là chỗ cần phân biệt được.
+
+Kết luận: giữ `ts_rank_cd`, không cần `setweight` và không cần đổi sang
+`ts_rank`. Giá trị `0.1` lặp lại trong phép thử ban đầu là hiện tượng của dữ
+liệu tổng hợp, không phải của hàm xếp hạng.
 
 ## Follow-Up
 
 - Cập nhật `SPEC.md` US-009 AC-2 và US-010 AC-1, AC-2b. *(Xong)*
 - Cập nhật `SPEC-v1.md` §5.2. *(Xong)*
-- Ở M2, đo phân bố điểm `ts_rank_cd` trên dữ liệu thật để phát hiện hoà điểm.
+- ~~Ở M2, đo phân bố điểm `ts_rank_cd` trên dữ liệu thật.~~ *(Xong — xem mục
+  bổ sung ở trên.)*
 - Giữ cấu hình text search `vi` — nó vẫn là thứ cung cấp `unaccent`.
