@@ -139,6 +139,54 @@ async def test_giai_thich_tung_ly_do_dung_lai(monkeypatch, finish, phai_co) -> N
         await _collect(GeminiLLMProvider(api_key="k"))
 
 
+async def test_bo_thinking_config_khi_mo_hinh_khong_nhan(monkeypatch) -> None:
+    """Mô hình không hỗ trợ trả về 400 kèm đúng một câu vô nghĩa:
+    *"Request contains an invalid argument"*, không nói trường nào sai.
+
+    Bắt người vận hành phải thuộc lòng mô hình nào nhận trường nào là cách chắc
+    chắn để một ngày nào đó đổi GEMINI_MODEL rồi hỏng sạch mà không hiểu vì sao.
+    """
+    monkeypatch.setattr(G, "_KHONG_HO_TRO_SUY_NGHI", set())
+    seen = _mount(monkeypatch, lambda r, n: (
+        httpx.Response(400, text="Request contains an invalid argument.") if n == 1
+        else httpx.Response(200, content=_sse(_chunk("xong")))
+    ))
+
+    p = GeminiLLMProvider(model="mo-hinh-cu", api_key="k")
+    assert await _collect(p) == "xong"
+
+    assert "thinkingConfig" in json.loads(seen[0].content)["generationConfig"]
+    assert "thinkingConfig" not in json.loads(seen[1].content)["generationConfig"]
+    assert "mo-hinh-cu" in G._KHONG_HO_TRO_SUY_NGHI, "phải nhớ để lần sau không thử lại"
+
+
+async def test_nho_mo_hinh_khong_ho_tro_de_khong_goi_thua(monkeypatch) -> None:
+    monkeypatch.setattr(G, "_KHONG_HO_TRO_SUY_NGHI", {"mo-hinh-cu"})
+    seen = _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_sse(_chunk("x"))))
+
+    await _collect(GeminiLLMProvider(model="mo-hinh-cu", api_key="k"))
+    assert len(seen) == 1, "đã biết mô hình này không nhận thì đừng thử nữa"
+    assert "thinkingConfig" not in json.loads(seen[0].content)["generationConfig"]
+
+
+async def test_het_han_muc_theo_ngay_noi_dung_ly_do(monkeypatch) -> None:
+    """Hạn mức theo NGÀY và theo PHÚT cần lời khuyên khác hẳn nhau.
+
+    Một mô hình chỉ cho 20 lượt mỗi ngày ở bản miễn phí, và bảo người dùng
+    "đợi ít phút" ở ca đó là dẫn họ đi sai đường suốt cả buổi.
+    """
+    async def khong_cho(giay: float) -> None:
+        return
+
+    monkeypatch.setattr(G.asyncio, "sleep", khong_cho)
+    _mount(monkeypatch, lambda r, n: httpx.Response(
+        429, text='"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"'
+    ))
+
+    with pytest.raises(RuntimeError, match="TRONG NGÀY"):
+        await _collect(GeminiLLMProvider(api_key="k"))
+
+
 async def test_tat_suy_nghi_theo_mac_dinh(monkeypatch) -> None:
     """Câu trả lời ở đây phải rút ra từ các đoạn đã cho, không phải suy luận ra.
 

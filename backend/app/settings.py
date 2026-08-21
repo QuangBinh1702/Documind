@@ -96,7 +96,13 @@ class Settings(BaseSettings):
     # mô hình đông người dùng nhất nên hay trả 503, và tệ hơn: nó âm thầm đổi
     # mô hình bên dưới, làm số đo của hai lần chạy đánh giá không so được với
     # nhau (US-045 AC-5 yêu cầu tái lập được).
-    gemini_model: str = "gemini-3.5-flash"
+    #
+    # Chọn bản `flash-lite` vì hạn mức miễn phí. Đo thật ngày 21/08/2026:
+    # `gemini-3.5-flash` chỉ cho **20 lượt gọi mỗi NGÀY** ở bản miễn phí — đủ
+    # để thử vài câu, không đủ để chạy một lượt đánh giá 100 câu. Bản lite chạy
+    # 25 lượt liên tiếp không bị chặn. Đây là ràng buộc chi phối, không phải
+    # chuyện chất lượng mô hình.
+    gemini_model: str = "gemini-3.1-flash-lite"
 
     # Các mô hình Gemini đời mới "suy nghĩ" trước khi trả lời, và phần suy nghĩ
     # ăn vào CÙNG hạn mức `LLM_MAX_TOKENS`. Đo thật: một câu hỏi nhỏ tốn 361

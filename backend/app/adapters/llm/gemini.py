@@ -58,6 +58,16 @@ _RETRY_AFTER = re.compile(r"retry in ([\d.]+)s", re.IGNORECASE)
 # hàng nghìn giây, và treo cả tiến trình chừng ấy thì tệ hơn là báo lỗi.
 MAX_WAIT_S = 90.0
 
+# Không phải mô hình Gemini nào cũng nhận `thinkingConfig`. Mô hình không hỗ trợ
+# trả về 400 kèm đúng một câu — *"Request contains an invalid argument"* — không
+# nói trường nào sai. Đổi GEMINI_MODEL sang một mô hình như vậy là hỏng sạch,
+# với thông báo lỗi không dẫn tới đâu.
+#
+# Thay vì bắt người vận hành phải thuộc lòng mô hình nào nhận trường nào: gửi
+# thử, gặp 400 thì bỏ trường đó và gọi lại, rồi NHỚ để lần sau không tốn thêm
+# một lượt gọi hỏng nào nữa.
+_KHONG_HO_TRO_SUY_NGHI: set[str] = set()
+
 # Chỉ thử lại TRƯỚC khi có byte đầu tiên. Đứt giữa chừng thì không thử lại được:
 # giao diện đã hiện phần đã nhận, và sinh lại từ đầu sẽ nối vào thành câu trùng
 # lặp. Đó là lý do vòng lặp `return` ngay sau khi phát xong.
@@ -103,15 +113,16 @@ class GeminiLLMProvider:
                 }
                 for m in messages
             ],
-            "generationConfig": {
-                "temperature": temperature,
-                # Phần suy nghĩ ăn vào cùng hạn mức với câu trả lời — xem chú
-                # thích ở `settings.gemini_thinking_budget`.
-                "thinkingConfig": {"thinkingBudget": settings.gemini_thinking_budget},
-            },
+            "generationConfig": {"temperature": temperature},
         }
         if max_tokens:
             payload["generationConfig"]["maxOutputTokens"] = max_tokens
+        if self.model not in _KHONG_HO_TRO_SUY_NGHI:
+            # Phần suy nghĩ ăn vào cùng hạn mức với câu trả lời — xem chú thích
+            # ở `settings.gemini_thinking_budget`.
+            payload["generationConfig"]["thinkingConfig"] = {
+                "thinkingBudget": settings.gemini_thinking_budget
+            }
 
         # `alt=sse` đổi phản hồi từ một mảng JSON dài sang từng sự kiện một.
         # Thiếu tham số này thì không có gì phát ra cho tới khi sinh xong, và
@@ -140,6 +151,20 @@ class GeminiLLMProvider:
                         )
                         await asyncio.sleep(delay)
                         attempt += 1
+                        continue
+
+                    if response.status_code == 400 and "thinkingConfig" in payload[
+                        "generationConfig"
+                    ]:
+                        # Mô hình này không nhận `thinkingConfig`. Ghi nhớ rồi
+                        # gọi lại, để cả tiến trình chỉ trả giá một lần.
+                        await response.aread()
+                        log.info(
+                            "%s không nhận thinkingConfig — bỏ trường đó và gọi lại",
+                            self.model,
+                        )
+                        _KHONG_HO_TRO_SUY_NGHI.add(self.model)
+                        payload["generationConfig"].pop("thinkingConfig")
                         continue
 
                     if response.status_code != 200:
@@ -237,6 +262,15 @@ def _explain(status: int, body: str) -> str:
             f"trong .env — ví dụ 'gemini-flash-latest'."
         )
     if status == 429:
+        # Hạn mức theo NGÀY và theo PHÚT cần lời khuyên khác hẳn nhau. Bản miễn
+        # phí của một số mô hình chỉ cho 20 lượt mỗi ngày, và bảo người dùng
+        # "đợi ít phút" ở ca đó là dẫn họ đi sai đường suốt cả buổi.
+        if "PerDay" in body or "per day" in body.lower():
+            return (
+                f"Đã hết hạn mức GỌI TRONG NGÀY của '{settings.gemini_model}' ở bản "
+                f"miễn phí. Đợi thêm cũng không được — đổi GEMINI_MODEL sang mô hình "
+                f"khác, hoặc chuyển sang Privacy Mode để chạy bằng mô hình cục bộ."
+            )
         return "Đã vượt hạn mức gọi Gemini. Đợi ít phút hoặc chuyển sang Privacy Mode."
     if status in (500, 503):
         return (
