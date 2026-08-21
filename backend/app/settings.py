@@ -191,6 +191,17 @@ class Settings(BaseSettings):
                 "từ vựng. Dùng được để phát triển và test logic, KHÔNG dùng được "
                 "cho bất kỳ số liệu nào trong báo cáo."
             )
+        if self.rerank_provider == "fake":
+            out.append(
+                "RERANK_PROVIDER=fake — chấm điểm bằng độ bao phủ từ khoá, không "
+                "hiểu phủ định hay điều kiện. Ngưỡng τ đo bằng nó không có nghĩa."
+            )
+        if self.llm_provider == "fake":
+            out.append(
+                "LLM_PROVIDER=fake — mô hình giả KHÔNG sinh ngôn ngữ. Nó ghép sẵn "
+                "một câu nói về chính nó kèm số đoạn trích dẫn, để test đường xử lý "
+                "marker. Câu trả lời bạn thấy không phải nội dung tài liệu."
+            )
         return out
 
 

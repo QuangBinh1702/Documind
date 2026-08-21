@@ -48,6 +48,48 @@ def test_gpu_bo_qua_khi_chay_cpu(client: TestClient) -> None:
         assert gpu["status"] in {"ok", "down"}
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "phai_co"),
+    [
+        ("llm_provider", "fake", "LLM_PROVIDER=fake"),
+        ("embedding_provider", "fake", "EMBEDDING_PROVIDER=fake"),
+        ("rerank_provider", "fake", "RERANK_PROVIDER=fake"),
+    ],
+)
+def test_adapter_gia_phai_duoc_bao_ra_ngoai(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, field, value, phai_co
+) -> None:
+    """Adapter giả trả về kết quả trông hoàn chỉnh — đó là điều nguy hiểm.
+
+    Mô hình giả sinh một câu trả lời đúng khuôn dạng, có chip trích dẫn bấm
+    được, nhìn không khác gì kết quả thật. Nếu cảnh báo chỉ nằm trong log của
+    máy chủ thì người đang xem giao diện không có cách nào biết mình đang nhìn
+    bản dựng để test. `/api/health` là chỗ giao diện đọc được, nên cảnh báo
+    phải ra tới đó.
+    """
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, field, value)
+    warnings = client.get("/api/health").json()["warnings"]
+    assert any(phai_co in w for w in warnings), warnings
+
+
+def test_khong_canh_bao_khi_dung_adapter_that(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cảnh báo phải im khi không có gì đáng cảnh báo.
+
+    Một nhãn luôn hiện là một nhãn không ai đọc.
+    """
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "llm_provider", "real")
+    monkeypatch.setattr(settings, "embedding_provider", "bge-m3")
+    monkeypatch.setattr(settings, "rerank_provider", "bge")
+    warnings = client.get("/api/health").json()["warnings"]
+    assert not any("PROVIDER=fake" in w for w in warnings), warnings
+
+
 def test_mot_thanh_phan_chet_lam_degraded_chu_khong_lam_sap(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

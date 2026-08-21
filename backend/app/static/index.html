@@ -66,6 +66,12 @@
   }
   .bubble.external { border-color: var(--warn); background: var(--warn-bg); }
   .bubble.refused { border-style: dashed; color: var(--muted); }
+  /* Nhãn cấu hình đáng ngờ. Cố ý đặt ngang màn hình và không tắt được — nó
+     nói rằng thứ đang hiện bên dưới có thể không phải kết quả thật. */
+  .banner { background: var(--warn-bg); border-bottom: 1px solid var(--warn);
+            color: var(--warn); padding: 8px 20px; font-size: 13px; }
+  /* Câu trả lời do mô hình giả sinh — nó không đọc tài liệu. */
+  .bubble.stub { border-style: dashed; border-color: var(--warn); }
   /* Bản sinh lại sau khi kiểm định không đạt (US-063) — nhìn phải khác bản đầu. */
   .bubble.replaced { border-left: 3px solid var(--warn); }
 
@@ -108,6 +114,8 @@
   <select id="nb"></select>
   <span id="cfg" class="tag"></span>
 </header>
+
+<div id="banner"></div>
 
 <main>
   <div id="chat">
@@ -157,6 +165,12 @@ async function loadNotebooks() {
 
   const h = await (await fetch("/api/health")).json();
   $("#cfg").textContent = `${h.device} · ${h.status}`;
+
+  // Cảnh báo cấu hình phải NHÌN THẤY được, không chỉ nằm trong log máy chủ.
+  // Adapter giả trả về câu trả lời trông hoàn chỉnh; không có nhãn này thì
+  // không có cách nào biết mình đang xem kết quả thật hay bản dựng để test.
+  $("#banner").innerHTML = (h.warnings || [])
+    .map(w => `<div class="banner">${w}</div>`).join("");
 }
 
 function showSources(nb) {
@@ -245,6 +259,19 @@ async function ask(question, external = false) {
 
       switch (e.type) {
         case "session": sessionId = e.session_id; break;
+        case "meta":
+          // Tên mô hình đi kèm TỪNG câu trả lời, không chỉ ở nhãn đầu trang.
+          // Một ảnh chụp màn hình một bong bóng chat phải tự nói được nó do
+          // mô hình nào sinh ra.
+          badges.push(e.model);
+          if (e.model.startsWith("fake")) {
+            bubble.classList.add("stub");
+            warn.className = "warn";
+            warn.textContent =
+              "Mô hình giả: câu dưới đây được ghép sẵn để test đường xử lý "
+              + "trích dẫn, không phải nội dung tài liệu.";
+          }
+          break;
         case "status": meta.textContent = `⋯ ${e.stage}`; break;
         case "condensed": meta.textContent = `câu hỏi đã gộp: "${e.query}"`; break;
         case "warning":
