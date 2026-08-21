@@ -56,6 +56,7 @@ import random
 import re
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -256,7 +257,9 @@ async def _hoi_mot_doan(
     return q.group(1).strip(), " ".join(a.group(1).split()), loai
 
 
-async def sinh_trong_pham_vi(so_cau: int) -> list[CauHoi]:
+async def sinh_trong_pham_vi(
+    so_cau: int, out: list[CauHoi], luu: Callable[[], None]
+) -> None:
     llm = get_llm_provider()
     print(f"Sinh câu hỏi bằng: {llm.name}")
 
@@ -265,7 +268,7 @@ async def sinh_trong_pham_vi(so_cau: int) -> list[CauHoi]:
         if user is None:
             print("Chưa nạp tài liệu. Chạy: python eval/build_dataset.py --nap",
                   file=sys.stderr)
-            return []
+            return
         nb = s.scalar(select(Notebook).where(Notebook.user_id == user.id))
         rows = s.execute(
             select(
@@ -300,7 +303,6 @@ async def sinh_trong_pham_vi(so_cau: int) -> list[CauHoi]:
     print(f"Nhịp gọi: {GOI_MOI_PHUT}/phút — dự kiến "
           f"{len(chon) * 60 / GOI_MOI_PHUT / 60:.0f} phút cho phần này.")
 
-    out: list[CauHoi] = []
     for i, r in enumerate(chon, 1):
         ket_qua = await _hoi_mot_doan(llm, r.content, nhip)
         if ket_qua is None:
@@ -317,9 +319,8 @@ async def sinh_trong_pham_vi(so_cau: int) -> list[CauHoi]:
                 context=r.content,
             )
         )
-        print(f"  [{i}/{len(chon)}] {loai:<12} {q[:64]}")
-
-    return out
+        print(f"  [{i}/{len(chon)}] {loai:<12} {q[:64]}", flush=True)
+        luu()
 
 
 # ══════════════════════════════════════════════════════
@@ -327,7 +328,9 @@ async def sinh_trong_pham_vi(so_cau: int) -> list[CauHoi]:
 # ══════════════════════════════════════════════════════
 
 
-async def sinh_ngoai_pham_vi(so_cau: int) -> list[NgoaiPhamVi]:
+async def sinh_ngoai_pham_vi(
+    so_cau: int, giu: list[NgoaiPhamVi], luu: Callable[[], None]
+) -> None:
     llm = get_llm_provider()
     embedder = get_embedding_provider()
 
@@ -364,31 +367,40 @@ async def sinh_ngoai_pham_vi(so_cau: int) -> list[NgoaiPhamVi]:
 
     reranker = get_rerank_provider()
     nhip = Nhip(GOI_MOI_PHUT)
-    giu: list[NgoaiPhamVi] = []
     loai_bo = 0
 
-    with session_scope() as s:
-        user = s.scalar(select(User).where(User.email == OWNER))
-        nb = s.scalar(select(Notebook).where(Notebook.user_id == user.id))
-        for q in ung_vien:
-            if len(giu) >= so_cau:
-                break
+    for q in ung_vien:
+        if len(giu) >= so_cau:
+            break
 
+        # Mở phiên RIÊNG cho từng câu, đóng ngay sau khi truy xuất xong.
+        #
+        # Vòng lặp này dành phần lớn thời gian để chờ mô hình và chờ
+        # cross-encoder trên CPU — hàng chục phút cho một lượt đầy đủ. Giữ một
+        # kết nối mở suốt chừng ấy là để nó phơi ra trước mọi thứ có thể cắt
+        # đứt: hết hạn nhàn rỗi, mạng chập chờn, hay Docker tắt giữa chừng.
+        # Lấy kết nối từ pool cho từng câu gần như không tốn gì, và mỗi lần lấy
+        # đều được `pool_pre_ping` kiểm tra lại.
+        with session_scope() as s:
+            user = s.scalar(select(User).where(User.email == OWNER))
+            nb = s.scalar(select(Notebook).where(Notebook.user_id == user.id))
             r = retrieve(s, q, notebook_id=nb.id, embedder=embedder, owner_id=user.id)
             d = decide(q, r, reranker=reranker)
 
-            # Quyết định GIỮ hay LOẠI dựa vào việc các đoạn có trả lời được câu
-            # hỏi không — không dựa vào `d.top_score`. Điểm chỉ được ghi lại.
-            tra_loi_duoc = await _co_dap_an_khong(llm, q, d.chunks, nhip)
-            if tra_loi_duoc:
-                loai_bo += 1
-                print(f"  loại (điểm {d.top_score:.2f}, tài liệu CÓ trả lời): {q[:56]}")
-                continue
+        # Quyết định GIỮ hay LOẠI dựa vào việc các đoạn có trả lời được câu hỏi
+        # không — không dựa vào `d.top_score`. Điểm chỉ được ghi lại.
+        if await _co_dap_an_khong(llm, q, d.chunks, nhip):
+            loai_bo += 1
+            print(f"  loại (điểm {d.top_score:.2f}, tài liệu CÓ trả lời): {q[:56]}",
+                  flush=True)
+            continue
 
-            giu.append(NgoaiPhamVi(id=f"o{len(giu) + 1:03d}", question=q,
-                                   top_score=round(d.top_score, 4)))
-            print(f"  giữ  (điểm {d.top_score:.2f}): {q[:66]}")
+        giu.append(NgoaiPhamVi(id=f"o{len(giu) + 1:03d}", question=q,
+                               top_score=round(d.top_score, 4)))
+        print(f"  giữ  (điểm {d.top_score:.2f}): {q[:66]}", flush=True)
+        luu()
 
+    luu()
     print(f"\nGiữ {len(giu)}, loại {loai_bo} vì tài liệu thật ra có trả lời được.")
     if giu:
         diem = [c.top_score for c in giu]
@@ -396,7 +408,6 @@ async def sinh_ngoai_pham_vi(so_cau: int) -> list[NgoaiPhamVi]:
               f"cao nhất {max(diem):.3f}, trung bình {sum(diem) / len(diem):.3f}")
         print("Đây là dữ liệu quan sát, KHÔNG phải bộ lọc — τ được chọn từ chính "
               "phân bố này ở US-047.")
-    return giu
 
 
 async def _co_dap_an_khong(
@@ -437,38 +448,55 @@ async def _co_dap_an_khong(
 # ══════════════════════════════════════════════════════
 
 
+def _ghi(trong: list[CauHoi], ngoai: list[NgoaiPhamVi]) -> None:
+    """Ghi bộ dữ liệu ra đĩa.
+
+    Gọi **sau mỗi câu**, không phải một lần ở cuối. Phần trong phạm vi tốn một
+    lượt gọi mô hình cho mỗi câu; để một lỗi ở bước sau xoá sạch công đó là điều
+    đã xảy ra thật, và nó tốn nửa giờ hạn mức API để học.
+    """
+    llm = get_llm_provider()
+    embedder = get_embedding_provider()
+    OUT.write_text(
+        json.dumps(
+            {
+                "metadata": {
+                    "created": datetime.now(UTC).isoformat(timespec="seconds"),
+                    "seed": SEED,
+                    "generator_model": llm.name,
+                    "embedding_model": embedder.name,
+                    "note": (
+                        "Câu hỏi do mô hình sinh TỪ một đoạn cụ thể, nên ground "
+                        "truth đúng theo cấu tạo. Trạng thái 'pending' nghĩa là "
+                        "CHƯA có người rà — US-044 AC-6 yêu cầu rà 100% trước khi "
+                        "dùng số liệu."
+                    ),
+                    "question_types": LOAI_CAU_HOI,
+                },
+                "in_scope": [asdict(c) for c in trong],
+                "out_of_scope": [asdict(c) for c in ngoai],
+            },
+            ensure_ascii=False, indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
 async def main_async(args: argparse.Namespace) -> int:
     if args.nap:
         await nap_tai_lieu()
         return 0
 
-    trong = await sinh_trong_pham_vi(args.so_cau)
+    trong: list[CauHoi] = []
+    ngoai: list[NgoaiPhamVi] = []
+
+    await sinh_trong_pham_vi(args.so_cau, trong, lambda: _ghi(trong, ngoai))
     if not trong:
         return 1
-    ngoai = await sinh_ngoai_pham_vi(args.ngoai_pham_vi)
 
-    llm = get_llm_provider()
-    embedder = get_embedding_provider()
-    bo_du_lieu = {
-        "metadata": {
-            "created": datetime.now(UTC).isoformat(timespec="seconds"),
-            "seed": SEED,
-            "generator_model": llm.name,
-            "embedding_model": embedder.name,
-            "note": (
-                "Câu hỏi do mô hình sinh TỪ một đoạn cụ thể, nên ground truth "
-                "đúng theo cấu tạo. Trạng thái 'pending' nghĩa là CHƯA có người "
-                "rà — US-044 AC-6 yêu cầu rà 100% trước khi dùng số liệu."
-            ),
-            "question_types": LOAI_CAU_HOI,
-        },
-        "in_scope": [asdict(c) for c in trong],
-        "out_of_scope": [asdict(c) for c in ngoai],
-    }
+    await sinh_ngoai_pham_vi(args.ngoai_pham_vi, ngoai, lambda: _ghi(trong, ngoai))
+    _ghi(trong, ngoai)
 
-    OUT.write_text(
-        json.dumps(bo_du_lieu, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
     print(f"\nĐã ghi {len(trong)} câu trong phạm vi + {len(ngoai)} câu ngoài "
           f"phạm vi vào {OUT.relative_to(ROOT)}")
     print("\nBƯỚC BẮT BUỘC TIẾP THEO: rà soát bằng  python eval/review.py")
