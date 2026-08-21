@@ -17,7 +17,7 @@ from app.adapters.embedding.fake import FakeEmbeddingProvider
 from app.main import app
 from app.models.base import session_scope
 from app.models.knowledge import Notebook, User
-from app.services.ingest import ingest_file
+from app.services.ingest import ingest_file_sync
 from app.settings import settings
 
 pytestmark = pytest.mark.db
@@ -66,7 +66,7 @@ def notebook_id(tmp_path):
     p = tmp_path / "quy-che.txt"
     p.write_text(DOC, encoding="utf-8")
     with session_scope() as s:
-        ingest_file(
+        ingest_file_sync(
             s, p, notebook_title=NOTEBOOK,
             embedder=FakeEmbeddingProvider(dim=1024), owner_email=OWNER,
         )

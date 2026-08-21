@@ -17,7 +17,7 @@ from app.models.base import session_scope
 from app.models.knowledge import Notebook, User
 from app.services import prompt as P
 from app.services.answer import answer_question, collect_text, final_result
-from app.services.ingest import ingest_file
+from app.services.ingest import ingest_file, ingest_file_sync
 from app.settings import settings
 
 OWNER = "answer@documind.local"
@@ -57,7 +57,7 @@ def seeded(tmp_path, providers):
     p = tmp_path / "quy-che.txt"
     p.write_text(DOC, encoding="utf-8")
     with session_scope() as s:
-        ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+        ingest_file_sync(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
     with session_scope() as s:
         user = s.scalar(select(User).where(User.email == OWNER))
         nb = s.scalar(select(Notebook).where(Notebook.user_id == user.id))
@@ -183,7 +183,9 @@ async def test_tai_lieu_tiem_chi_thi_khong_dieu_khien_duoc_he_thong(
     p.write_text(doc, encoding="utf-8")
 
     with session_scope() as s:
-        ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+        # Test này là async, nên phải `await` thẳng thay vì dùng bọc đồng bộ —
+        # `asyncio.run()` không chạy được bên trong vòng lặp đang hoạt động.
+        await ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
         user = s.scalar(select(User).where(User.email == OWNER))
         nb = s.scalar(select(Notebook).where(Notebook.user_id == user.id))
         events = [

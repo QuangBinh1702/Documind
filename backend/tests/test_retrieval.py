@@ -21,7 +21,7 @@ from app.models.base import session_scope
 from app.models.knowledge import Notebook, Source, User
 from app.repositories import retrieval as repo
 from app.repositories.retrieval import Candidate
-from app.services.ingest import ingest_file
+from app.services.ingest import ingest_file_sync
 from app.services.retrieval import reciprocal_rank_fusion, retrieve
 from app.settings import settings
 from app.text.segment import build_tsquery_parts
@@ -213,7 +213,7 @@ def seeded(tmp_path, emb):
         p = tmp_path / name
         p.write_text(body, encoding="utf-8")
         with session_scope() as s:
-            ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=owner)
+            ingest_file_sync(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=owner)
     with session_scope() as s:
         for owner in (OWNER_A, OWNER_B):
             user = s.scalar(select(User).where(User.email == owner))
@@ -289,7 +289,7 @@ def test_loc_pham_vi_nguon_o_tang_sql(seeded, emb, tmp_path) -> None:
     extra = tmp_path / "them.txt"
     extra.write_text(DOC_B, encoding="utf-8")
     with session_scope() as s:
-        ingest_file(s, extra, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER_A)
+        ingest_file_sync(s, extra, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER_A)
 
     with session_scope() as s:
         sources = s.scalars(select(Source).where(Source.notebook_id == nb_id)).all()

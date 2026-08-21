@@ -23,7 +23,7 @@ from app.adapters.extract import ExtractionError
 from app.models.base import session_scope
 from app.models.knowledge import Notebook, Source, SourceChunk, SourceText, User
 from app.repositories import knowledge as repo
-from app.services.ingest import ingest_file
+from app.services.ingest import ingest_file_sync
 
 pytestmark = pytest.mark.db
 
@@ -79,7 +79,7 @@ def legal_file(tmp_path: Path) -> Path:
 
 def _ingest(path: Path, emb: FakeEmbeddingProvider):
     with session_scope() as s:
-        return ingest_file(s, path, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+        return ingest_file_sync(s, path, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
 
 
 # Mọi phép đếm phải giới hạn trong phạm vi tài khoản test. Đếm toàn bảng làm
@@ -235,7 +235,7 @@ def test_dinh_dang_khong_ho_tro_bao_loi(tmp_path: Path, emb) -> None:
     p = tmp_path / "a.xyz"
     p.write_text("nội dung", encoding="utf-8")
     with session_scope() as s, pytest.raises(ExtractionError) as exc:
-        ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+        ingest_file_sync(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
     assert exc.value.code == "KIND_UNSUPPORTED"
 
 
@@ -254,7 +254,7 @@ def test_van_ban_bang_ma_cu_bi_chan(tmp_path: Path, emb) -> None:
     p.write_text(tcvn3, encoding="utf-8")
 
     with session_scope() as s, pytest.raises(ExtractionError) as exc:
-        ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+        ingest_file_sync(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
     assert "LEGACY_ENCODING" in exc.value.code
 
     # Nguồn phải được ghi lại ở trạng thái failed kèm lý do đọc được, không

@@ -25,7 +25,7 @@ from app.services.external import (
     QuotaExceeded,
     answer_externally,
 )
-from app.services.ingest import ingest_file
+from app.services.ingest import ingest_file_sync
 from app.settings import settings
 
 pytestmark = pytest.mark.db
@@ -66,7 +66,7 @@ def users(tmp_path, emb):
     p.write_text(DOC, encoding="utf-8")
     out = {}
     with session_scope() as s:
-        ingest_file(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+        ingest_file_sync(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
         repo_user = s.scalar(select(User).where(User.email == OWNER))
         nb = s.scalar(select(Notebook).where(Notebook.user_id == repo_user.id))
         out[OWNER] = (repo_user.id, nb.id)

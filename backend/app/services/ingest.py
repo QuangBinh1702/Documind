@@ -20,12 +20,14 @@ from sqlalchemy.orm import Session
 
 from app.adapters.extract import ExtractionError, extract
 from app.ports.embedding import EmbeddingProvider
+from app.ports.llm import LLMProvider
 from app.repositories import knowledge as repo
+from app.services.contextual import build_prefixes, indexed_text
 from app.settings import settings
 from app.text.chunker import chunk_document
 from app.text.quality import TextQuality
 
-__all__ = ["SUFFIX_TO_KIND", "IngestResult", "ingest_file"]
+__all__ = ["SUFFIX_TO_KIND", "IngestResult", "ingest_file", "ingest_file_sync"]
 
 log = logging.getLogger(__name__)
 
@@ -55,22 +57,29 @@ class IngestResult:
     method: str
     offsets_ok: int
     offsets_total: int
+    context_seconds: float = 0.0
+    """Thời gian sinh bối cảnh khi bật US-049 — chi phí của dòng E ablation."""
 
     @property
     def invariant_holds(self) -> bool:
         return self.offsets_total > 0 and self.offsets_ok == self.offsets_total
 
 
-def ingest_file(
+async def ingest_file(
     session: Session,
     path: Path,
     *,
     notebook_title: str,
     embedder: EmbeddingProvider,
+    llm: LLMProvider | None = None,
     owner_email: str = "cli@documind.local",
     on_progress: Callable[[str], None] | None = None,
 ) -> IngestResult:
-    """Nạp một tệp. Ném `ExtractionError` nếu tệp không dùng được."""
+    """Nạp một tệp. Ném `ExtractionError` nếu tệp không dùng được.
+
+    `llm` chỉ cần khi bật Contextual Retrieval (US-049); các đường khác không
+    dùng tới nó.
+    """
 
     def step(message: str) -> None:
         log.info(message)
@@ -154,14 +163,31 @@ def ingest_file(
         session.flush()
         raise ExtractionError(source.error_code, source.error_message)
 
+    # ── Contextual Retrieval (US-049), nếu bật ──────────
+    prefixes: list[str] | None = None
+    context_seconds = 0.0
+    if settings.contextual_retrieval_enabled and llm is not None:
+        step(f"Sinh bối cảnh cho {len(chunks)} đoạn …")
+        contextual = await build_prefixes(
+            result.full_text, chunks, llm=llm,
+            on_progress=(lambda i, n: step(f"  bối cảnh {i}/{n}")) if on_progress else None,
+        )
+        prefixes = contextual.prefixes
+        context_seconds = contextual.seconds
+
     step(f"Nhúng {len(chunks)} đoạn bằng {embedder.name} …")
     source.status = "embedding"
     session.flush()
 
-    vectors = embedder.embed_documents([c.content for c in chunks])
+    # Nhúng trên prefix + nội dung khi có bối cảnh; hiển thị vẫn là nội dung
+    # gốc. Xem `contextual.indexed_text`.
+    vectors = embedder.embed_documents(
+        [indexed_text(c.content, prefixes[i] if prefixes else None)
+         for i, c in enumerate(chunks)]
+    )
 
     step("Ghi vào cơ sở dữ liệu …")
-    repo.insert_chunks(session, source, chunks, vectors)
+    repo.insert_chunks(session, source, chunks, vectors, prefixes)
 
     # Kiểm chứng INV-1 trên dữ liệu ĐÃ GHI, không phải trên đối tượng trong bộ
     # nhớ. Bắt được cả lỗi phát sinh ở tầng lưu trữ.
@@ -191,4 +217,27 @@ def ingest_file(
         method=result.method,
         offsets_ok=ok,
         offsets_total=total,
+        context_seconds=context_seconds,
+    )
+
+def ingest_file_sync(*args, **kwargs) -> IngestResult:
+    """Bọc đồng bộ cho `ingest_file`.
+
+    Hàm chính là async vì Contextual Retrieval (US-049) gọi mô hình ngôn ngữ.
+    Những chỗ gọi vốn đồng bộ — CLI, fixture của test — dùng bọc này thay vì
+    phải chuyển cả chuỗi gọi sang async chỉ vì một tính năng tuỳ chọn.
+
+    Không dùng được bên trong một vòng lặp sự kiện đang chạy; ở đó hãy `await`
+    thẳng `ingest_file`.
+    """
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(ingest_file(*args, **kwargs))
+
+    raise RuntimeError(
+        "ingest_file_sync() được gọi bên trong một vòng lặp sự kiện đang chạy. "
+        "Ở đó hãy dùng 'await ingest_file(...)' thay vì bọc đồng bộ."
     )

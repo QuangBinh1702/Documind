@@ -19,7 +19,7 @@ from pathlib import Path
 from app.adapters.embedding import get_embedding_provider
 from app.adapters.extract import ExtractionError
 from app.models.base import session_scope
-from app.services.ingest import SUFFIX_TO_KIND, ingest_file
+from app.services.ingest import SUFFIX_TO_KIND, ingest_file_sync
 from app.settings import settings
 
 
@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{i}/{len(files)}] {path.name}")
         try:
             with session_scope() as session:
-                result = ingest_file(
+                result = ingest_file_sync(
                     session,
                     path,
                     notebook_title=args.notebook,

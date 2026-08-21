@@ -105,27 +105,39 @@ def insert_chunks(
     source: Source,
     chunks: Sequence[Chunk],
     embeddings: Sequence[Sequence[float]],
+    context_prefixes: Sequence[str] | None = None,
 ) -> int:
     """Ghi chunk, xoá sạch chunk cũ của nguồn trước.
 
     Xoá trước là điều kiện để nạp lại cùng một tệp không sinh chunk trùng
     (US-008 AC-8) và không để lại chunk mồ côi khi tài liệu ngắn đi.
+
+    `context_prefixes` (US-049) chỉ tham gia vào `tsv`; nó **không** ghi đè
+    `content`, nên bất biến INV-1 giữ nguyên và trích dẫn vẫn hiện đúng nguyên
+    văn tài liệu.
     """
     if len(chunks) != len(embeddings):
         raise ValueError(
             f"Số chunk ({len(chunks)}) khác số vector ({len(embeddings)})"
         )
+    if context_prefixes is not None and len(context_prefixes) != len(chunks):
+        raise ValueError(
+            f"Số chunk ({len(chunks)}) khác số bối cảnh ({len(context_prefixes)})"
+        )
 
     session.execute(delete(SourceChunk).where(SourceChunk.source_id == source.id))
     session.flush()
 
-    for chunk, vector in zip(chunks, embeddings, strict=True):
+    prefixes = list(context_prefixes) if context_prefixes else [None] * len(chunks)
+
+    for chunk, vector, prefix in zip(chunks, embeddings, prefixes, strict=True):
         session.add(
             SourceChunk(
                 source_id=source.id,
                 notebook_id=source.notebook_id,
                 chunk_index=chunk.chunk_index,
                 content=chunk.content,
+                context_prefix=prefix or None,
                 heading_path=chunk.heading_path,
                 page_no=chunk.page_no,
                 char_start=chunk.char_start,
@@ -137,13 +149,19 @@ def insert_chunks(
         )
     session.flush()
 
-    # tsv sinh ở tầng SQL bằng to_tsvector('vi', content) trên văn bản GỐC.
-    # Không tách từ, không nối bằng gạch dưới — xem quyết định 0001: bộ phân
-    # tích của Postgres coi '_' là ký tự phân tách nên cách cũ hỏng im lặng.
+    # tsv sinh ở tầng SQL bằng to_tsvector('vi', …) trên văn bản GỐC. Không
+    # tách từ, không nối bằng gạch dưới — xem quyết định 0001: bộ phân tích của
+    # Postgres coi '_' là ký tự phân tách nên cách cũ hỏng im lặng.
+    #
+    # Khi có bối cảnh, nó được ghép vào đây — đây chính là "Contextual BM25"
+    # của US-049 AC-2. Bỏ nửa này là bỏ một nửa lợi ích của cả kỹ thuật.
+    columns = SourceChunk.__table__.c
+    indexed = func.coalesce(columns.context_prefix + " ", "") + columns.content
+
     session.execute(
         SourceChunk.__table__.update()
-        .where(SourceChunk.__table__.c.source_id == source.id)
-        .values(tsv=func.to_tsvector("vi", SourceChunk.__table__.c.content))
+        .where(columns.source_id == source.id)
+        .values(tsv=func.to_tsvector("vi", indexed))
     )
     session.flush()
     return len(chunks)

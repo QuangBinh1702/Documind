@@ -66,6 +66,8 @@
   }
   .bubble.external { border-color: var(--warn); background: var(--warn-bg); }
   .bubble.refused { border-style: dashed; color: var(--muted); }
+  /* Bản sinh lại sau khi kiểm định không đạt (US-063) — nhìn phải khác bản đầu. */
+  .bubble.replaced { border-left: 3px solid var(--warn); }
 
   .warn {
     color: var(--warn); font-size: 13px; margin-bottom: 8px; font-weight: 550;
@@ -227,7 +229,7 @@ async function ask(question, external = false) {
 
   const reader = res.body.getReader();
   const dec = new TextDecoder();
-  let buf = "", raw = "", refused = false;
+  let buf = "", raw = "", refused = false, badges = [];
 
   while (true) {
     const { done, value } = await reader.read();
@@ -258,16 +260,35 @@ async function ask(question, external = false) {
           bubble.classList.add("refused");
           meta.textContent = `cổng ngưỡng: ${e.top_score.toFixed(3)} < τ ${e.threshold} — ${e.reason}`;
           break;
+        case "intent":
+          // US-066 — nhánh chitchat không chạy truy xuất, nên phải nhìn ra
+          // được là câu vừa rồi đi đường nào.
+          badges.push(`ý định ${e.intent} (${e.decided_by})`);
+          break;
         case "token":
           raw += e.text;
           bubble.innerHTML = renderMarkers(raw);
+          break;
+        case "replace":
+          // US-063 — bản sinh lại thay thế toàn bộ, không ghép thêm. Giao diện
+          // không rút lại được thứ đã hiện nên phải vẽ lại từ đầu.
+          raw = e.text;
+          bubble.innerHTML = renderMarkers(raw);
+          bubble.classList.add("replaced");
+          break;
+        case "verification":
+          badges.push(e.passed
+            ? "kiểm định ĐẠT"
+            : `kiểm định KHÔNG ĐẠT — ${e.issue || "không nêu lý do"}`);
+          if (!e.passed) { warn.className = "warn"; warn.textContent = badges.at(-1); }
           break;
         case "citation":
           citations[e.marker] = e;
           bubble.innerHTML = renderMarkers(raw);
           break;
         case "done":
-          meta.textContent = `${e.answer_kind} · ${e.latency_ms} ms`
+          if (e.retries) badges.push(`sinh lại ${e.retries} lần`);
+          meta.textContent = [`${e.answer_kind} · ${e.latency_ms} ms`, ...badges].join(" · ")
             + (e.dropped_markers?.length ? ` · đã loại marker bịa ${e.dropped_markers.join(",")}` : "");
           if (refused && !external) {
             const b = document.createElement("button");
