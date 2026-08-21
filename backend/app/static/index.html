@@ -270,6 +270,16 @@ async function ask(question, external = false) {
             warn.textContent =
               "Mô hình giả: câu dưới đây được ghép sẵn để test đường xử lý "
               + "trích dẫn, không phải nội dung tài liệu.";
+          } else if (e.is_local === false) {
+            // SPEC-REVIEW.md §A.4: ở Fast Mode, câu hỏi VÀ các đoạn tài liệu
+            // được chọn đều rời khỏi máy. Nhãn ở đầu trang nói về cấu hình;
+            // nhãn này nói về CHÍNH câu trả lời đang hiện, nên một ảnh chụp
+            // màn hình cũng tự nói được dữ liệu đã đi đâu.
+            bubble.classList.add("external");
+            warn.className = "warn";
+            warn.textContent =
+              `Câu hỏi và các đoạn tài liệu được chọn đã gửi tới ${e.model}. `
+              + "Chuyển sang Privacy Mode để không có gì rời khỏi máy.";
           }
           break;
         case "status": meta.textContent = `⋯ ${e.stage}`; break;
