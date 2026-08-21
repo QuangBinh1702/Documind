@@ -79,7 +79,7 @@ def make_pdf(tmp_path: Path, vi_font: str):
     Trả về hàm ``make_pdf(pages: list[list[str]]) -> Path`` — mỗi trang là một
     danh sách đoạn văn.
     """
-    fitz = pytest.importorskip("fitz", reason="cần PyMuPDF")
+    fitz = pytest.importorskip("pymupdf", reason="cần PyMuPDF")
 
     def _make(pages: list[list[str]], name: str = "test.pdf") -> Path:
         doc = fitz.open()
@@ -107,7 +107,7 @@ def make_pdf(tmp_path: Path, vi_font: str):
 @pytest.fixture
 def scanned_pdf(tmp_path: Path):
     """PDF không có lớp text — mô phỏng bản scan."""
-    fitz = pytest.importorskip("fitz", reason="cần PyMuPDF")
+    fitz = pytest.importorskip("pymupdf", reason="cần PyMuPDF")
 
     doc = fitz.open()
     for _ in range(3):

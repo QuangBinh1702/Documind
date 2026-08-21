@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz
 except ImportError:
     sys.exit("Thiếu PyMuPDF. Chạy: pip install -r spikes/requirements.txt")
 

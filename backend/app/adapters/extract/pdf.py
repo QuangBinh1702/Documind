@@ -26,7 +26,10 @@ class PdfPageText(tuple):
 
 def _open(path: Path):
     try:
-        import fitz  # PyMuPDF
+        # Tên `fitz` là bí danh cũ, đã bị đánh dấu ngừng hỗ trợ và sẽ biến mất
+        # ở một bản phát hành sau. Dùng đúng tên gói ngay để khỏi phải đi tìm
+        # trong ngày nó bị gỡ.
+        import pymupdf
     except ImportError as exc:  # pragma: no cover - phụ thuộc môi trường
         raise ExtractionError(
             "PYMUPDF_MISSING",
@@ -34,7 +37,7 @@ def _open(path: Path):
         ) from exc
 
     try:
-        doc = fitz.open(path)
+        doc = pymupdf.open(path)
     except Exception as exc:
         raise ExtractionError(
             "PDF_UNREADABLE",
