@@ -37,6 +37,18 @@ ra nằm trong phạm vi và bị loại. Phép kiểm này độc lập với t
 không làm hỏng phép hiệu chỉnh sau đó. Điểm rerank vẫn được ghi lại — như **dữ
 liệu quan sát được**, không phải như bộ lọc.
 
+Mặt trái: câu hỏi dễ hơn câu hỏi thật
+--------------------------------------
+Đặt câu hỏi từ một đoạn làm ground truth đáng tin, nhưng cũng làm câu hỏi thừa
+hưởng **từ vựng** của chính đoạn đó — và truy xuất tìm lại nó gần như chắc chắn.
+Lượt chấm đầu tiên cho điểm cross-encoder 0.98–0.99 trên phần lớn câu trong
+phạm vi, tức là bài toán dễ hơn hẳn thực tế.
+
+Prompt vì vậy yêu cầu diễn đạt lại bằng từ ngữ đời thường. Nó thu hẹp khoảng
+cách chứ không xoá được: người rà vẫn phải viết lại những câu chép quá sát, và
+`eval/README.md` ghi rõ Context Recall đo ở đây là **chặn trên**, không phải kỳ
+vọng.
+
 Con người vẫn phải rà
 ---------------------
 AC-6 yêu cầu **người rà soát và sửa 100%**, và ghi lại tỉ lệ loại/sửa như một
@@ -133,8 +145,13 @@ QUY TẮC
 từ nơi khác.
 2. Câu hỏi phải tự đứng được: người đọc không nhìn thấy đoạn này vẫn hiểu đang \
 hỏi gì. KHÔNG dùng "đoạn này", "theo trên", "điều khoản nêu trên".
-3. Đáp án viết ngắn gọn 1–3 câu, chỉ dùng thông tin trong đoạn.
-4. Loại câu hỏi phải là MỘT trong: {loai}
+3. **Hỏi bằng lời của người dùng, không bằng lời của văn bản.** Diễn đạt lại \
+bằng từ ngữ đời thường. TRÁNH chép lại các cụm từ đặc trưng của đoạn — nếu đoạn \
+viết "điểm trung bình tích lũy" thì hỏi "điểm trung bình toàn khoá"; nếu đoạn \
+viết "nghỉ học tạm thời" thì hỏi "bảo lưu kết quả". Người thật hỏi bằng từ ngữ \
+của họ, không phải từ ngữ trong quy chế.
+4. Đáp án viết ngắn gọn 1–3 câu, chỉ dùng thông tin trong đoạn.
+5. Loại câu hỏi phải là MỘT trong: {loai}
 
 Trả về ĐÚNG khuôn dạng sau, không thêm gì khác:
 
