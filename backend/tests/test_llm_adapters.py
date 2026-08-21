@@ -113,6 +113,46 @@ async def test_gui_khoa_qua_header_khong_qua_url(monkeypatch) -> None:
     assert "bi-mat" not in str(seen[0].url)
 
 
+async def test_tra_ve_rong_thi_bao_loi_chu_khong_im_lang(monkeypatch) -> None:
+    """Ca hỏng tệ nhất: cổng ngưỡng cho qua, giao diện hiện bong bóng trống,
+    và không có gì trong log nói vì sao.
+
+    Đã gặp thật: các mô hình Gemini đời mới suy nghĩ trước khi trả lời, và phần
+    suy nghĩ ăn vào CÙNG hạn mức token với câu trả lời. Với prompt RAG mang 8
+    đoạn tài liệu, suy nghĩ dùng hết hạn mức và phần trả lời còn lại rỗng.
+    """
+    event = {"candidates": [{"content": {"parts": []}, "finishReason": "MAX_TOKENS"}]}
+    _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_sse(event)))
+
+    with pytest.raises(RuntimeError, match=r"THINKING_BUDGET|hạn mức token"):
+        await _collect(GeminiLLMProvider(api_key="k"))
+
+
+@pytest.mark.parametrize(
+    ("finish", "phai_co"),
+    [("SAFETY", "bộ lọc nội dung"), ("RECITATION", "bản quyền"), ("OTHER", "OTHER")],
+)
+async def test_giai_thich_tung_ly_do_dung_lai(monkeypatch, finish, phai_co) -> None:
+    event = {"candidates": [{"content": {"parts": []}, "finishReason": finish}]}
+    _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_sse(event)))
+    with pytest.raises(RuntimeError, match=phai_co):
+        await _collect(GeminiLLMProvider(api_key="k"))
+
+
+async def test_tat_suy_nghi_theo_mac_dinh(monkeypatch) -> None:
+    """Câu trả lời ở đây phải rút ra từ các đoạn đã cho, không phải suy luận ra.
+
+    Nên hạn mức token nên dành cả cho câu trả lời — đó cũng là thứ giữ cho ca
+    "trả về rỗng" ở trên không xảy ra ngay từ đầu.
+    """
+    seen = _mount(monkeypatch, lambda r, n: httpx.Response(200, content=_sse(_chunk("x"))))
+    await _collect(GeminiLLMProvider(api_key="k"), max_tokens=500)
+
+    cfg = json.loads(seen[0].content)["generationConfig"]
+    assert cfg["thinkingConfig"]["thinkingBudget"] == 0
+    assert cfg["maxOutputTokens"] == 500
+
+
 async def test_thu_lai_khi_qua_tai_roi_thanh_cong(monkeypatch) -> None:
     """503 là trạng thái tạm thời và rất hay gặp ở hạn mức miễn phí.
 

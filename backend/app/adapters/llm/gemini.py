@@ -86,7 +86,12 @@ class GeminiLLMProvider:
                 }
                 for m in messages
             ],
-            "generationConfig": {"temperature": temperature},
+            "generationConfig": {
+                "temperature": temperature,
+                # Phần suy nghĩ ăn vào cùng hạn mức với câu trả lời — xem chú
+                # thích ở `settings.gemini_thinking_budget`.
+                "thinkingConfig": {"thinkingBudget": settings.gemini_thinking_budget},
+            },
         }
         if max_tokens:
             payload["generationConfig"]["maxOutputTokens"] = max_tokens
@@ -119,11 +124,22 @@ class GeminiLLMProvider:
                         body = (await response.aread()).decode("utf-8", "replace")[:300]
                         raise RuntimeError(_explain(response.status_code, body))
 
+                    emitted = False
+                    finish = None
                     async for line in response.aiter_lines():
                         if not line.startswith("data: "):
                             continue
-                        for piece in _texts(line[6:]):
+                        texts, reason = _parse(line[6:])
+                        finish = reason or finish
+                        for piece in texts:
+                            emitted = True
                             yield piece
+
+                    # Một câu trả lời rỗng mà không có lỗi là ca hỏng tệ nhất:
+                    # cổng ngưỡng đã cho qua, giao diện hiện một bong bóng
+                    # trống, và không có gì trong log nói vì sao. Bắt ngay ở đây.
+                    if not emitted:
+                        raise RuntimeError(_explain_empty(finish))
                     return
 
             except httpx.ConnectError as exc:
@@ -133,18 +149,42 @@ class GeminiLLMProvider:
                 ) from exc
 
 
-def _texts(data: str) -> list[str]:
-    """Rút phần văn bản khỏi một sự kiện SSE.
+def _parse(data: str) -> tuple[list[str], str | None]:
+    """Rút văn bản và `finishReason` khỏi một sự kiện SSE.
 
     Một sự kiện có thể mang nhiều `part`, và có part không phải văn bản — ví dụ
     `thoughtSignature` của các mô hình biết suy luận. Bỏ qua chúng thay vì báo
     lỗi: chúng là chi tiết nội bộ của mô hình, không phải nội dung câu trả lời.
     """
     try:
-        parts = json.loads(data)["candidates"][0]["content"]["parts"]
+        candidate = json.loads(data)["candidates"][0]
     except (json.JSONDecodeError, KeyError, IndexError):
-        return []
-    return [p["text"] for p in parts if isinstance(p.get("text"), str)]
+        return [], None
+
+    parts = candidate.get("content", {}).get("parts", [])
+    texts = [p["text"] for p in parts if isinstance(p.get("text"), str)]
+    return texts, candidate.get("finishReason")
+
+
+def _explain_empty(finish: str | None) -> str:
+    """Vì sao mô hình không trả về chữ nào — US-030 AC-5."""
+    if finish == "MAX_TOKENS":
+        return (
+            "Gemini hết hạn mức token trước khi viết được câu trả lời. Nếu "
+            "GEMINI_THINKING_BUDGET đang khác 0 thì phần suy nghĩ đã ăn hết "
+            "LLM_MAX_TOKENS; đặt về 0 hoặc tăng LLM_MAX_TOKENS."
+        )
+    if finish in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST"):
+        return (
+            f"Gemini chặn câu trả lời vì bộ lọc nội dung ({finish}). "
+            f"Privacy Mode chạy mô hình cục bộ nên không có bộ lọc này."
+        )
+    if finish == "RECITATION":
+        return (
+            "Gemini từ chối vì câu trả lời trùng quá nhiều với văn bản có bản "
+            "quyền mà nó đã học. Thử hỏi lại theo cách khác."
+        )
+    return f"Gemini kết thúc mà không trả về chữ nào (finishReason={finish})."
 
 
 def _explain(status: int, body: str) -> str:

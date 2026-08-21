@@ -100,6 +100,40 @@ _LEGAL_LEVEL = {
     "phụ lục": 1,
 }
 
+# Đánh số thập phân: "2.13 Tên mục", "2.1. Tên mục", "3.4.1 — Tên mục".
+# Cấp = số thành phần, nên 2.13 nằm trên 2.13.1 mà không cần bảng tra.
+#
+# Ràng buộc chặt để không nuốt nhầm số liệu trong văn xuôi hay trong bảng: phải
+# đứng đầu dòng, và phần chữ theo sau phải bắt đầu bằng **chữ HOA**.
+#
+# Chỉ đòi "bắt đầu bằng chữ cái" là không đủ — "2.5 kg mỗi ngày" và "1.2 triệu
+# đồng" đều qua được. Chữ hoa mới là thứ tách được, vì tiêu đề tiếng Việt viết
+# hoa chữ đầu còn số liệu giữa câu thì không. Đánh đổi: một tiêu đề viết thường
+# hoàn toàn sẽ bị bỏ sót — chấp nhận được, vì bỏ sót chỉ mất một nhãn, còn nhận
+# nhầm là dán nhãn SAI lên trích dẫn.
+_DECIMAL_HEADING = re.compile(r"^(\d+(?:\.\d+){1,3})\s*[.\-—:]?\s+(\S.*)$")
+
+# "Đề tài 2.10: …", "Bài 3. …", "Câu 5 …". Miền tài liệu của đồ án gồm cả đề
+# cương môn học và danh sách đề tài, không chỉ văn bản pháp quy.
+_ITEM_HEADING = re.compile(
+    r"^(Đề\s*tài|ĐỀ\s*TÀI|Bài|BÀI|Câu|CÂU|Nhiệm\s*vụ|NHIỆM\s*VỤ)\s+"
+    r"(\d+(?:\.\d+)*)\s*[.\-—:]?\s*(.*)$"
+)
+_ITEM_LEVEL = 4
+
+# Dòng dài không phải tiêu đề mà là một câu bắt đầu bằng số. Giới hạn này rẻ và
+# loại được gần hết ca nhập nhằng còn lại.
+_MAX_HEADING_CHARS = 200
+
+# Một tiêu đề chỉ được coi là "chỗ chứa" của đoạn nằm trong khoảng này. Xa hơn
+# thì tài liệu có cấu trúc mà bộ nhận diện không thấy, và gán bừa tiêu đề gần
+# nhất phía trước là **nói sai**, không phải nói thiếu.
+#
+# Đã gặp thật: một tài liệu 85 trang chỉ lộ ra đúng một tiêu đề, và 110/119 đoạn
+# nhận cùng nhãn đó — kể cả đoạn cách nó ba mươi trang. Trên chip trích dẫn,
+# một nhãn sai còn tệ hơn không có nhãn.
+_MAX_HEADING_DISTANCE = 20_000
+
 
 @dataclass(frozen=True, slots=True)
 class _Heading:
@@ -115,27 +149,52 @@ def _find_headings(text: str) -> list[_Heading]:
 
     for line in text.split("\n"):
         stripped = line.strip()
-        if stripped:
-            md = _MD_HEADING.match(stripped)
-            if md:
-                out.append(_Heading(len(md.group(1)), md.group(2).strip(), pos))
-            else:
-                legal = _LEGAL_HEADING.match(stripped)
-                if legal:
-                    keyword = legal.group(1).lower()
-                    level = _LEGAL_LEVEL.get(keyword, 4)
-                    title = f"{legal.group(1)} {legal.group(2)}"
-                    if legal.group(3).strip():
-                        title = f"{title}. {legal.group(3).strip()}"
-                    out.append(_Heading(level, title, pos))
+        if stripped and len(stripped) <= _MAX_HEADING_CHARS:
+            found = _match_heading(stripped, pos)
+            if found is not None:
+                out.append(found)
 
         pos += len(line) + 1  # +1 cho ký tự '\n' đã bị split ăn mất
 
     return out
 
 
+def _match_heading(line: str, pos: int) -> _Heading | None:
+    """Nhận diện một dòng tiêu đề. Thứ tự thử là từ chắc chắn nhất trở xuống."""
+    md = _MD_HEADING.match(line)
+    if md:
+        return _Heading(len(md.group(1)), md.group(2).strip(), pos)
+
+    legal = _LEGAL_HEADING.match(line)
+    if legal:
+        keyword = legal.group(1).lower()
+        title = f"{legal.group(1)} {legal.group(2)}"
+        if legal.group(3).strip():
+            title = f"{title}. {legal.group(3).strip()}"
+        return _Heading(_LEGAL_LEVEL.get(keyword, 4), title, pos)
+
+    item = _ITEM_HEADING.match(line)
+    if item:
+        title = f"{item.group(1)} {item.group(2)}"
+        if item.group(3).strip():
+            title = f"{title}: {item.group(3).strip()}"
+        return _Heading(_ITEM_LEVEL, title, pos)
+
+    dec = _DECIMAL_HEADING.match(line)
+    if dec:
+        title = dec.group(2).strip()
+        if title[:1].isupper():
+            number = dec.group(1)
+            return _Heading(number.count(".") + 1, f"{number} {title}", pos)
+
+    return None
+
+
 def _heading_path_at(headings: list[_Heading], pos: int) -> str | None:
-    """Chuỗi tiêu đề tổ tiên tại một vị trí, ví dụ "Chương 3 > Điều 12"."""
+    """Chuỗi tiêu đề tổ tiên tại một vị trí, ví dụ "Chương 3 > Điều 12".
+
+    Trả về ``None`` khi tiêu đề gần nhất nằm quá xa: xem `_MAX_HEADING_DISTANCE`.
+    """
     stack: list[_Heading] = []
     for h in headings:
         if h.pos > pos:
@@ -143,7 +202,10 @@ def _heading_path_at(headings: list[_Heading], pos: int) -> str | None:
         while stack and stack[-1].level >= h.level:
             stack.pop()
         stack.append(h)
-    return " > ".join(h.title for h in stack) if stack else None
+
+    if not stack or pos - stack[-1].pos > _MAX_HEADING_DISTANCE:
+        return None
+    return " > ".join(h.title for h in stack)
 
 
 # ── Cắt chunk ──────────────────────────────────────────

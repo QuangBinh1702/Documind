@@ -201,6 +201,59 @@ def test_heading_path_theo_cau_truc_van_ban_phap_quy() -> None:
     assert nested, f"không có đường dẫn lồng nhau: {paths}"
 
 
+@pytest.mark.parametrize(
+    ("dong", "phai_nhan_ra"),
+    [
+        ("2.13 Phát hiện tấn công mạng dựa mô hình CNN", True),
+        ("2.1.  Ứng dụng học máy trong phân tích log", True),
+        ("3.4.1 — Thu thập dữ liệu", True),
+        ("Đề tài 2.10: Công cụ phân tích mã độc TUI", True),
+        ("Bài 3. Cấu hình tường lửa", True),
+        ("Câu 5 Trình bày quy trình kiểm thử", True),
+        # Số liệu trong văn xuôi — KHÔNG phải tiêu đề.
+        ("2.5 kg mỗi ngày theo khẩu phần chuẩn", False),
+        ("1.2 triệu đồng là mức thu tối đa", False),
+        ("Tỉ lệ đạt 2.13 phần trăm so với kỳ trước", False),
+    ],
+)
+def test_nhan_dien_them_cach_danh_so_ngoai_van_ban_phap_quy(dong, phai_nhan_ra) -> None:
+    """Miền tài liệu của đồ án không chỉ có văn bản pháp quy.
+
+    Đề cương môn học và danh sách đề tài đánh số kiểu `2.13` hoặc `Đề tài 2.10`.
+    Không nhận ra chúng thì cả tài liệu chỉ có một tiêu đề — hoặc không có gì.
+
+    Ràng buộc "phần chữ phải bắt đầu bằng chữ cái" là thứ tách `2.13 Phát hiện`
+    khỏi `2.5 kg mỗi ngày`.
+    """
+    from app.text.chunker import _match_heading
+
+    assert (_match_heading(dong, 0) is not None) is phai_nhan_ra, dong
+
+
+def test_dong_qua_dai_khong_phai_tieu_de() -> None:
+    from app.text.chunker import _MAX_HEADING_CHARS, _find_headings
+
+    dai = "2.13 " + "chữ " * (_MAX_HEADING_CHARS // 2)
+    assert _find_headings(dai) == []
+
+
+def test_khong_gan_tieu_de_o_qua_xa() -> None:
+    """Tiêu đề cách ba mươi trang không phải là "chỗ chứa" của đoạn văn.
+
+    Đã gặp trên tài liệu thật: một tệp 85 trang chỉ lộ ra đúng một tiêu đề, và
+    110/119 đoạn nhận cùng nhãn đó. Trên chip trích dẫn thì một nhãn sai còn tệ
+    hơn không có nhãn — người dùng bấm vào và đọc một vị trí không có thật.
+    """
+    from app.text.chunker import _MAX_HEADING_DISTANCE
+
+    full = normalize("Chương I. Quy định chung\n\n" + "Nội dung không có tiêu đề nào. " * 3000)
+    assert len(full) > _MAX_HEADING_DISTANCE
+
+    chunks = chunk_text(full, max_tokens=200)
+    assert chunks[0].heading_path, "đoạn ngay dưới tiêu đề vẫn phải mang nhãn"
+    assert chunks[-1].heading_path is None, "đoạn ở cuối không thuộc tiêu đề đó nữa"
+
+
 def test_tat_respect_headings_thi_khong_cat_theo_tieu_de() -> None:
     with_h = chunk_text(normalize(LEGAL_DOC), max_tokens=400, respect_headings=True)
     without_h = chunk_text(normalize(LEGAL_DOC), max_tokens=400, respect_headings=False)

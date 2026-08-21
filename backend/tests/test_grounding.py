@@ -196,6 +196,59 @@ def test_nguong_thay_doi_thi_quyet_dinh_thay_doi(
     assert d.threshold == threshold
 
 
+class CountingReranker:
+    """Đếm xem cross-encoder thật sự được gọi trên bao nhiêu đoạn."""
+
+    name = "counting"
+
+    def __init__(self) -> None:
+        self.seen: list[int] = []
+
+    def score(self, query: str, documents: list[str]) -> list[float]:
+        self.seen.append(len(documents))
+        # Điểm giảm dần theo thứ tự vào, để test biết được thứ tự bị đảo hay không.
+        return [1.0 - i * 0.01 for i in range(len(documents))]
+
+
+def test_chi_cham_phan_dau_bang(monkeypatch) -> None:
+    """Cross-encoder chạy tuyến tính theo số ứng viên, nên đây là tham số chi
+    phối độ trễ nhiều nhất của cả đường truy xuất.
+
+    Chấm hết cũng không cải thiện gì: một đoạn xếp hạng 80 sau RRF gần như
+    không bao giờ leo lên top 8. Nó chỉ nhân độ trễ lên.
+    """
+    monkeypatch.setattr(settings, "rerank_candidates", 5)
+    rr = CountingReranker()
+    result = _result(*[_chunk(i, f"đoạn {i}", rrf=1.0 / (i + 1)) for i in range(40)])
+
+    rerank("thử", result, reranker=rr)
+    assert rr.seen == [5], "phải chấm đúng 5 đoạn, không phải cả 40"
+
+
+def test_it_ung_vien_hon_nguong_thi_cham_het(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "rerank_candidates", 50)
+    rr = CountingReranker()
+    rerank("thử", _result(_chunk(1, "a"), _chunk(2, "b")), reranker=rr)
+    assert rr.seen == [2]
+
+
+def test_hai_con_so_doc_lap_nhau(monkeypatch) -> None:
+    """`rerank_candidates` là chấm bao nhiêu, `rerank_top_k` là giữ bao nhiêu.
+
+    Rất dễ nhầm thành một tham số, và lúc đó hạ chi phí xuống cũng hạ luôn số
+    đoạn đưa vào mô hình sinh — tức là đổi cả chất lượng câu trả lời chứ không
+    chỉ đổi độ trễ.
+    """
+    monkeypatch.setattr(settings, "rerank_candidates", 6)
+    monkeypatch.setattr(settings, "rerank_top_k", 2)
+    rr = CountingReranker()
+    result = _result(*[_chunk(i, f"đoạn {i}", rrf=1.0 / (i + 1)) for i in range(20)])
+
+    kept = rerank("thử", result, reranker=rr)
+    assert rr.seen == [6]
+    assert len(kept) == 2
+
+
 def test_tat_rerank_van_chay_duoc(rr: FakeRerankProvider, monkeypatch) -> None:
     """US-011 AC-4 — bắt buộc, để chạy cấu hình C của bảng ablation."""
     monkeypatch.setattr(settings, "rerank_enabled", False)

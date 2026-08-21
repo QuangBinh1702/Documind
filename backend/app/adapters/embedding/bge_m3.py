@@ -58,7 +58,13 @@ class BgeM3EmbeddingProvider:
             self.model_name, revision=self.revision, device=self.device
         )
 
-        actual = model.get_sentence_embedding_dimension()
+        # sentence-transformers đã đổi tên hàm này; bản cũ chỉ có tên cũ, bản
+        # mới cảnh báo khi gọi tên cũ. Hỏi tên mới trước để chạy được trên cả
+        # hai mà không phải ghim phiên bản.
+        get_dim = getattr(model, "get_embedding_dimension", None) or (
+            model.get_sentence_embedding_dimension
+        )
+        actual = get_dim()
         if actual != self.dim:
             # Lệch số chiều làm cột vector(1024) từ chối ghi, nhưng thông báo
             # lỗi của Postgres khó lần ra nguyên nhân. Chặn ngay tại đây.

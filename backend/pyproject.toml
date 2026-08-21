@@ -53,7 +53,9 @@ dependencies = [
 #   pip install -e ".[ml]"
 ml = [
     "torch>=2.5",
-    "FlagEmbedding>=1.3",
+    # Nạp cả bge-m3 (SentenceTransformer) lẫn bge-reranker-v2-m3 (CrossEncoder).
+    # KHÔNG dùng FlagEmbedding: nó gọi `tokenizer.prepare_for_model`, một API đã
+    # bị gỡ ở transformers 5, nên reranker chết ngay lượt chấm đầu tiên.
     "sentence-transformers>=3.3",
     "paddleocr>=3.0",
 ]

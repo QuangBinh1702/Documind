@@ -7,9 +7,10 @@ một hệ thống tự quyết khi nào mình biết sẽ luôn nghiêng về p
 
 Cách hoạt động::
 
-    50 ứng viên sau RRF
+    ~100 ứng viên sau RRF
+        ↓  giữ RERANK_CANDIDATES đầu bảng   (mặc định 50)
         ↓  cross-encoder chấm từng cặp (câu hỏi, đoạn)
-    xếp lại theo điểm, giữ top 5–8
+    xếp lại theo điểm, giữ RERANK_TOP_K     (mặc định 8)
         ↓
     điểm cao nhất ≥ τ ?
      ├─ CÓ     → đủ căn cứ, đi đường sinh câu trả lời
@@ -67,23 +68,30 @@ def rerank(
     *,
     reranker: RerankProvider,
     top_k: int | None = None,
+    candidates: int | None = None,
 ) -> list[ScoredChunk]:
-    """Chấm lại từng ứng viên bằng cross-encoder rồi giữ top-k.
+    """Chấm lại các ứng viên đầu bảng bằng cross-encoder rồi giữ top-k.
 
     Điểm mới ghi đè `rrf_score` trong bản sao trả về — nhưng `ranks` được giữ
     nguyên, nên vẫn truy được một đoạn đã lọt vào từ nhánh nào.
+
+    Chỉ chấm `candidates` ứng viên đầu, không chấm tất cả. Đây là tầng thứ hai
+    của một cascade: RRF vốn đã xếp hạng chúng, và cross-encoder — thứ đắt hơn
+    hai bậc — chỉ nên chạy trên phần đầu bảng. Chấm hết vừa không cải thiện kết
+    quả (thứ hạng 80 gần như không bao giờ leo lên top 8) vừa nhân độ trễ lên
+    nhiều lần.
     """
     top_k = top_k or settings.rerank_top_k
+    candidates = candidates or settings.rerank_candidates
     if not result.chunks:
         return []
 
-    scores = reranker.score(question, [s.candidate.content for s in result.chunks])
-    if len(scores) != len(result.chunks):  # pragma: no cover - phòng thủ
-        raise RuntimeError(
-            f"Reranker trả về {len(scores)} điểm cho {len(result.chunks)} đoạn."
-        )
+    pool = result.chunks[:candidates]
+    scores = reranker.score(question, [s.candidate.content for s in pool])
+    if len(scores) != len(pool):  # pragma: no cover - phòng thủ
+        raise RuntimeError(f"Reranker trả về {len(scores)} điểm cho {len(pool)} đoạn.")
 
-    scored = [replace(s, rrf_score=score) for s, score in zip(result.chunks, scores, strict=True)]
+    scored = [replace(s, rrf_score=score) for s, score in zip(pool, scores, strict=True)]
     # Phá hoà bằng chunk_id để thứ tự tái lập được giữa các lần chạy.
     scored.sort(key=lambda s: (-s.rrf_score, s.chunk_id))
     return scored[:top_k]

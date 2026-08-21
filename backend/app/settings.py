@@ -92,7 +92,21 @@ class Settings(BaseSettings):
     # Runtime cụ thể chốt ở spike S2 và không ảnh hưởng tới mã nguồn.
     local_llm_base_url: str = "http://localhost:11434/v1"
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-flash-latest"
+    # Ghim một phiên bản cụ thể, không dùng bí danh `-latest`. Bí danh trỏ vào
+    # mô hình đông người dùng nhất nên hay trả 503, và tệ hơn: nó âm thầm đổi
+    # mô hình bên dưới, làm số đo của hai lần chạy đánh giá không so được với
+    # nhau (US-045 AC-5 yêu cầu tái lập được).
+    gemini_model: str = "gemini-3.5-flash"
+
+    # Các mô hình Gemini đời mới "suy nghĩ" trước khi trả lời, và phần suy nghĩ
+    # ăn vào CÙNG hạn mức `LLM_MAX_TOKENS`. Đo thật: một câu hỏi nhỏ tốn 361
+    # token suy nghĩ cho 39 token trả lời. Với prompt RAG mang 8 đoạn tài liệu,
+    # phần suy nghĩ ăn hết hạn mức và câu trả lời trả về RỖNG mà không báo lỗi.
+    #
+    # Đặt 0 để tắt. Câu trả lời ở đây phải rút ra từ các đoạn đã cho chứ không
+    # phải suy luận ra, nên đây gần như không mất gì mà lấy lại được cả hạn mức
+    # lẫn phần lớn độ trễ. Đặt số dương để cấp riêng hạn mức cho suy nghĩ.
+    gemini_thinking_budget: int = Field(default=0, ge=0)
 
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
@@ -103,6 +117,18 @@ class Settings(BaseSettings):
     retrieval_top_n_per_branch: int = 50
     rrf_k: int = 60
     rerank_enabled: bool = True
+
+    # Bao nhiêu ứng viên đi qua cross-encoder. Đây là hai con số KHÁC nhau và
+    # rất dễ nhầm thành một:
+    #
+    #   rerank_candidates — chấm bao nhiêu  (chi phí)
+    #   rerank_top_k      — giữ lại bao nhiêu (ngữ cảnh đưa vào mô hình sinh)
+    #
+    # Cross-encoder chạy tuyến tính theo số ứng viên, nên đây là tham số chi
+    # phối độ trễ nhiều nhất trong cả đường truy xuất. Trên GPU 50 là hợp lý;
+    # trên CPU nó biến mỗi câu hỏi thành hàng phút, và lúc đó phải hạ xuống
+    # 10–20 chứ không phải tắt hẳn rerank.
+    rerank_candidates: int = Field(default=50, ge=1, le=200)
     rerank_top_k: int = 8
 
     # Ngưỡng "đủ căn cứ" — trên thang ĐÃ sigmoid (US-011 AC-1, US-031 AC-1).
@@ -132,10 +158,24 @@ class Settings(BaseSettings):
 
     # ── Suy dẫn ─────────────────────────────────────────
 
-    @field_validator("embedding_device", "rerank_device", "ocr_device", mode="before")
+    @field_validator(
+        "embedding_device", "rerank_device", "ocr_device",
+        "embedding_revision", "rerank_revision", "gemini_api_key",
+        mode="before",
+    )
     @classmethod
     def _blank_to_none(cls, v: object) -> object:
-        """Chuỗi rỗng trong .env nghĩa là "kế thừa DEVICE", không phải giá trị sai."""
+        """Một dòng bỏ trống trong `.env` nghĩa là "không đặt", không phải một
+        giá trị rỗng.
+
+        Với ba trường thiết bị, chuỗi rỗng nghĩa là "kế thừa DEVICE".
+
+        Với hai trường revision thì hậu quả nặng hơn nhiều và rất khó thấy:
+        `EMBEDDING_REVISION=` được truyền xuống HuggingFace như một revision
+        thật, nên nó không khớp bản đã có trong cache và **bắt buộc phải ra
+        mạng** ở mọi lần nạp mô hình. Máy mất mạng thì mô hình đã tải về vẫn
+        không dùng được — đúng thứ US-029 AC-3 hứa là làm được.
+        """
         return None if v == "" else v
 
     @computed_field  # type: ignore[prop-decorator]

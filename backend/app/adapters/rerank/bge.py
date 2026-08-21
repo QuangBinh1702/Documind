@@ -1,6 +1,16 @@
 """Bộ xếp hạng lại thật — `BAAI/bge-reranker-v2-m3`.
 
 Nạp lười giống adapter nhúng: import module không kéo theo 2.2 GB.
+
+Vì sao dùng `sentence-transformers` chứ không dùng `FlagEmbedding`
+------------------------------------------------------------------
+`FlagEmbedding` là thư viện của chính nhóm tác giả bge, nhưng nó gọi vào
+`tokenizer.prepare_for_model` — một API đã bị gỡ ở `transformers` 5. Cài cả hai
+cùng lúc thì reranker chết ngay lượt chấm đầu tiên với `AttributeError`.
+
+`CrossEncoder` của `sentence-transformers` nạp đúng mô hình đó, và thư viện này
+vốn đã có mặt vì adapter nhúng cần. Một phụ thuộc ít hơn, và không phải ghim
+`transformers` xuống bản cũ chỉ để giữ một thư viện chạy được.
 """
 
 from __future__ import annotations
@@ -37,19 +47,20 @@ class BgeRerankProvider:
             return self._model
 
         try:
-            from FlagEmbedding import FlagReranker
+            from sentence_transformers import CrossEncoder
         except ImportError as exc:  # pragma: no cover - phụ thuộc môi trường
             raise RuntimeError(
-                'Thiếu FlagEmbedding. Cài bằng: pip install -e ".[ml]"\n'
+                'Thiếu sentence-transformers. Cài bằng: pip install -e ".[ml]"\n'
                 "Trên máy phát triển có thể đặt RERANK_PROVIDER=fake để bỏ qua."
             ) from exc
 
         log.info("Nạp %s trên %s …", self.model_name, self.device)
-        self._model = FlagReranker(
+        self._model = CrossEncoder(
             self.model_name,
             revision=self.revision,
-            use_fp16=self.device == "cuda",
-            devices=self.device,
+            device=self.device,
+            # fp16 chỉ có nghĩa trên GPU; ép trên CPU thì chậm hơn chứ không nhanh hơn.
+            model_kwargs={"dtype": "float16"} if self.device == "cuda" else {},
         )
         return self._model
 
@@ -57,14 +68,19 @@ class BgeRerankProvider:
         if not documents:
             return []
 
+        import torch
+
         model = self._load()
-        # normalize=True là BẮT BUỘC, không phải tuỳ chọn: thiếu nó model trả
-        # về logit thô khoảng −10…+10, và ngưỡng τ = 0.35 ở US-031 sẽ nhận mọi
-        # thứ là "đủ căn cứ" mà không có gì báo lỗi.
-        raw = model.compute_score(
-            [[query, d] for d in documents], normalize=True
+        # Sigmoid là BẮT BUỘC, không phải tuỳ chọn: thiếu nó mô hình trả về
+        # logit thô khoảng −10…+10, và ngưỡng τ = 0.35 ở US-031 sẽ nhận mọi thứ
+        # là "đủ căn cứ" mà không có gì báo lỗi.
+        raw = model.predict(
+            [(query, d) for d in documents],
+            activation_fn=torch.nn.Sigmoid(),
+            show_progress_bar=False,
+            convert_to_numpy=True,
         )
-        scores = [float(raw)] if isinstance(raw, (int, float)) else [float(s) for s in raw]
+        scores = [float(s) for s in raw]
 
         if len(scores) != len(documents):  # pragma: no cover - phòng thủ
             raise RuntimeError(
