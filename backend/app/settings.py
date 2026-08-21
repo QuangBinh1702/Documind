@@ -81,12 +81,21 @@ class Settings(BaseSettings):
     embedding_revision: str | None = None
     embedding_dim: int = 1024
     embedding_batch_size: int = 16
+    rerank_provider: Literal["bge", "fake"] = "bge"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_revision: str | None = None
+    # `fake` ghép câu trả lời từ ngữ cảnh thay vì sinh ngôn ngữ — dùng để test
+    # đường xử lý mà không cần khoá API, quota hay mạng.
+    llm_provider: Literal["real", "fake"] = "real"
     local_llm_model: str = "qwen3-8b-q4"
-    llm_backend: str = "gemini"
+    # Máy chủ tương thích OpenAI chạy cục bộ: Ollama, vLLM hay llama.cpp.
+    # Runtime cụ thể chốt ở spike S2 và không ảnh hưởng tới mã nguồn.
+    local_llm_base_url: str = "http://localhost:11434/v1"
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-flash"
+    gemini_model: str = "gemini-flash-latest"
+
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 1024
 
     # ── Retrieval — trục của ablation US-046 ────────────
     retrieval_vector_enabled: bool = True
