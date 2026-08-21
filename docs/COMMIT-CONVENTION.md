@@ -105,12 +105,62 @@ Thay đổi phá vỡ tương thích:
 BREAKING CHANGE: source_chunks.tsv is now built from raw text
 ```
 
-## 7. Một commit làm một việc
+## 7. Khi nào được commit
 
-Nếu phải viết "and" trong dòng tiêu đề thì đó là hai commit.
+Đây là phần hay bị bỏ qua nhất, và cũng là phần quyết định lịch sử git có đọc
+được hay không. Quy ước về *cách viết message* ở trên không cứu được một lịch
+sử bị chia sai chỗ.
 
-Ngoại lệ hợp lý: mã và test của nó đi cùng nhau — một hành vi mới cùng bằng
-chứng cho hành vi đó là **một** việc.
+### Nguyên tắc: một commit = một thay đổi logic trọn vẹn
+
+Hướng dẫn gửi bản vá của nhân Linux — nơi quy tắc này được áp dụng nghiêm ngặt
+nhất — nói đúng ba điều, và ba điều đó là đủ:
+
+1. **Tách mỗi thay đổi logic thành một bản vá riêng.** Sửa lỗi và cải thiện
+   hiệu năng cho cùng một phân hệ vẫn là **hai** bản vá.
+2. **Gom thay đổi liên quan lại với nhau.** Một thay đổi chạm mười tệp nhưng
+   phục vụ đúng một mục đích thì là **một** bản vá, không phải mười.
+3. **Sau mỗi bản vá, hệ thống phải dựng và chạy được.** Người khác dùng
+   `git bisect` sẽ dừng ở bất kỳ điểm nào trong chuỗi.
+
+Điều thứ ba là ràng buộc mạnh nhất: nó loại bỏ hoàn toàn khái niệm "commit dở
+dang". Nếu test đang đỏ, hoặc tính năng mới làm được một nửa, thì **chưa tới
+lúc commit** — kể cả khi đã viết được nhiều mã.
+
+### Hai chiều sai, đều đã xảy ra trong repo này
+
+| Chiều sai | Ví dụ thật | Vì sao sai |
+|---|---|---|
+| **Quá nhỏ** | `refactor(extract): import pymupdf under its own name` — đổi một dòng import, commit riêng giữa lúc đang làm việc khác | Nó không hoàn thành việc gì. Nó là một bước tay giữa chừng, đáng lẽ gộp vào commit của phần việc đang làm |
+| **Quá to** | `fix: make the pipeline work with real models` — gộp lỗi cấu hình revision, đổi thư viện reranker, hạn mức token của mô hình, nhận diện tiêu đề, và tham số rerank | Năm thay đổi không liên quan gì nhau. Không revert được một phần; `git bisect` chỉ ra commit này thì vẫn chưa biết lỗi nằm ở đâu; và tiêu đề buộc phải mơ hồ vì không có chủ đề chung |
+
+Commit thứ hai đáng lẽ là năm commit, mỗi cái có scope riêng và tự đứng được:
+`fix(config)`, `build(rerank)`, `fix(llm)`, `fix(chunker)`, `perf(rerank)`.
+
+### Ba phép thử trước khi commit
+
+1. **Phép thử một câu.** Mô tả được commit trong một câu không có chữ "và"
+   không? Không được thì đó là nhiều commit.
+2. **Phép thử tự đứng.** Ai đó lấy đúng commit này về, chạy test — xanh không?
+   Đọc riêng nó có hiểu được nó làm gì và tại sao không?
+3. **Phép thử revert.** Nếu ngày mai phải gỡ bỏ đúng thay đổi này, `git revert`
+   một commit có làm được không, hay sẽ kéo theo thứ khác?
+
+### Trong lúc làm thì sao
+
+Cứ làm liên tục, đừng dừng lại để commit từng bước. Khi một đơn vị công việc đã
+trọn vẹn thì mới gom lại và commit — dùng `git add -p` để tách nếu trong cây
+làm việc đang lẫn nhiều thay đổi khác nhau.
+
+Mã, test và tài liệu của **cùng một thay đổi** đi chung một commit. Một hành vi
+mới cùng bằng chứng cho hành vi đó là **một** việc, không phải hai.
+
+### Với đồ án này
+
+Đơn vị tự nhiên là **một user story**, hoặc **một lỗi**, hoặc **một quyết định
+kỹ thuật kèm tài liệu của nó**. Footer `Refs: US-xxx` vừa là công cụ truy vết
+vừa là phép thử: nếu một commit phải ghi bốn mã story không liên quan thì nó
+đang làm quá nhiều việc.
 
 ## 8. Cách tạo commit trên máy Windows này
 
@@ -133,16 +183,27 @@ PowerShell 5.1 chèn BOM, và BOM đó lọt vào đầu dòng tiêu đề commi
 
 ## 9. Trước khi commit
 
+Phạm vi — kiểm trước, vì sai ở đây thì message viết hay đến mấy cũng không cứu:
+
+- [ ] Một đơn vị công việc đã **hoàn chỉnh**, không phải một bước giữa chừng
+- [ ] Mô tả được trong một câu không có chữ "và"
+- [ ] Toàn bộ test xanh **tại chính commit này** (DoD D6 ở `SPEC.md` §A.4)
+- [ ] `git revert` một mình commit này gỡ đúng thay đổi, không kéo theo thứ khác
+- [ ] Test và tài liệu của cùng thay đổi này nằm chung trong commit
+
+Message:
+
 - [ ] Dòng tiêu đề ở thức mệnh lệnh, dưới 50 ký tự, không dấu chấm cuối
 - [ ] Type và scope đúng theo §3 và §4
 - [ ] Thân bài giải thích **tại sao**, gói dòng ở 72 ký tự
 - [ ] Footer có `Refs:` trỏ về user story
-- [ ] Commit chỉ làm **một** việc
-- [ ] Toàn bộ test xanh (Definition of Done D6 ở `SPEC.md` §A.4)
 
 ---
 
 ## Nguồn
 
-- [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
-- [How to Write a Git Commit Message — Chris Beams](https://cbea.ms/git-commit/)
+- [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) — cấu trúc dòng tiêu đề
+- [How to Write a Git Commit Message — Chris Beams](https://cbea.ms/git-commit/) — cách viết
+- [Submitting patches — tài liệu nhân Linux](https://www.kernel.org/doc/html/latest/process/submitting-patches.html) — §"Separate your changes", nguồn của §7
+- [Atomic Commits Explained — PHP Architect](https://www.phparch.com/2025/06/atomic-commits-explained-stop-writing-useless-git-messages/)
+- [Granularity of (Git) Commits — Kenny Ballou](https://kennyballou.com/blog/2021/03/commit-granularity/) — hai trường phái và đánh đổi
