@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator
 
 from app.ports.llm import Message
@@ -40,6 +41,22 @@ API_ROOT = "https://generativelanguage.googleapis.com/v1beta"
 _TRANSIENT = frozenset({429, 500, 503})
 RETRIES = 2
 BACKOFF_S = 1.5
+
+# Vượt hạn mức (429) khác hẳn quá tải (503) và phải xử lý khác.
+#
+# Quá tải là ngẫu nhiên: thử lại sau một hai giây thường được. Vượt hạn mức thì
+# có kỳ hạn — bản miễn phí cho 20 request mỗi phút, nên nếu đã hết thì phải chờ
+# đủ hết phút đó, không có cách nào lách. Đợi 1,5 giây rồi thử lại chỉ tốn thêm
+# một lần gọi hỏng.
+#
+# Máy chủ nói thẳng phải chờ bao lâu — *"Please retry in 57.8s"*. Nghe theo con
+# số đó thay vì tự đoán, và cho 429 nhiều lượt thử hơn vì mỗi lượt chờ lâu hơn.
+RATE_LIMIT_RETRIES = 3
+_RETRY_AFTER = re.compile(r"retry in ([\d.]+)s", re.IGNORECASE)
+
+# Chặn trên cho thời gian nghe theo máy chủ. Hạn mức theo ngày có thể trả về
+# hàng nghìn giây, và treo cả tiến trình chừng ấy thì tệ hơn là báo lỗi.
+MAX_WAIT_S = 90.0
 
 # Chỉ thử lại TRƯỚC khi có byte đầu tiên. Đứt giữa chừng thì không thử lại được:
 # giao diện đã hiện phần đã nhận, và sinh lại từ đầu sẽ nối vào thành câu trùng
@@ -101,7 +118,8 @@ class GeminiLLMProvider:
         # mốc "token đầu tiên dưới 3 giây" của US-012 AC-2 mất ý nghĩa.
         url = f"{API_ROOT}/models/{self.model}:streamGenerateContent?alt=sse"
 
-        for attempt in range(RETRIES + 1):
+        attempt = 0
+        while True:
             try:
                 async with (
                     httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client,
@@ -110,14 +128,18 @@ class GeminiLLMProvider:
                         headers={"x-goog-api-key": self.api_key},
                     ) as response,
                 ):
-                    if response.status_code in _TRANSIENT and attempt < RETRIES:
-                        await response.aread()
-                        delay = BACKOFF_S * 2**attempt
+                    con_lai = (
+                        RATE_LIMIT_RETRIES if response.status_code == 429 else RETRIES
+                    )
+                    if response.status_code in _TRANSIENT and attempt < con_lai:
+                        body = (await response.aread()).decode("utf-8", "replace")
+                        delay = _cho_bao_lau(response.status_code, body, attempt)
                         log.warning(
-                            "Gemini trả về %d, thử lại sau %.1fs (lần %d/%d)",
-                            response.status_code, delay, attempt + 1, RETRIES,
+                            "Gemini trả về %d, chờ %.1fs rồi thử lại (lần %d/%d)",
+                            response.status_code, delay, attempt + 1, con_lai,
                         )
                         await asyncio.sleep(delay)
+                        attempt += 1
                         continue
 
                     if response.status_code != 200:
@@ -147,6 +169,21 @@ class GeminiLLMProvider:
                     "Không kết nối được tới Gemini. Fast Mode cần mạng; "
                     "chuyển sang Privacy Mode để chạy hoàn toàn cục bộ."
                 ) from exc
+
+
+def _cho_bao_lau(status: int, body: str, attempt: int) -> float:
+    """Chờ bao lâu trước lượt thử tiếp theo.
+
+    Ưu tiên con số máy chủ đưa ra: với 429 nó biết chính xác khi nào hạn mức
+    được nạp lại, còn ta thì chỉ đoán được. Không có con số đó thì lùi theo cấp
+    số nhân — mốc xuất phát của 429 lớn hơn hẳn, vì hạn mức tính theo phút.
+    """
+    if status == 429:
+        if m := _RETRY_AFTER.search(body):
+            # Cộng thêm một giây cho lệch đồng hồ giữa hai máy.
+            return min(float(m.group(1)) + 1.0, MAX_WAIT_S)
+        return min(20.0 * 2**attempt, MAX_WAIT_S)
+    return BACKOFF_S * 2**attempt
 
 
 def _parse(data: str) -> tuple[list[str], str | None]:

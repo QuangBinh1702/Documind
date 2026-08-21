@@ -169,6 +169,60 @@ async def test_thu_lai_khi_qua_tai_roi_thanh_cong(monkeypatch) -> None:
     assert len(seen) == 2
 
 
+async def test_nghe_theo_thoi_gian_cho_may_chu_bao(monkeypatch) -> None:
+    """Vượt hạn mức có kỳ hạn, và máy chủ nói thẳng kỳ hạn đó là bao lâu.
+
+    Bản miễn phí cho 20 request mỗi phút. Hết hạn mức thì chờ một giây rưỡi rồi
+    thử lại chỉ tốn thêm một lượt gọi hỏng — phải chờ đủ hết phút đó. Ta không
+    đoán được, nhưng máy chủ thì biết và có nói.
+    """
+    ngu: list[float] = []
+
+    async def ghi_lai(giay: float) -> None:
+        ngu.append(giay)
+
+    monkeypatch.setattr(G.asyncio, "sleep", ghi_lai)
+    _mount(monkeypatch, lambda r, n: (
+        httpx.Response(429, text='"message": "... Please retry in 57.8s."')
+        if n == 1 else httpx.Response(200, content=_sse(_chunk("xong")))
+    ))
+
+    assert await _collect(GeminiLLMProvider(api_key="k")) == "xong"
+    assert ngu and 57.8 <= ngu[0] <= 60.0, f"phải chờ theo máy chủ, đã chờ {ngu}"
+
+
+async def test_khong_treo_khi_han_muc_theo_ngay(monkeypatch) -> None:
+    """Hạn mức theo ngày trả về hàng nghìn giây. Treo cả tiến trình chừng ấy
+    còn tệ hơn báo lỗi."""
+    ngu: list[float] = []
+
+    async def ghi_lai(giay: float) -> None:
+        ngu.append(giay)
+
+    monkeypatch.setattr(G.asyncio, "sleep", ghi_lai)
+    _mount(monkeypatch, lambda r, n: (
+        httpx.Response(429, text="Please retry in 86400.0s.")
+        if n == 1 else httpx.Response(200, content=_sse(_chunk("xong")))
+    ))
+
+    await _collect(GeminiLLMProvider(api_key="k"))
+    assert ngu[0] == G.MAX_WAIT_S
+
+
+async def test_han_muc_duoc_thu_lai_nhieu_lan_hon_qua_tai(monkeypatch) -> None:
+    """Mỗi lượt chờ của 429 dài hơn hẳn, nên đáng thử thêm vài lần."""
+    async def khong_cho(giay: float) -> None:
+        return
+
+    monkeypatch.setattr(G.asyncio, "sleep", khong_cho)
+
+    seen_429 = _mount(monkeypatch, lambda r, n: httpx.Response(429, text="hết hạn mức"))
+    with pytest.raises(RuntimeError, match="hạn mức"):
+        await _collect(GeminiLLMProvider(api_key="k"))
+    assert len(seen_429) == G.RATE_LIMIT_RETRIES + 1
+    assert G.RATE_LIMIT_RETRIES > G.RETRIES
+
+
 async def test_qua_tai_keo_dai_thi_bao_loi_doc_duoc(monkeypatch) -> None:
     monkeypatch.setattr(G, "BACKOFF_S", 0.0)
     seen = _mount(monkeypatch, lambda r, n: httpx.Response(503, text="high demand"))
