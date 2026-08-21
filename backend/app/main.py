@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-from app.api import health
+from app.api import chat, health
 from app.settings import settings
+
+STATIC = Path(__file__).parent / "static"
 
 logging.basicConfig(
     level=settings.log_level,
@@ -46,3 +50,15 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
+
+
+@app.get("/", include_in_schema=False)
+def testbed() -> FileResponse:
+    """Bàn thử bộ não.
+
+    Giao diện tạm để nhìn thấy streaming, cổng ngưỡng và chip trích dẫn hoạt
+    động thật. Bố cục ba cột của US-016 sẽ dựng bằng Next.js ở M2; trang này
+    không phải giao diện sản phẩm và sẽ bị thay thế.
+    """
+    return FileResponse(STATIC / "index.html")

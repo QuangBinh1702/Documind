@@ -1,0 +1,275 @@
+﻿"""API hội thoại với streaming SSE — `SPEC-v1.md` §7.1.
+
+Router chỉ điều phối, xác thực đầu vào và định dạng sự kiện. Toàn bộ nghiệp vụ
+nằm ở tầng service (Definition of Done D4).
+
+Hai điểm về SSE đáng ghi lại:
+
+* Sự kiện `done` mang theo `AnswerResult`, một đối tượng Python không tuần tự
+  hoá thẳng thành JSON được. Nó bị lược bỏ trước khi gửi, chỉ giữ những trường
+  giao diện thật sự cần.
+* Phiên cơ sở dữ liệu phải sống suốt luồng stream. Đóng nó sớm — điều dễ xảy ra
+  khi dùng dependency thông thường của FastAPI — làm mọi truy cập lười phía sau
+  đổ vỡ giữa chừng.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from collections.abc import AsyncIterator
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+from app.adapters.embedding import get_embedding_provider
+from app.adapters.llm import get_llm_provider
+from app.adapters.rerank import get_rerank_provider
+from app.models.base import session_scope
+from app.models.chat import ChatMessage, ChatSession
+from app.models.knowledge import Notebook, Source, SourceChunk, User
+from app.services.chat import ask
+from app.services.external import QuotaExceeded, answer_externally
+from app.settings import Mode, settings
+
+router = APIRouter(tags=["chat"])
+log = logging.getLogger(__name__)
+
+# Những khoá không tuần tự hoá được hoặc không cần cho giao diện.
+_INTERNAL_KEYS = {"result"}
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    notebook_id: uuid.UUID
+    session_id: uuid.UUID | None = None
+    mode: Mode | None = None
+    source_ids: list[uuid.UUID] | None = None
+
+
+class ExternalRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    notebook_id: uuid.UUID
+    confirmed: bool = False
+    """US-032 AC-4 — ở Privacy Mode phải xác nhận thêm một lần, vì thao tác này
+    gửi câu hỏi ra dịch vụ bên ngoài."""
+
+
+def _sse(event: dict[str, Any]) -> str:
+    payload = {k: v for k, v in event.items() if k not in _INTERNAL_KEYS}
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _resolve(session, notebook_id: uuid.UUID) -> tuple[User, Notebook]:
+    """Lấy notebook kèm chủ sở hữu.
+
+    Xác thực thật thuộc US-002; cho tới lúc đó chủ sở hữu suy ra từ chính
+    notebook. Điều quan trọng là `owner_id` vẫn được truyền xuống tầng truy
+    xuất, nên INV-4 đã có hiệu lực và sẽ không phải sửa khi thêm đăng nhập.
+    """
+    nb = session.get(Notebook, notebook_id)
+    if nb is None:
+        raise HTTPException(404, "Không tìm thấy notebook.")
+    return session.get(User, nb.user_id), nb
+
+
+@router.post("/chat/ask", summary="Hỏi đáp có căn cứ, trả về luồng SSE")
+async def chat_ask(req: AskRequest) -> StreamingResponse:
+    async def stream() -> AsyncIterator[str]:
+        with session_scope() as session:
+            try:
+                user, nb = _resolve(session, req.notebook_id)
+            except HTTPException as e:
+                yield _sse({"type": "error", "code": "NOT_FOUND", "message": e.detail})
+                return
+
+            chat_session = None
+            if req.session_id:
+                chat_session = session.get(ChatSession, req.session_id)
+                if chat_session is None or chat_session.notebook_id != nb.id:
+                    yield _sse(
+                        {"type": "error", "code": "SESSION_NOT_FOUND",
+                         "message": "Phiên hội thoại không tồn tại."}
+                    )
+                    return
+
+            try:
+                async for event in ask(
+                    session,
+                    req.question,
+                    notebook_id=nb.id,
+                    chat_session=chat_session,
+                    embedder=get_embedding_provider(),
+                    reranker=get_rerank_provider(),
+                    llm=get_llm_provider(req.mode),
+                    owner_id=user.id if user else None,
+                    source_ids=req.source_ids,
+                ):
+                    yield _sse(event)
+            except Exception as exc:
+                # Traceback đầy đủ vào log máy chủ, thông báo tiếng Việt ra
+                # giao diện — US-028 AC-4.
+                log.exception("Lỗi khi trả lời câu hỏi")
+                yield _sse(
+                    {"type": "error", "code": type(exc).__name__,
+                     "message": f"Có lỗi khi xử lý câu hỏi: {exc}"}
+                )
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat/ask-external", summary="Hỏi bằng kiến thức ngoài tài liệu")
+async def chat_ask_external(req: ExternalRequest) -> StreamingResponse:
+    """US-032 — chỉ chạy khi người dùng chủ động bấm nút.
+
+    Không có đường nào tự động gọi tới endpoint này; hệ thống chỉ hiển thị nút
+    mời sau khi cổng ngưỡng kết luận tài liệu không đủ căn cứ.
+    """
+
+    async def stream() -> AsyncIterator[str]:
+        with session_scope() as session:
+            try:
+                user, _ = _resolve(session, req.notebook_id)
+            except HTTPException as e:
+                yield _sse({"type": "error", "code": "NOT_FOUND", "message": e.detail})
+                return
+
+            if settings.default_mode == "privacy" and not req.confirmed:
+                yield _sse(
+                    {"type": "confirm_required",
+                     "message": "Thao tác này sẽ gửi câu hỏi của bạn ra dịch vụ bên ngoài."}
+                )
+                return
+
+            try:
+                async for event in answer_externally(
+                    session,
+                    req.question,
+                    user_id=user.id,
+                    embedder=get_embedding_provider(),
+                    llm=get_llm_provider("fast"),
+                ):
+                    yield _sse(event)
+            except QuotaExceeded as exc:
+                yield _sse({"type": "error", "code": "QUOTA_EXCEEDED", "message": str(exc)})
+            except Exception as exc:
+                log.exception("Lỗi khi hỏi ra ngoài")
+                yield _sse(
+                    {"type": "error", "code": type(exc).__name__, "message": str(exc)}
+                )
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Dữ liệu phụ trợ cho giao diện ──────────────────────
+
+
+@router.get("/notebooks", summary="Danh sách notebook")
+def list_notebooks() -> list[dict[str, Any]]:
+    with session_scope() as session:
+        rows = session.execute(
+            select(Notebook, User.email)
+            .join(User, User.id == Notebook.user_id)
+            .order_by(Notebook.updated_at.desc())
+        ).all()
+        out = []
+        for nb, email in rows:
+            sources = session.scalars(
+                select(Source).where(Source.notebook_id == nb.id)
+            ).all()
+            out.append({
+                "id": str(nb.id),
+                "title": nb.title,
+                "owner": email,
+                "source_count": len(sources),
+                "sources": [
+                    {"id": str(s.id), "title": s.title, "status": s.status,
+                     "pages": s.page_count, "kind": s.kind}
+                    for s in sources
+                ],
+            })
+        return out
+
+
+@router.get("/citations/{chunk_id}", summary="Chi tiết một trích dẫn")
+def get_citation(chunk_id: int) -> dict[str, Any]:
+    """US-015 — dữ liệu để mở đúng vị trí và tô sáng."""
+    with session_scope() as session:
+        chunk = session.get(SourceChunk, chunk_id)
+        if chunk is None:
+            raise HTTPException(404, "Đoạn trích dẫn không còn tồn tại.")
+        source = session.get(Source, chunk.source_id)
+        return {
+            "chunk_id": chunk.id,
+            "content": chunk.content,
+            "page_no": chunk.page_no,
+            "char_start": chunk.char_start,
+            "char_end": chunk.char_end,
+            "bbox": chunk.bbox,
+            "heading_path": chunk.heading_path,
+            "source": {
+                "id": str(source.id),
+                "title": source.title,
+                "kind": source.kind,
+                "pages": source.page_count,
+            },
+        }
+
+
+@router.get("/sessions", summary="Lịch sử hội thoại của một notebook")
+def list_sessions(notebook_id: uuid.UUID) -> list[dict[str, Any]]:
+    with session_scope() as session:
+        sessions = session.scalars(
+            select(ChatSession)
+            .where(ChatSession.notebook_id == notebook_id)
+            .order_by(ChatSession.updated_at.desc())
+        ).all()
+        return [
+            {"id": str(s.id), "title": s.title, "updated_at": s.updated_at.isoformat()}
+            for s in sessions
+        ]
+
+
+@router.get("/sessions/{session_id}/messages", summary="Tin nhắn của một phiên")
+def list_messages(session_id: uuid.UUID) -> list[dict[str, Any]]:
+    """US-018 AC-3 — chip trích dẫn phải hiển thị lại đầy đủ và bấm được."""
+    with session_scope() as session:
+        messages = session.scalars(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.seq)
+        ).all()
+        return [
+            {
+                "id": str(m.id),
+                "role": m.role,
+                "content": m.content,
+                "answer_kind": m.answer_kind,
+                "model_used": m.model_used,
+                "latency_ms": m.latency_ms,
+                "citations": [
+                    {
+                        "marker": c.marker,
+                        "chunk_id": c.chunk_id,
+                        "snippet": c.snippet,
+                        "page": c.page_no,
+                        # chunk_id NULL nghĩa là nguồn đã bị xoá — US-020 AC-4.
+                        "deleted": c.chunk_id is None,
+                    }
+                    for c in m.citations
+                ],
+            }
+            for m in messages
+        ]

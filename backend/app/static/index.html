@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocuMind — bàn thử bộ não</title>
+<style>
+  /* Giao diện THỬ NGHIỆM, không phải giao diện sản phẩm.
+     Bố cục ba cột của US-016 sẽ dựng bằng Next.js ở M2. Trang này tồn tại để
+     nhìn thấy streaming, cổng ngưỡng và chip trích dẫn hoạt động thật. */
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfa; --fg: #1c1c1a; --muted: #6f6f68;
+    --line: #e3e3de; --card: #fff;
+    --accent: #2f5d50; --warn: #8a5a00; --warn-bg: #fff8e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161815; --fg: #e8e8e3; --muted: #9a9a92;
+      --line: #2c2f2a; --card: #1d201c;
+      --accent: #7fbfa8; --warn: #e0b268; --warn-bg: #2a2415;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
+  .tag {
+    font-size: 11px; padding: 2px 7px; border-radius: 4px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  main { display: grid; grid-template-columns: 1fr 340px; gap: 0; min-height: calc(100vh - 56px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  #chat { padding: 20px; overflow-y: auto; }
+  aside {
+    border-left: 1px solid var(--line); padding: 20px;
+    background: var(--card); font-size: 13px;
+  }
+  @media (max-width: 900px) { aside { border-left: 0; border-top: 1px solid var(--line); } }
+
+  select, input, button, textarea { font: inherit; color: inherit; }
+  select, input[type=text] {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 10px;
+  }
+  button {
+    background: var(--accent); color: #fff; border: 0;
+    border-radius: 6px; padding: 8px 16px; cursor: pointer; font-weight: 550;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+
+  .msg { margin-bottom: 22px; max-width: 70ch; }
+  .msg.user { color: var(--muted); }
+  .msg.user b { color: var(--fg); font-weight: 600; }
+  .bubble {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; white-space: pre-wrap;
+  }
+  .bubble.external { border-color: var(--warn); background: var(--warn-bg); }
+  .bubble.refused { border-style: dashed; color: var(--muted); }
+
+  .warn {
+    color: var(--warn); font-size: 13px; margin-bottom: 8px; font-weight: 550;
+  }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  .chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 20px; height: 20px; padding: 0 5px; margin: 0 1px;
+    border-radius: 5px; background: var(--accent); color: #fff;
+    font-size: 11px; font-weight: 700; cursor: pointer; vertical-align: 1px;
+  }
+  .chip.dead { background: var(--muted); cursor: not-allowed; }
+
+  #ask { display: flex; gap: 10px; margin-top: 18px; max-width: 70ch; }
+  #q { flex: 1; }
+
+  .status { font-size: 12px; color: var(--muted); font-style: italic; }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  aside section { margin-bottom: 24px; }
+  .src { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .src small { color: var(--muted); }
+  pre {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;
+    max-height: 320px; overflow-y: auto;
+  }
+  kbd { font: inherit; font-size: 11px; border: 1px solid var(--line);
+        border-radius: 3px; padding: 0 4px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DocuMind</h1>
+  <span class="tag">bàn thử bộ não</span>
+  <select id="nb"></select>
+  <span id="cfg" class="tag"></span>
+</header>
+
+<main>
+  <div id="chat">
+    <p class="status">Chọn notebook rồi đặt câu hỏi. Nạp tài liệu bằng
+      <kbd>python -m app.cli.ingest &lt;tệp&gt; --notebook &lt;tên&gt;</kbd></p>
+    <div id="ask">
+      <input type="text" id="q" placeholder="Hỏi gì đó về tài liệu…" autocomplete="off">
+      <button id="send">Hỏi</button>
+    </div>
+  </div>
+
+  <aside>
+    <section>
+      <h2>Nguồn</h2>
+      <div id="sources"></div>
+    </section>
+    <section>
+      <h2>Trích dẫn đang xem</h2>
+      <div id="cite"><span class="status">Bấm vào một chip [n] để xem đoạn gốc.</span></div>
+    </section>
+    <section>
+      <h2>Nhật ký sự kiện</h2>
+      <pre id="log"></pre>
+    </section>
+  </aside>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const chat = $("#chat"), askBox = $("#ask");
+let citations = {};   // marker -> dữ liệu trích dẫn của lượt hiện tại
+let sessionId = null;
+
+function logEvent(e) {
+  const el = $("#log");
+  el.textContent = (JSON.stringify(e) + "\n" + el.textContent).slice(0, 4000);
+}
+
+async function loadNotebooks() {
+  const list = await (await fetch("/api/notebooks")).json();
+  const sel = $("#nb");
+  sel.innerHTML = list.length
+    ? list.map(n => `<option value="${n.id}">${n.title} (${n.source_count} nguồn)</option>`).join("")
+    : `<option value="">— chưa có notebook nào —</option>`;
+  sel.onchange = () => showSources(list.find(n => n.id === sel.value));
+  if (list.length) showSources(list[0]);
+
+  const h = await (await fetch("/api/health")).json();
+  $("#cfg").textContent = `${h.device} · ${h.status}`;
+}
+
+function showSources(nb) {
+  sessionId = null;
+  $("#sources").innerHTML = !nb || !nb.sources.length
+    ? `<span class="status">Chưa có nguồn nào.</span>`
+    : nb.sources.map(s =>
+        `<div class="src">${s.title}<br><small>${s.kind} · ${s.pages ?? "?"} trang · ${s.status}</small></div>`
+      ).join("");
+}
+
+function renderMarkers(text) {
+  // Biến [n] thành chip bấm được — US-014 AC-2.
+  return text.replace(/\[(\d{1,2})\]/g, (m, n) =>
+    `<span class="chip${citations[n] ? "" : " dead"}" data-m="${n}">${n}</span>`);
+}
+
+async function showCitation(marker) {
+  const c = citations[marker];
+  if (!c) return;
+  const box = $("#cite");
+  box.innerHTML = `<div class="status">Đang tải…</div>`;
+  try {
+    const d = await (await fetch(`/api/citations/${c.chunk_id}`)).json();
+    box.innerHTML = `
+      <div><b>[${marker}]</b> ${d.source.title}${d.page_no ? " · trang " + d.page_no : ""}</div>
+      ${d.heading_path ? `<div class="status">${d.heading_path}</div>` : ""}
+      <pre>${d.content.replace(/[<>&]/g, ch => ({"<":"&lt;",">":"&gt;","&":"&amp;"}[ch]))}</pre>
+      <div class="status">ký tự ${d.char_start}–${d.char_end}${
+        d.bbox ? ` · ${d.bbox.length} vùng toạ độ` : " · chưa có toạ độ"}</div>`;
+  } catch {
+    box.innerHTML = `<span class="status">Không tải được đoạn trích dẫn.</span>`;
+  }
+}
+
+document.addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (chip && !chip.classList.contains("dead")) showCitation(chip.dataset.m);
+});
+
+async function ask(question, external = false) {
+  const nb = $("#nb").value;
+  if (!nb) return alert("Chưa có notebook nào. Nạp tài liệu bằng CLI trước.");
+
+  citations = {};
+  chat.insertBefore(Object.assign(document.createElement("div"), {
+    className: "msg user", innerHTML: `<b>Bạn:</b> ${question}`,
+  }), askBox);
+
+  const wrap = document.createElement("div");
+  wrap.className = "msg";
+  const warn = document.createElement("div");
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  wrap.append(warn, bubble, meta);
+  chat.insertBefore(wrap, askBox);
+
+  const url = external ? "/api/chat/ask-external" : "/api/chat/ask";
+  const body = external
+    ? { question, notebook_id: nb, confirmed: true }
+    : { question, notebook_id: nb, session_id: sessionId };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", raw = "", refused = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop();
+
+    for (const part of parts) {
+      if (!part.startsWith("data: ")) continue;
+      const e = JSON.parse(part.slice(6));
+      logEvent(e);
+
+      switch (e.type) {
+        case "session": sessionId = e.session_id; break;
+        case "status": meta.textContent = `⋯ ${e.stage}`; break;
+        case "condensed": meta.textContent = `câu hỏi đã gộp: "${e.query}"`; break;
+        case "warning":
+          warn.className = "warn"; warn.textContent = e.text;
+          bubble.classList.add("external");
+          break;
+        case "cache_hit":
+          warn.className = "warn";
+          warn.textContent = `Câu trả lời đã lưu cho câu hỏi: «${e.cached_question}» (tương đồng ${e.similarity})`;
+          break;
+        case "no_answer":
+          refused = true;
+          bubble.classList.add("refused");
+          meta.textContent = `cổng ngưỡng: ${e.top_score.toFixed(3)} < τ ${e.threshold} — ${e.reason}`;
+          break;
+        case "token":
+          raw += e.text;
+          bubble.innerHTML = renderMarkers(raw);
+          break;
+        case "citation":
+          citations[e.marker] = e;
+          bubble.innerHTML = renderMarkers(raw);
+          break;
+        case "done":
+          meta.textContent = `${e.answer_kind} · ${e.latency_ms} ms`
+            + (e.dropped_markers?.length ? ` · đã loại marker bịa ${e.dropped_markers.join(",")}` : "");
+          if (refused && !external) {
+            const b = document.createElement("button");
+            b.className = "ghost";
+            b.style.marginTop = "10px";
+            b.textContent = "Trả lời bằng kiến thức ngoài tài liệu";
+            b.onclick = () => { b.remove(); ask(question, true); };
+            wrap.append(b);
+          }
+          break;
+        case "error":
+          bubble.textContent = e.message;
+          bubble.classList.add("refused");
+          break;
+      }
+      chat.scrollTop = chat.scrollHeight;
+    }
+  }
+}
+
+$("#send").onclick = () => {
+  const q = $("#q").value.trim();
+  if (!q) return;
+  $("#q").value = "";
+  ask(q);
+};
+$("#q").addEventListener("keydown", e => { if (e.key === "Enter") $("#send").click(); });
+
+loadNotebooks();
+</script>
+</body>
+</html>
