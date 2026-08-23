@@ -22,7 +22,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { type Khoa, type NgonNgu, dich } from "@/lib/i18n";
+import { type Khoa, type NgonNgu, dich, soTrang as soTrangI18n } from "@/lib/i18n";
 import { api, token } from "@/lib/api";
 
 const KHOA_LUU = "documind.ngon-ngu";
@@ -31,12 +31,15 @@ type BoiCanh = {
   ngonNgu: NgonNgu;
   doi: (n: NgonNgu) => void;
   t: (khoa: Khoa, tham?: Record<string, string | number>) => string;
+  /** Số nhiều: tiếng Việt không chia, tiếng Anh có. Ghép tay cho ra "1 pages". */
+  soTrang: (so: number) => string;
 };
 
 const Ctx = createContext<BoiCanh>({
   ngonNgu: "vi",
   doi: () => {},
   t: (khoa, tham) => dich("vi", khoa, tham),
+  soTrang: (so) => soTrangI18n("vi", so),
 });
 
 export function NgonNguProvider({ children }: { children: React.ReactNode }) {
@@ -94,6 +97,7 @@ export function NgonNguProvider({ children }: { children: React.ReactNode }) {
       ngonNgu,
       doi,
       t: (khoa, tham) => dich(ngonNgu, khoa, tham),
+      soTrang: (so) => soTrangI18n(ngonNgu, so),
     }),
     [ngonNgu, doi],
   );

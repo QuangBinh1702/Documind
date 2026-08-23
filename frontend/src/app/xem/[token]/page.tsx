@@ -41,7 +41,7 @@ export default function TrangXemChiaSe() {
   const [dangHoi, setDangHoi] = useState(false);
   const [doan, setDoan] = useState<{ title: string; content: string } | null>(null);
   const cuoiRef = useRef<HTMLDivElement>(null);
-  const { t } = useNgonNgu();
+  const { t, soTrang } = useNgonNgu();
 
   useEffect(() => {
     api
@@ -184,7 +184,7 @@ export default function TrangXemChiaSe() {
                 <p className="truncate text-sm font-medium">{s.title}</p>
                 <p className="mt-0.5 text-xs text-mo">
                   {s.kind.toUpperCase()}
-                  {s.kind !== "image" && s.page_count ? ` · ${s.page_count} ${t("chung.trang")}` : ""}
+                  {s.kind !== "image" && s.page_count ? ` · ${soTrang(s.page_count)}` : ""}
                 </p>
               </li>
             ))}

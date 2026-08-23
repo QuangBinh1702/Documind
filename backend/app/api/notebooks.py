@@ -205,8 +205,13 @@ async def stream_sources(
     trong `sources` mà ở Redis, vì hàng `sources` bị transaction nạp tài liệu
     khoá suốt quá trình. Xem `app/services/progress.py`.
     """
-    nb = notebook_cua_toi(session, user, notebook_id)
-    nb_id = nb.id
+    # Kiểm quyền rồi **thả ngay** kết nối cơ sở dữ liệu.
+    #
+    # Dependency `DbSession` của FastAPI sống tới khi response kết thúc, mà ở
+    # đây response là một luồng sống tới mười phút. Giữ nó nghĩa là mỗi tab
+    # đang mở chiếm một kết nối trong pool; vài tab là pool cạn và **toàn bộ**
+    # hệ thống đứng. Vòng lặp bên dưới tự mở phiên ngắn cho từng lượt hỏi.
+    nb_id = notebook_cua_toi(session, user, notebook_id).id
 
     async def stream() -> AsyncIterator[str]:
         truoc_do: dict[str, tuple] = {}
@@ -238,6 +243,24 @@ async def stream_sources(
                     n["status"] = buoc.get("status", n["status"])
                     n["progress"] = buoc.get("progress", n["progress"])
                     n["message"] = buoc.get("message", "")
+
+            # Vì sao còn nằm chờ — US-022 AC-2.
+            #
+            # Worker chạy `--concurrency=1`, nên tài liệu thứ hai nằm chờ thật
+            # sự và có thể chờ vài phút. "đang chờ 0%" không nói gì; "đang chờ
+            # 1 tài liệu khác xử lý xong" thì nói đúng chuyện đang xảy ra và
+            # người dùng biết là hệ thống không treo.
+            dang_chay = [
+                n for n in nguon if n["status"] in ("parsing", "ocr", "chunking", "embedding")
+            ]
+            for thu_tu, n in enumerate(
+                [x for x in reversed(nguon) if x["status"] == "queued"], start=1
+            ):
+                truoc = len(dang_chay) + thu_tu - 1
+                n["message"] = (
+                    f"Đang chờ {truoc} tài liệu khác xử lý xong …" if truoc
+                    else "Sắp tới lượt …"
+                )
 
             dau_van_tay = {
                 n["id"]: (n["status"], n["progress"], n.get("message", "")) for n in nguon

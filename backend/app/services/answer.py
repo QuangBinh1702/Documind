@@ -27,6 +27,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ports.embedding import EmbeddingProvider
@@ -36,6 +37,11 @@ from app.services import prompt as P
 from app.services.grounding import GroundingDecision, decide
 from app.services.intent import chitchat_system_prompt, classify
 from app.services.retrieval import ScoredChunk, retrieve
+from app.services.summarize import (
+    KHONG_CO_TAI_LIEU,
+    KHONG_CO_TAI_LIEU_EN,
+    gom_dau_tai_lieu,
+)
 from app.services.translate import dich_de_truy_xuat
 from app.services.verifier import STRICTER_HINT, verify_answer
 from app.settings import settings
@@ -102,6 +108,28 @@ AnswerEvent = dict[str, Any]
 # Độ dài đoạn trích lưu kèm mỗi trích dẫn. Bản chụp này là thứ giữ cho chip
 # trích dẫn còn hiển thị được sau khi nguồn bị xoá (US-020 AC-4).
 SNIPPET_CHARS = 400
+
+
+def _ten_nguon(session: Session, chunks: list[ScoredChunk]) -> dict[uuid.UUID, str]:
+    """Tên tài liệu của các đoạn sắp đưa vào ngữ cảnh.
+
+    Một câu truy vấn cho cả lượt, không phải một câu cho mỗi đoạn: tám đoạn
+    thường chỉ đến từ một hai tài liệu.
+
+    Cần thiết vì mô hình **đọc nhãn ngữ cảnh và chép nó vào câu trả lời**. Không
+    có tên thật thì nhãn là một mã băm, và câu trả lời hiện ra
+    *"… (nguồn #27905960)"* — thông tin nội bộ, người dùng không dùng được.
+    """
+    from app.models.knowledge import Source
+
+    ids = {c.candidate.source_id for c in chunks}
+    if not ids:
+        return {}
+
+    rows = session.execute(
+        select(Source.id, Source.title).where(Source.id.in_(ids))
+    ).all()
+    return {sid: ten for sid, ten in rows}
 
 
 def _citations_for(blocks: list[P.ContextBlock], markers: list[int]) -> list[Citation]:
@@ -198,6 +226,81 @@ async def answer_question(
                    "latency_ms": elapsed}
             return
 
+        if intent == "summarize":
+            # ── Câu hỏi về TOÀN BỘ tài liệu (US-069) ────────
+            #
+            # Không truy xuất, và cố ý không đi qua cổng ngưỡng τ. Lý do đầy đủ
+            # ở `app/services/summarize.py`; tóm lại: "tóm tắt tài liệu của tôi"
+            # không chứa từ nội dung nào của tài liệu, nên đi đường truy xuất là
+            # bảo đảm nhận về "không tìm thấy thông tin này".
+            yield {"type": "status", "stage": "reading"}
+            doan = await asyncio.to_thread(
+                gom_dau_tai_lieu,
+                session,
+                notebook_id=notebook_id,
+                source_ids=source_ids,
+            )
+
+            if not doan:
+                # Không có tài liệu thì nói thẳng, chứ không để mô hình tự nghĩ
+                # ra một bản tóm tắt.
+                trong = (
+                    KHONG_CO_TAI_LIEU_EN if ngon_ngu == "en" else KHONG_CO_TAI_LIEU
+                )
+                yield {"type": "token", "text": trong}
+                elapsed = int((time.perf_counter() - started) * 1000)
+                result = AnswerResult(
+                    answer=trong, kind="no_answer", citations=[],
+                    decision=None, model_used="", latency_ms=elapsed,
+                )
+                yield {"type": "done", "result": result,
+                       "answer_kind": "no_answer", "latency_ms": elapsed}
+                return
+
+            blocks = P.build_context(doan, _ten_nguon(session, doan))
+            system = P.build_summarize_system_prompt(ngon_ngu)
+            user = P.build_user_prompt(question, blocks)
+
+            if not llm.is_local:
+                yield {"type": "external_call", "model": llm.name,
+                       "includes_documents": True}
+
+            yield {"type": "status", "stage": "generating"}
+            pieces = []
+            async for piece in llm.stream(
+                system,
+                [{"role": "user", "content": user}],
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            ):
+                pieces.append(piece)
+                yield {"type": "token", "text": piece}
+
+            raw = "".join(pieces).strip()
+            valid = {b.marker for b in blocks}
+            cleaned, dropped = P.strip_invalid_markers(raw, valid)
+            citations = _citations_for(blocks, P.used_markers(cleaned))
+            for c in citations:
+                yield c.as_event()
+
+            elapsed = int((time.perf_counter() - started) * 1000)
+            result = AnswerResult(
+                answer=cleaned,
+                # `grounded` chứ không phải một loại riêng: bản tóm tắt DỰA
+                # TRÊN tài liệu và có trích dẫn kiểm chứng được, đúng nghĩa của
+                # nhãn này. Thêm một giá trị mới còn phải nới ràng buộc CHECK
+                # dưới cơ sở dữ liệu — loại lỗi đã cắn hai lần trong đồ án.
+                kind="grounded",
+                citations=citations,
+                decision=None,
+                model_used=llm.name,
+                latency_ms=elapsed,
+                dropped_markers=dropped,
+            )
+            yield {"type": "done", "result": result, "answer_kind": "grounded",
+                   "latency_ms": elapsed}
+            return
+
     # ── Truy xuất ───────────────────────────────────────
     #
     # `retrieve` và `decide` là mã ĐỒNG BỘ và tốn CPU: nhúng câu hỏi, rồi
@@ -269,7 +372,7 @@ async def answer_question(
         return
 
     # ── Sinh câu trả lời ────────────────────────────────
-    blocks = P.build_context(decision.chunks)
+    blocks = P.build_context(decision.chunks, _ten_nguon(session, decision.chunks))
     system = P.build_grounded_system_prompt(ngon_ngu)
     user = P.build_user_prompt(question, blocks)
     messages: list[Message] = [*(history or []), {"role": "user", "content": user}]

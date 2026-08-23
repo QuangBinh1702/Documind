@@ -55,7 +55,7 @@ export function CotNguon({
   const [loi, setLoi] = useState<string | null>(null);
   const [keoVao, setKeoVao] = useState(false);
   const chonTep = useRef<HTMLInputElement>(null);
-  const { t } = useNgonNgu();
+  const { t, soTrang } = useNgonNgu();
 
   async function tai(files: Iterable<File> | FileList | null) {
     const ds = files ? Array.from(files) : [];
@@ -206,7 +206,7 @@ export function CotNguon({
                     {BIEU_TUONG[s.kind] ?? s.kind.toUpperCase()}
                     {/* Ảnh luôn là "1 trang" — một con số không nói gì thêm. */}
                     {s.kind !== "image" && s.page_count
-                      ? ` · ${s.page_count} ${t("chung.trang")}`
+                      ? ` · ${soTrang(s.page_count)}`
                       : ""}{" "}
                     ·{" "}
                     <TrangThai nguon={s} t={t} />

@@ -86,3 +86,11 @@ class FakeEmbeddingProvider:
 
     def embed_query(self, text: str) -> list[float]:
         return self._vector(text)
+
+    @property
+    def da_san_sang(self) -> bool:
+        """Luôn sẵn sàng — adapter này băm chuỗi, không có trọng số nào."""
+        return True
+
+    def warm(self) -> None:
+        """Không có gì để nạp."""

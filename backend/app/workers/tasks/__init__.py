@@ -33,6 +33,7 @@ from app.adapters.llm import get_llm_provider
 from app.adapters.storage import minio_store
 from app.models.base import session_scope
 from app.models.knowledge import Source
+from app.services import progress
 from app.services.ingest import ingest_file
 from app.settings import settings
 
@@ -86,7 +87,24 @@ def xu_ly_nguon(source_id: str | uuid.UUID) -> None:
 
         _dat_trang_thai(sid, progress=15)
 
+        # ── Nạp mô hình, và NÓI RA là đang nạp ──────────
+        #
+        # Lần chạy đầu tiên phải tải khoảng 4,3 GB trọng số về. Trước đây bước
+        # này im lặng: giao diện đứng ở "đang đọc 15%" suốt một phút rưỡi, và
+        # mọi tài liệu xếp sau đứng ở "đang chờ 0%" mà không có lời giải thích
+        # nào. Người dùng chỉ thấy một hệ thống bị treo.
+        #
+        # Nạp ở đây, tường minh, thay vì để nó xảy ra lặng lẽ bên trong bước
+        # nhúng — nơi thanh tiến trình đã nhảy tới 85% và đứng im ở đó.
         embedder = get_embedding_provider()
+        if not embedder.da_san_sang:
+            progress.dat(
+                sid, status="parsing", progress=15,
+                message="Đang chuẩn bị mô hình (lần đầu tải khoảng 4 GB) …",
+            )
+            log.info("Nạp mô hình lần đầu — bước này có thể mất vài phút")
+        embedder.warm()
+
         llm = get_llm_provider() if settings.contextual_retrieval_enabled else None
 
         with session_scope() as s:

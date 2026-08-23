@@ -41,6 +41,24 @@ class BgeM3EmbeddingProvider:
         """Ghi cả revision vào tên để metadata lần chạy tái lập được."""
         return f"{self.model_name}@{self.revision or 'unpinned'}"
 
+    @property
+    def da_san_sang(self) -> bool:
+        """Trọng số đã nằm trong bộ nhớ chưa.
+
+        Chỗ gọi dùng nó để biết lượt `warm()` sắp tới là tức thời hay là một
+        lượt tải về vài GB — và nói cho người dùng biết trước điều đó.
+        """
+        return self._model is not None
+
+    def warm(self) -> None:
+        """Nạp mô hình ngay bây giờ thay vì đợi lượt nhúng đầu tiên.
+
+        Không có hàm này thì việc tải trọng số xảy ra lặng lẽ bên trong
+        `embed_documents`, tức là **sau khi** thanh tiến trình đã nhảy lên 85%.
+        Người dùng thấy 85% đứng im hàng phút và kết luận hệ thống treo.
+        """
+        self._load()
+
     def _load(self):
         if self._model is not None:
             return self._model

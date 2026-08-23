@@ -24,7 +24,8 @@ export const VI = {
   "chung.huy": "Huỷ",
   "chung.xoa": "Xoá",
   "chung.dong": "Đóng",
-  "chung.trang": "trang",
+  "chung.soTrang": "{so} trang",
+  "chung.soTrangNhieu": "{so} trang",
   "chung.dangXuLy": "đang xử lý",
   "chung.matKetNoi":
     "Mất kết nối tới máy chủ. Đang tự thử lại — công việc của bạn không bị mất.",
@@ -207,7 +208,11 @@ export const EN: Partial<Record<Khoa, string>> = {
   "chung.huy": "Cancel",
   "chung.xoa": "Delete",
   "chung.dong": "Close",
-  "chung.trang": "pages",
+  // Tiếng Việt không chia số nhiều, tiếng Anh thì có — nên "số trang" phải là
+  // MỘT khoá nhận tham số, không phải chuỗi "trang" ghép tay ở chỗ gọi. Ghép
+  // tay cho ra "1 pages".
+  "chung.soTrang": "{so} page",
+  "chung.soTrangNhieu": "{so} pages",
   "chung.dangXuLy": "processing",
   "chung.matKetNoi":
     "Lost connection to the server. Retrying — your work is safe.",
@@ -381,6 +386,10 @@ const BANG: Record<NgonNgu, Partial<Record<Khoa, string>>> = { vi: VI, en: EN };
  * Thiếu khoá ở tiếng Anh thì rơi về tiếng Việt (AC-4). Thiếu ở cả hai là lỗi
  * lập trình, và trả về chính khoá — nhưng `tsc` đã chặn ca đó từ trước rồi.
  */
+export function soTrang(ngonNgu: NgonNgu, so: number): string {
+  return dich(ngonNgu, so === 1 ? "chung.soTrang" : "chung.soTrangNhieu", { so });
+}
+
 export function dich(
   ngonNgu: NgonNgu,
   khoa: Khoa,

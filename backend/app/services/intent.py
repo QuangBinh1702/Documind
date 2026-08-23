@@ -40,7 +40,47 @@ __all__ = [
 
 log = logging.getLogger(__name__)
 
-Intent = Literal["rag", "chitchat"]
+Intent = Literal["rag", "chitchat", "summarize"]
+
+# ── Câu hỏi về TOÀN BỘ tài liệu ────────────────────────
+#
+# "Tóm tắt tài liệu của tôi" là câu hỏi hợp lệ nhất trên đời với một hệ thống
+# đọc tài liệu, và đường RAG thường trả lời nó bằng *"không tìm thấy thông tin
+# này"*. Lý do không phải là lỗi cài đặt mà là lỗi **thể loại**:
+#
+#   Truy xuất đi tìm đoạn văn GIỐNG câu hỏi. Nhưng "tóm tắt tài liệu của tôi"
+#   không chứa một từ nội dung nào của tài liệu — nó nói về tài liệu, không nói
+#   về chủ đề của tài liệu. Điểm liên quan vì thế thấp, và cổng ngưỡng τ từ
+#   chối. Cổng làm đúng việc của nó; câu hỏi mới là thứ đi nhầm đường.
+#
+# Nên nó cần một đường riêng: lấy phần đầu của từng tài liệu đang trong phạm vi
+# và tóm tắt, thay vì đi tìm đoạn giống câu hỏi.
+_TOM_TAT = re.compile(
+    r"(?:tóm\s*tắt|tóm\s*lược|tổng\s*hợp|khái\s*quát|nội\s*dung\s*chính|"
+    r"ý\s*chính|điểm\s*chính|nói\s*về\s*(?:cái\s*)?gì|viết\s*về\s*gì|"
+    r"đề\s*cập\s*(?:đến|tới)\s*(?:cái\s*)?gì|bao\s*gồm\s*(?:những\s*)?gì|"
+    r"có\s*(?:những\s*)?nội\s*dung\s*gì|"
+    r"\bsummar(?:y|ise|ize)\b|\boverview\b|main\s+points?|key\s+points?|"
+    r"what\s+(?:is|are)\s+(?:this|these|it|they)\s+about)",
+    re.IGNORECASE,
+)
+
+# Dạng không dấu của cùng những cụm trên, chỉ giữ cụm không có từ đồng âm.
+_TOM_TAT_BARE = re.compile(
+    r"(?:tom\s*tat|tom\s*luoc|khai\s*quat|noi\s*dung\s*chinh|"
+    r"noi\s*ve\s*(?:cai\s*)?gi|viet\s*ve\s*gi)",
+    re.IGNORECASE,
+)
+
+# "Tóm tắt Điều 5" là câu hỏi TRA CỨU, không phải câu hỏi toàn tài liệu: nó chỉ
+# đích danh một phần cụ thể, và truy xuất tìm được phần ấy rất tốt. Chỉ những
+# yêu cầu tóm tắt KHÔNG trỏ vào phần nào mới đi đường toàn tài liệu.
+_PHAN_CU_THE = re.compile(
+    r"(?:\bđiều\s*\d|\bkhoản\s*\d|\bchương\s*[\dIVX]|\bmục\s*\d|phụ\s*lục\s*\w|"
+    r"\bdieu\s*\d|\bkhoan\s*\d|\bchuong\s*[\dIVX]|"
+    r"\barticle\s*\d|\bchapter\s*\d|\bsection\s*\d)",
+    re.IGNORECASE,
+)
 
 # Lời chào và lời cảm ơn tiếng Việt gần như luôn kéo theo một từ xưng hô hoặc
 # một tiểu từ tình thái — "chào bạn", "cảm ơn nhé", "ok anh". Bỏ qua chúng thì
@@ -128,6 +168,16 @@ def _by_rules(question: str) -> Intent | None:
     """Kết luận nhanh, hoặc `None` khi không chắc."""
     accented = question.strip().lower()
     bare = strip_accents(question).strip().lower()
+
+    # Xét TRƯỚC dấu hiệu tài liệu: "tóm tắt tài liệu của tôi" khớp cả hai, và
+    # thứ tự ngược lại sẽ đẩy nó vào đường tra cứu — đúng cái đường trả về
+    # "không tìm thấy thông tin này".
+    muon_tom_tat = _TOM_TAT.search(accented) or _TOM_TAT_BARE.search(bare)
+    if muon_tom_tat:
+        # Có trỏ vào một phần cụ thể ("tóm tắt Điều 5") thì đã đủ để kết luận
+        # ngay là tra cứu — truy xuất tìm "Điều 5" rất tốt. Không cần hỏi mô
+        # hình một câu mà mình đã biết câu trả lời.
+        return "rag" if _PHAN_CU_THE.search(accented) else "summarize"
 
     if _DOCUMENT_SIGNAL.search(accented) or _DOCUMENT_SIGNAL_BARE.search(bare):
         return "rag"

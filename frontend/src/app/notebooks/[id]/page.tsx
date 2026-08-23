@@ -41,6 +41,9 @@ export default function ManHinhNotebook() {
   const [tab, setTab] = useState<Tab>("hoi");
   const { t } = useNgonNgu();
   const daXong = useRef<Set<string>>(new Set());
+  // Đánh thức vòng lặp theo dõi khi có tệp mới, mà không phải dựng lại hiệu ứng
+  // — dựng lại chính là thứ đã giết luồng đang chạy ở bản trước.
+  const bao = useRef<() => void>(() => {});
 
   const tai = useCallback(async () => {
     try {
@@ -74,13 +77,33 @@ export default function ManHinhNotebook() {
 
   // Luồng trạng thái — US-022 AC-1.
   //
-  // Máy chủ tự đóng luồng khi mọi nguồn đã xong, nên vòng lặp này không phải là
-  // hỏi lại liên tục: nó chỉ mở lại khi có tệp mới được tải lên, và ngồi im
-  // trong lúc chờ.
+  // Phụ thuộc CHỈ vào `id`, không vào `nguon`.
+  //
+  // Bản trước để `nguon.length` trong danh sách phụ thuộc, và nó tự phá chính
+  // mình: luồng đẩy về một tài liệu mới → `setNguon` → độ dài đổi → React dọn
+  // hiệu ứng → `abort()` giết đúng cái luồng vừa gửi dữ liệu → mở luồng khác →
+  // lặp lại. Người dùng thấy trạng thái đứng im ở "đang chờ 0%" trong khi máy
+  // chủ đã xử lý xong từ lâu, và log máy chủ đầy những lượt mở luồng liên tiếp.
+  //
+  // Giờ vòng lặp tự nối lại: máy chủ đóng luồng khi mọi thứ đã xong, và một
+  // lượt tải lên bấm `bao.current()` để mở lại ngay.
   useEffect(() => {
     if (!token.access()) return;
+
     const dung = new AbortController();
     let huy = false;
+
+    // Đánh thức vòng lặp mà không phải dựng lại hiệu ứng.
+    let danhThuc: (() => void) | null = null;
+    bao.current = () => danhThuc?.();
+
+    const doiTinHieu = () =>
+      new Promise<void>((giai_quyet) => {
+        danhThuc = giai_quyet;
+        // Vẫn hỏi lại sau một phút kể cả khi không ai bấm gì: một sự kiện bị
+        // rơi không được biến thành trạng thái sai vĩnh viễn.
+        setTimeout(giai_quyet, 60_000);
+      });
 
     async function chay() {
       while (!huy) {
@@ -107,21 +130,24 @@ export default function ManHinhNotebook() {
           dung.signal,
         );
         if (huy) return;
-        // Luồng đóng vì mọi thứ đã xong. Lấy lại bản đầy đủ một lần rồi nghỉ;
-        // lượt tải lên tiếp theo sẽ gọi `tai()` và mở lại vòng này.
+
+        // Luồng đã đóng — hoặc vì mọi nguồn đã xong, hoặc vì hết hạn. Lấy lại
+        // bản đầy đủ rồi ngủ cho tới khi có tệp mới.
         await tai();
-        return;
+        if (huy) return;
+        await doiTinHieu();
       }
     }
 
     void chay();
     return () => {
       huy = true;
+      danhThuc?.();
+      bao.current = () => {};
       dung.abort();
     };
-    // `nguon.length` để mở lại luồng khi có tệp mới, không phải mỗi lần đổi %.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, nguon.length]);
+  }, [id]);
 
   if (loi) {
     return (
@@ -202,7 +228,17 @@ export default function ManHinhNotebook() {
         <BaCot
           tab={tab}
           onDoiTab={setTab}
-          nguon={<CotNguon nbId={id} nguon={nguon} onDoiThay={() => void tai()} />}
+          nguon={
+            <CotNguon
+              nbId={id}
+              nguon={nguon}
+              onDoiThay={async () => {
+                await tai();
+                // Mở lại luồng ngay để thấy tiến độ của tệp vừa thêm.
+                bao.current();
+              }}
+            />
+          }
           hoiDap={
             <CotHoiDap
               nbId={id}

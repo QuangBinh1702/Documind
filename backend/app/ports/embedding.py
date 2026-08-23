@@ -47,3 +47,22 @@ class EmbeddingProvider(Protocol):
     def embed_query(self, text: str) -> list[float]:
         """Nhúng câu hỏi khi truy xuất."""
         ...
+
+    @property
+    def da_san_sang(self) -> bool:
+        """Mô hình đã sẵn sàng dùng ngay chưa.
+
+        Không phải chi tiết cài đặt: worker hỏi nó để biết lượt `warm()` sắp
+        tới là tức thời hay là một lượt tải về vài GB, rồi **nói cho người dùng
+        biết trước**. Thiếu thông tin ấy thì lần chạy đầu tiên trông y hệt một
+        hệ thống bị treo.
+        """
+        ...
+
+    def warm(self) -> None:
+        """Nạp mô hình ngay, thay vì đợi lượt nhúng đầu tiên.
+
+        Adapter nào không có gì để nạp thì để rỗng — đó là lý do cổng khai nó
+        chứ không bắt chỗ gọi phải biết adapter nào cần và adapter nào không.
+        """
+        ...
