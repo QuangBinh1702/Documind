@@ -315,8 +315,31 @@ async def upload_source(
     # rồi im lặng, tài liệu kẹt ở `queued` mãi mãi.
     session.commit()
 
-    background.add_task(xu_ly_nguon, str(ket_qua.source_id))
+    xep_hang(background, ket_qua.source_id)
     return phan_hoi
+
+
+def xep_hang(background: BackgroundTasks, source_id: uuid.UUID) -> None:
+    """Đưa một nguồn vào hàng đợi xử lý — US-021 AC-1.
+
+    Hỏng thì rơi về `BackgroundTasks` chứ không để tài liệu kẹt ở `queued`:
+    Redis chết hay chưa bật worker là sự cố hạ tầng, và biến nó thành "tài liệu
+    của bạn biến mất" là phản ứng sai. Đường dự phòng yếu hơn — mất việc nếu API
+    khởi động lại — nên nó ghi một dòng cảnh báo để không diễn ra âm thầm.
+    """
+    if settings.worker_mode == "celery":
+        try:
+            from app.workers.celery_app import xu_ly_nguon_task
+
+            xu_ly_nguon_task.delay(str(source_id))
+            return
+        except Exception as exc:
+            log.warning(
+                "Không đẩy được việc vào hàng đợi (%s). Xử lý ngay trong tiến "
+                "trình API — việc sẽ mất nếu API khởi động lại.", exc,
+            )
+
+    background.add_task(xu_ly_nguon, str(source_id))
 
 
 def _nguon_cua_toi(session, nb: Notebook, source_id: uuid.UUID) -> Source:

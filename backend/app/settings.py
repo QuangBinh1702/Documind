@@ -103,6 +103,26 @@ class Settings(BaseSettings):
     image_max_side: int = 3200
     """Thu ảnh lớn về cạnh dài này. Ảnh 12 MP không đọc tốt hơn ảnh 4 MP."""
 
+    worker_mode: Literal["celery", "inline"] = "celery"
+    """Ai chạy việc nạp tài liệu — US-021.
+
+    `celery` đẩy sang tiến trình worker riêng: đó là cách đúng, và là cách
+    `docker compose up` chạy. `inline` chạy ngay trong tiến trình API bằng
+    `BackgroundTasks`.
+
+    `inline` dành cho hai ca: chạy backend trần khi phát triển mà không muốn
+    bật thêm worker, và chạy bộ test. Nó **không** dùng được thật, vì khởi động
+    lại API là mất việc đang chạy dở.
+    """
+
+    task_time_limit_seconds: int = 3600
+    """Trần cứng cho một lượt nạp tài liệu.
+
+    OCR một tài liệu vài trăm trang trên CPU có thể chạm ngưỡng này. Chạm thì
+    việc bị giết và ghi `failed` kèm lý do — thà kết luận sai còn hơn giữ chỗ
+    của mọi tài liệu xếp sau vô thời hạn.
+    """
+
     pdf_font: str | None = None
     """Đường dẫn tới tệp .ttf dùng khi xuất hội thoại ra PDF — US-040 AC-2.
 

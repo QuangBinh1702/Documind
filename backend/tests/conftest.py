@@ -13,6 +13,20 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _xu_ly_ngay(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Chạy việc nạp tài liệu ngay trong tiến trình test — US-021.
+
+    Mặc định của hệ thống là đẩy sang Celery, và đó là mặc định đúng. Nhưng bộ
+    test không có worker: để nguyên thì mọi tài liệu tải lên trong test đều kẹt
+    ở `queued` và các assertion về `ready` sẽ đỏ vì một lý do chẳng liên quan gì
+    tới thứ đang được kiểm.
+    """
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "worker_mode", "inline")
+
+
+@pytest.fixture(autouse=True)
 def _khong_cham_mang(monkeypatch: pytest.MonkeyPatch) -> None:
     """Chặn mọi lượt gọi mạng thật trong bộ test.
 
