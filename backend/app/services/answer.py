@@ -34,10 +34,11 @@ from app.ports.llm import LLMProvider, Message
 from app.ports.rerank import RerankProvider
 from app.services import prompt as P
 from app.services.grounding import GroundingDecision, decide
-from app.services.intent import CHITCHAT_SYSTEM_PROMPT, classify
+from app.services.intent import chitchat_system_prompt, classify
 from app.services.retrieval import ScoredChunk, retrieve
 from app.services.verifier import STRICTER_HINT, verify_answer
 from app.settings import settings
+from app.text.language import nhan_dien as nhan_dien_ngon_ngu
 
 __all__ = ["AnswerEvent", "AnswerResult", "Citation", "answer_question"]
 
@@ -144,7 +145,16 @@ async def answer_question(
     """
     started = time.perf_counter()
 
-    yield {"type": "meta", "model": llm.name, "is_local": llm.is_local}
+    # US-037 — ngôn ngữ trả lời đi theo ngôn ngữ CÂU HỎI, không theo ngôn ngữ
+    # tài liệu. Người hỏi bằng tiếng Anh về một quy chế tiếng Việt vẫn phải nhận
+    # được câu trả lời đọc được, kèm số liệu trích nguyên văn.
+    #
+    # Nhận diện trước cả bước định tuyến ý định, vì lời chào cũng cần trả lời
+    # đúng ngôn ngữ — "hello" mà đáp "Chào bạn!" thì hỏng ngay câu đầu tiên.
+    ngon_ngu = nhan_dien_ngon_ngu(question)
+
+    yield {"type": "meta", "model": llm.name, "is_local": llm.is_local,
+           "language": ngon_ngu}
 
     # ── Định tuyến ý định (US-066), nếu bật ─────────────
     if settings.intent_routing_enabled:
@@ -166,7 +176,7 @@ async def answer_question(
 
             pieces: list[str] = []
             async for piece in llm.stream(
-                CHITCHAT_SYSTEM_PROMPT,
+                chitchat_system_prompt(ngon_ngu),
                 [*(history or []), {"role": "user", "content": question}],
                 temperature=settings.llm_temperature,
                 max_tokens=settings.llm_max_tokens,
@@ -228,9 +238,10 @@ async def answer_question(
         }
         # Câu từ chối vẫn phát ra dưới dạng token để giao diện chỉ có một
         # đường hiển thị duy nhất.
-        yield {"type": "token", "text": P.NO_ANSWER_TEXT}
+        tu_choi = P.no_answer_text(ngon_ngu)
+        yield {"type": "token", "text": tu_choi}
         result = AnswerResult(
-            answer=P.NO_ANSWER_TEXT,
+            answer=tu_choi,
             kind="no_answer",
             citations=[],
             decision=decision,
@@ -243,7 +254,7 @@ async def answer_question(
 
     # ── Sinh câu trả lời ────────────────────────────────
     blocks = P.build_context(decision.chunks)
-    system = P.build_grounded_system_prompt()
+    system = P.build_grounded_system_prompt(ngon_ngu)
     user = P.build_user_prompt(question, blocks)
     messages: list[Message] = [*(history or []), {"role": "user", "content": user}]
 
@@ -330,7 +341,7 @@ async def answer_question(
     elapsed = int((time.perf_counter() - started) * 1000)
     # Mô hình có thể tự trả lời câu từ chối dù cổng ngưỡng đã cho qua — khi đó
     # phải ghi đúng `answer_kind` để thống kê ở US-041 không bị lệch.
-    kind: AnswerKind = "no_answer" if cleaned.startswith(P.NO_ANSWER_TEXT) else "grounded"
+    kind: AnswerKind = "no_answer" if P.is_no_answer(cleaned) else "grounded"
 
     result = AnswerResult(
         answer=cleaned,

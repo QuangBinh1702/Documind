@@ -30,7 +30,13 @@ from typing import Literal
 from app.ports.llm import LLMProvider
 from app.text.normalize import strip_accents
 
-__all__ = ["CHITCHAT_SYSTEM_PROMPT", "Intent", "classify"]
+__all__ = [
+    "CHITCHAT_SYSTEM_PROMPT",
+    "CHITCHAT_SYSTEM_PROMPT_EN",
+    "Intent",
+    "chitchat_system_prompt",
+    "classify",
+]
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +106,22 @@ tài liệu của họ và luôn kèm trích dẫn để họ tự kiểm chứn
 
 KHÔNG bịa nội dung tài liệu. Nếu họ hỏi điều gì cần tra cứu, hãy mời họ đặt \
 câu hỏi cụ thể."""
+
+CHITCHAT_SYSTEM_PROMPT_EN = """You are the assistant of DocuMind, a system that \
+answers questions about documents the user has uploaded.
+
+Answer briefly and warmly, in English.
+
+If the user asks what you can do, say that you answer questions from their own \
+documents and always cite the passages so they can check for themselves.
+
+NEVER invent document content. If they ask something that needs looking up, \
+invite them to ask a specific question."""
+
+
+def chitchat_system_prompt(language: str = "vi") -> str:
+    """Prompt trò chuyện theo ngôn ngữ người dùng đang dùng — US-037."""
+    return CHITCHAT_SYSTEM_PROMPT_EN if language == "en" else CHITCHAT_SYSTEM_PROMPT
 
 
 def _by_rules(question: str) -> Intent | None:
