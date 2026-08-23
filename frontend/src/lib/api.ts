@@ -255,6 +255,36 @@ export const api = {
 };
 
 /**
+ * Tải một tệp do máy chủ sinh ra về máy — US-040 AC-4.
+ *
+ * Không dùng thẻ `<a href>` thẳng: đường xuất đòi `Authorization`, mà thẻ liên
+ * kết thì không gắn header được. Nên tải bằng `fetch` rồi tạo một liên kết tạm
+ * trỏ vào blob và bấm hộ.
+ *
+ * Tên tệp lấy từ `Content-Disposition` của máy chủ chứ không tự đặt ở đây: máy
+ * chủ mới biết tên notebook, và để một chỗ đặt tên thì hai bên không lệch nhau.
+ */
+export async function taiVe(duong: string, tenDuPhong: string): Promise<void> {
+  const r = await goiTho(duong);
+  if (!r.ok) {
+    throw new ApiError(r.status, "Không xuất được tệp.");
+  }
+
+  const cd = r.headers.get("Content-Disposition") ?? "";
+  const ten = /filename="([^"]+)"/.exec(cd)?.[1] ?? tenDuPhong;
+
+  const url = URL.createObjectURL(await r.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ten;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Thu hồi ngay thì Safari huỷ lượt tải đang bắt đầu; đợi một nhịp là đủ.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+/**
  * Tải tệp lên kèm tiến trình theo phần trăm — US-006 AC-6.
  *
  * Dùng `XMLHttpRequest` chứ không dùng `fetch`: `fetch` chưa có cách nào theo

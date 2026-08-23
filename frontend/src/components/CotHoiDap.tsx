@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { TrichDan } from "@/lib/api";
+import { type TrichDan, taiVe } from "@/lib/api";
 import { hoi, type SuKien } from "@/lib/stream";
 
 type Luot = {
@@ -43,6 +43,10 @@ export function CotHoiDap({
   const [luot, setLuot] = useState<Luot[]>([]);
   const [cauHoi, setCauHoi] = useState("");
   const [dangHoi, setDangHoi] = useState(false);
+  // Máy chủ tạo phiên ở lượt hỏi đầu tiên và báo lại qua sự kiện `session`.
+  // Không có id này thì không xuất được — nên giữ nó ngay khi nhận.
+  const [phienId, setPhienId] = useState<string | null>(null);
+  const [dangXuat, setDangXuat] = useState(false);
   const cuoiRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -73,8 +77,11 @@ export function CotHoiDap({
     const capNhat = (sua: (l: Luot) => Luot) =>
       setLuot((cu) => cu.map((l, i) => (i === chiSo ? sua(l) : l)));
 
-    await hoi({ question: q, notebook_id: nbId }, (e: SuKien) => {
+    await hoi({ question: q, notebook_id: nbId, session_id: phienId }, (e: SuKien) => {
       switch (e.type) {
+        case "session":
+          setPhienId(String(e.session_id));
+          break;
         // `external_call` cố ý KHÔNG hiện gì trong khung chat. Việc dữ liệu đi
         // đâu là thuộc tính của cả không gian làm việc, không phải của từng câu
         // trả lời, nên nó nằm ở nhãn trên thanh tiêu đề. Nhét vào giữa cuộc hội
@@ -114,8 +121,48 @@ export function CotHoiDap({
     setDangHoi(false);
   }
 
+  async function xuat(dinhDang: "md" | "pdf") {
+    if (!phienId || dangXuat) return;
+    setDangXuat(true);
+    try {
+      await taiVe(
+        `/api/sessions/${phienId}/export?dinh_dang=${dinhDang}`,
+        `hoi-dap.${dinhDang}`,
+      );
+    } catch {
+      setLuot((cu) =>
+        cu.map((l, i) =>
+          i === cu.length - 1 ? { ...l, loi: "Không xuất được tệp. Thử lại sau." } : l,
+        ),
+      );
+    } finally {
+      setDangXuat(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
+      {/* Thanh xuất chỉ hiện khi đã có gì để xuất — US-040. */}
+      {phienId && luot.some((l) => l.xong) && (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-b border-vien px-6 py-2">
+          <span className="mr-auto text-xs text-mo">Lưu lại cuộc hỏi đáp này</span>
+          <button
+            onClick={() => void xuat("md")}
+            disabled={dangXuat}
+            className="rounded-md border border-vien px-2.5 py-1 text-xs text-mo hover:border-nhan hover:text-nhan disabled:opacity-45"
+          >
+            Markdown
+          </button>
+          <button
+            onClick={() => void xuat("pdf")}
+            disabled={dangXuat}
+            className="rounded-md border border-vien px-2.5 py-1 text-xs text-mo hover:border-nhan hover:text-nhan disabled:opacity-45"
+          >
+            PDF
+          </button>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         {luot.length === 0 && (
           <div className="mx-auto max-w-[68ch] rounded-lg border border-dashed border-vien px-5 py-10 text-center">

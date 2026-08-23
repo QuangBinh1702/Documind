@@ -19,9 +19,9 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -34,6 +34,7 @@ from app.models.base import session_scope
 from app.models.chat import ChatMessage, ChatSession
 from app.models.knowledge import Notebook, Source, SourceChunk
 from app.services.chat import ask
+from app.services.export import KhongCoFont, xuat
 from app.services.external import QuotaExceeded, answer_externally
 from app.settings import Mode, settings
 
@@ -265,6 +266,31 @@ def list_sessions(
         {"id": str(s.id), "title": s.title, "updated_at": s.updated_at.isoformat()}
         for s in sessions
     ]
+
+
+@router.get("/sessions/{session_id}/export", summary="Xuất hội thoại ra tệp")
+def export_session(
+    session_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+    dinh_dang: Literal["md", "pdf"] = "md",
+) -> Response:
+    """US-040 — tải về Markdown hoặc PDF."""
+    try:
+        ket = xuat(session, session_id, user.id, dinh_dang)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except KhongCoFont as exc:
+        # Thiếu font là lỗi cấu hình máy chủ, không phải lỗi của người dùng —
+        # và thông báo phải nói được điều đó để người vận hành sửa được.
+        log.error("Không xuất được PDF: %s", exc)
+        raise HTTPException(503, str(exc)) from exc
+
+    return Response(
+        content=ket.noi_dung,
+        media_type=ket.mime,
+        headers={"Content-Disposition": f'attachment; filename="{ket.ten_tep}"'},
+    )
 
 
 @router.get("/sessions/{session_id}/messages", summary="Tin nhắn của một phiên")

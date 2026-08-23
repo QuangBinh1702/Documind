@@ -103,6 +103,15 @@ class Settings(BaseSettings):
     image_max_side: int = 3200
     """Thu ảnh lớn về cạnh dài này. Ảnh 12 MP không đọc tốt hơn ảnh 4 MP."""
 
+    pdf_font: str | None = None
+    """Đường dẫn tới tệp .ttf dùng khi xuất hội thoại ra PDF — US-040 AC-2.
+
+    Bỏ trống thì hệ thống tự dò một font Unicode có sẵn trên máy. Chỉ điền khi
+    muốn ghim một font cụ thể, hoặc khi máy chủ không có font nào — 14 font
+    chuẩn của PDF không có ký tự tiếng Việt, và thiếu font thì mọi chữ có dấu
+    in ra thành ô vuông mà không báo lỗi gì.
+    """
+
     ocr_dpi: int = 300
     ocr_min_confidence: float = Field(default=0.60, ge=0.0, le=1.0)
     """Dòng dưới ngưỡng này được đánh dấu để người rà (US-027), không bị bỏ."""
@@ -229,7 +238,7 @@ class Settings(BaseSettings):
         "embedding_device", "rerank_device", "ocr_device",
         "embedding_revision", "rerank_revision",
         "gemini_api_key", "ollama_cloud_api_key",
-        
+        "pdf_font",
         mode="before",
     )
     @classmethod
