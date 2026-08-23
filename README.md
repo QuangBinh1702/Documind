@@ -36,7 +36,15 @@ chủ động chọn như vậy.
 - Docker và Docker Compose (bản v2, tức lệnh `docker compose`, không phải
   `docker-compose`)
 - 8 GB RAM trở lên
-- ~15 GB đĩa trống: khoảng 5 GB cho ảnh Docker, ~10 GB cho trọng số mô hình
+- **~16 GB đĩa trống**, đo thật chứ không ước lượng:
+
+  | | |
+  |---|---|
+  | Ảnh Docker (`api`, `worker`, `frontend`) | 8,0 GB |
+  | Trọng số mô hình (volume `model-cache`) | 6,4 GB |
+  | Postgres, MinIO, Redis và tài liệu của bạn | phần còn lại |
+
+  `api` và `worker` dùng chung một ảnh 3,2 GB nên chỉ tính một lần.
 
 **Tuỳ chọn nhưng nên có**
 
@@ -76,10 +84,18 @@ Chờ khoảng một phút cho Postgres và MinIO sẵn sàng, rồi mở:
 > **Lần dựng đầu mất khoảng 10–15 phút** và tải về vài GB (PyTorch, thư viện
 > Node). Những lần sau dùng cache nên chỉ vài giây.
 >
-> **Tài liệu đầu tiên cũng lâu**: worker phải tải trọng số `bge-m3` và
-> `bge-reranker-v2-m3`, khoảng **4,3 GB**, vào volume `model-cache`. Đo trên máy
-> phát triển: tải hết mất khoảng 3 phút, sau đó một tệp DOCX 10 nghìn ký tự xử
-> lý xong trong 47 giây. Từ tài liệu thứ hai trở đi không phải tải nữa.
+> **Tài liệu đầu tiên cũng lâu**, và nó tải làm **hai đợt** — biết trước thì đỡ
+> tưởng là treo:
+>
+> | Khi nào | Tải gì | Dung lượng |
+> |---|---|---|
+> | Tải tài liệu đầu tiên | `bge-m3` (nhúng) | 4,3 GB |
+> | Đặt **câu hỏi** đầu tiên | `bge-reranker-v2-m3` (xếp hạng lại) | 2,1 GB |
+> | | **Tổng trong volume `model-cache`** | **6,4 GB** |
+>
+> Đo trên máy phát triển: đợt một mất khoảng 3 phút, sau đó một tệp DOCX 10
+> nghìn ký tự xử lý xong trong 47 giây. Từ tài liệu và câu hỏi thứ hai trở đi
+> không phải tải nữa.
 >
 > Theo dõi bằng `docker compose logs -f worker`.
 
