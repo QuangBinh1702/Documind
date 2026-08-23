@@ -1,0 +1,61 @@
+%% Hợp đồng sự kiện SSE — SPEC-v1.md §7.1.
+%%
+%% Tên và thứ tự sự kiện là HỢP ĐỒNG, không phải chi tiết cài đặt: giao diện
+%% dựa vào chúng, nên đổi ở đây mà không đổi giao diện là làm hỏng một cách im
+%% lặng. `tests/test_api_chat.py` ghim thứ tự này lại.
+%%
+%% Hai điều dễ làm sai:
+%%   - `external_call` phát NGAY TRƯỚC lượt gọi thật sự gửi dữ liệu đi, không
+%%     phát ở đầu luồng. Đường từ chối không gọi mô hình nào, nên báo sớm là nói
+%%     với người dùng rằng tài liệu của họ đã ra ngoài trong khi không có gì ra
+%%     cả — một cảnh báo sai còn tệ hơn không cảnh báo.
+%%   - `replace` tồn tại vì giao diện không rút lại được thứ đã hiện. Khi bộ
+%%     kiểm định bắt sinh lại, phải gửi cả bản mới chứ không gửi thêm token.
+sequenceDiagram
+    autonumber
+    participant GD as Giao diện<br/>(fetch + ReadableStream)
+    participant API as POST /api/chat/ask
+
+    GD->>API: {question, notebook_id, session_id}
+
+    API-->>GD: meta {model, is_local, language}
+    opt lượt đầu của phiên
+        API-->>GD: session {session_id, title}
+    end
+    opt định tuyến ý định bật
+        API-->>GD: intent {intent, decided_by}
+    end
+    opt câu hỏi phụ thuộc ngữ cảnh
+        API-->>GD: condensed {query}
+    end
+
+    API-->>GD: status {stage: retrieving}
+    API-->>GD: status {stage: reranking}
+
+    alt không đủ căn cứ
+        API-->>GD: no_answer {top_score, threshold, reason}
+        API-->>GD: token (nguyên văn câu từ chối)
+    else đủ căn cứ
+        opt dữ liệu rời khỏi máy
+            API-->>GD: external_call {model, includes_documents}
+        end
+        API-->>GD: status {stage: generating}
+        loop từng mẩu
+            API-->>GD: token {text}
+        end
+        opt bộ kiểm định bật
+            API-->>GD: verification {passed, issue}
+            opt phải sinh lại
+                API-->>GD: status {stage: regenerating}
+                API-->>GD: replace {text, attempt}
+            end
+        end
+        loop mỗi marker được dùng
+            API-->>GD: citation {marker, chunk_id, source_id,<br/>page, char_start, char_end, snippet}
+        end
+    end
+
+    API-->>GD: done {answer_kind, latency_ms}
+    API-->>GD: saved {message_id, session_id}
+
+    Note over GD: Ranh giới gói tin do mạng quyết định.<br/>Một lần đọc có thể trả về hai sự kiện rưỡi,<br/>nên nửa sự kiện còn lại phải giữ trong bộ đệm.

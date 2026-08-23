@@ -1,0 +1,43 @@
+%% Thành phần logic và luồng dữ liệu chính.
+%%
+%% Hai luồng, và chúng gặp nhau đúng một chỗ — bảng `source_chunks`:
+%%
+%%   nạp tài liệu:  tệp → trích xuất → chunk → nhúng → chỉ mục
+%%   hỏi đáp:       câu hỏi → truy xuất → rerank → cổng ngưỡng → sinh câu trả lời
+%%
+%% Bảng `external_answer_cache` cố ý đứng tách rời. Đường truy xuất tài liệu
+%% KHÔNG BAO GIỜ đọc nó (INV-3): trộn hai thứ vào nhau thì hệ thống sẽ dần trích
+%% dẫn chính những nội dung nó tự sinh ra.
+flowchart TB
+    subgraph Nap["Nạp tài liệu"]
+        direction LR
+        Tep[Tệp tải lên] --> TrichXuat[Trích xuất<br/>PyMuPDF · python-docx · OCR]
+        TrichXuat --> Chuan[Chuẩn hoá NFC<br/>+ cổng chất lượng]
+        Chuan --> Chunk[Chia đoạn<br/>theo tiêu đề, có chồng lấn]
+        Chunk --> Nhung[Nhúng<br/>bge-m3]
+    end
+
+    Chunks[(source_chunks<br/>nội dung · offset · bbox<br/>vector · tsvector)]
+    Nhung --> Chunks
+
+    subgraph Hoi["Hỏi đáp"]
+        direction TB
+        CauHoi[Câu hỏi] --> YDinh{Ý định?}
+        YDinh -->|trò chuyện| TraLoiNgan[Trả lời ngắn<br/>không truy xuất]
+        YDinh -->|hỏi tài liệu| TruyXuat[Truy xuất lai<br/>vector + BM25 → RRF]
+        TruyXuat --> Rerank[Xếp hạng lại<br/>cross-encoder]
+        Rerank --> Cong{Điểm cao nhất ≥ τ?}
+        Cong -->|không| TuChoi[Từ chối có lý do]
+        Cong -->|có| Sinh[Sinh câu trả lời<br/>kèm marker trích dẫn]
+        Sinh --> HauXuLy[Loại marker bịa<br/>+ ghép về chunk]
+    end
+
+    Chunks --> TruyXuat
+    Chunks --> Rerank
+    HauXuLy --> KetQua[Câu trả lời + trích dẫn bấm được]
+
+    Cache[(external_answer_cache<br/>TÁCH BIỆT — INV-3)]
+    HoiNgoai[Người dùng chủ động<br/>hỏi ra ngoài tài liệu] --> Cache
+
+    classDef tach fill:#fff8e6,stroke:#8a5a00,color:#8a5a00
+    class Cache,HoiNgoai tach

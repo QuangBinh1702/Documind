@@ -1,0 +1,149 @@
+%% Lược đồ cơ sở dữ liệu — khớp với migration 0001 và 0003.
+%%
+%% Hai điều đáng chú ý:
+%%
+%%   1. `external_answer_cache` KHÔNG có quan hệ nào tới `source_chunks`. Đó là
+%%      bất biến INV-3, và nó là một quyết định kiến trúc chứ không phải một
+%%      thiếu sót: nếu câu trả lời do mô hình tự sinh lọt vào kho tri thức thì
+%%      hệ thống sẽ dần trích dẫn chính những thứ nó bịa ra.
+%%
+%%   2. `message_citations.chunk_id` cho phép NULL. Xoá một tài liệu không được
+%%      xoá luôn những câu trả lời cũ trỏ vào nó — trích dẫn khi đó hiện là
+%%      "nguồn đã bị xoá" thay vì biến mất (US-020 AC-4).
+erDiagram
+    users ||--o{ notebooks : "sở hữu"
+    users ||--o{ refresh_tokens : "có phiên"
+    users ||--o{ external_answer_cache : "cache riêng"
+    users ||--o{ external_call_log : "hạn mức riêng"
+
+    notebooks ||--o{ sources : "chứa"
+    notebooks ||--o{ chat_sessions : "chứa"
+    notebooks ||--o| share_links : "chia sẻ"
+    notebooks ||--o{ source_chunks : "phạm vi truy xuất"
+
+    sources ||--o| source_texts : "toàn văn"
+    sources ||--o{ source_chunks : "chia thành"
+
+    chat_sessions ||--o{ chat_messages : "gồm"
+    chat_messages ||--o{ message_citations : "trích dẫn"
+    source_chunks |o--o{ message_citations : "được trích"
+
+    users {
+        uuid id PK
+        text email UK
+        text password_hash "Argon2id"
+        text locale "vi | en"
+        text role
+        timestamptz created_at
+    }
+
+    notebooks {
+        uuid id PK
+        uuid user_id FK
+        text title
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    sources {
+        uuid id PK
+        uuid notebook_id FK
+        text title
+        text original_name
+        text storage_key "khoá trên MinIO"
+        text kind "pdf|docx|txt|md|image|paste"
+        text mime_type
+        bigint size_bytes
+        int page_count
+        text status "CHECK 7 giá trị"
+        smallint progress
+        bool is_scanned
+        text ocr_engine
+        float text_quality
+        text error_code
+        text error_message
+        bool in_scope
+        timestamptz ready_at
+    }
+
+    source_texts {
+        uuid source_id PK_FK
+        text full_text "chuỗi mà offset trỏ vào — INV-1"
+        jsonb page_map
+    }
+
+    source_chunks {
+        bigint id PK
+        uuid source_id FK
+        uuid notebook_id FK
+        int chunk_index
+        text content
+        text context_prefix "US-049"
+        text heading_path
+        int page_no
+        int char_start "INV-1"
+        int char_end "INV-1"
+        jsonb bbox "nhiều hộp mỗi đoạn"
+        int token_count
+        vector embedding "bge-m3, 1024 chiều"
+        tsvector tsv "chỉ mục từ khoá"
+    }
+
+    chat_sessions {
+        uuid id PK
+        uuid notebook_id FK
+        text title
+        uuid_array scope_source_ids
+    }
+
+    chat_messages {
+        uuid id PK
+        uuid session_id FK
+        text role "user | assistant"
+        text content
+        text answer_kind "CHECK 5 giá trị"
+        text model_used "tiền tố local: = chạy trên máy"
+        text condensed_query
+        float top_rerank_score
+        int latency_ms
+        bigint seq
+    }
+
+    message_citations {
+        uuid id PK
+        uuid message_id FK
+        bigint chunk_id FK "NULL = nguồn đã xoá"
+        int marker
+        text snippet
+        int page_no
+    }
+
+    share_links {
+        uuid notebook_id PK_FK
+        text token UK "256 bit"
+        timestamptz revoked_at "NULL = còn hiệu lực"
+    }
+
+    external_answer_cache {
+        uuid id PK
+        uuid user_id FK
+        text question
+        vector question_embedding
+        text answer
+        text model_used
+        int hit_count
+        timestamptz expires_at
+    }
+
+    external_call_log {
+        bigint id PK
+        uuid user_id FK
+        timestamptz called_at
+        bool from_cache
+    }
+
+    refresh_tokens {
+        uuid id PK
+        uuid user_id FK
+        text token_hash UK
+    }

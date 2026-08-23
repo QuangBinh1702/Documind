@@ -1,0 +1,58 @@
+%% Kiến trúc ports & adapters, xếp theo lớp.
+%%
+%% Quy tắc một chiều: mũi tên chỉ đi từ ngoài vào trong. Tầng `services` biết
+%% các **cổng** (giao thức Python), không biết adapter nào đang chạy phía sau.
+%%
+%% Đây không phải trang trí kiến trúc. Nó là điều kiện để:
+%%   - bảng ablation US-046 đổi được từng tầng bằng một dòng cấu hình;
+%%   - US-048 so được ba engine OCR trên cùng bộ mẫu;
+%%   - bộ test chạy được trên máy không GPU, bằng adapter giả tất định.
+flowchart TB
+    subgraph API["Tầng API — app/api"]
+        A1[auth] & A2[notebooks] & A3[chat] & A4[share] & A5[stats] & A6[config]
+    end
+
+    subgraph SV["Tầng nghiệp vụ — app/services"]
+        S1[ingest<br/>nạp tài liệu]
+        S2[retrieval<br/>truy xuất lai + RRF]
+        S3[grounding<br/>rerank + cổng ngưỡng τ]
+        S4[answer<br/>điều phối một câu trả lời]
+        S5[chat<br/>một lượt hội thoại]
+        S6[prompt · intent · verifier · condense]
+        S7[export · share · stats · progress]
+    end
+
+    subgraph P["Cổng — app/ports"]
+        P1[[EmbeddingProvider]]
+        P2[[RerankProvider]]
+        P3[[LLMProvider]]
+        P4[[OcrProvider]]
+    end
+
+    subgraph AD["Adapter — app/adapters"]
+        direction LR
+        D1[bge-m3 · fake]
+        D2[bge-reranker · fake]
+        D3[local · gemini · ollama-cloud · fake]
+        D4[rapidocr · paddleocr]
+        D5[extract: pdf · docx · plain · scanned · image]
+        D6[storage: MinIO]
+    end
+
+    subgraph HT["Hạ tầng"]
+        H1[(PostgreSQL<br/>+ pgvector)]
+        H2[(Redis)]
+        H3[(MinIO)]
+    end
+
+    API --> SV
+    SV --> P
+    P -.->|cài đặt| AD
+    SV --> R[app/repositories<br/>truy vấn SQL]
+    R --> H1
+    S7 --> H2
+    D6 --> H3
+    SV --> D5
+
+    classDef cong fill:#eef4f2,stroke:#2f5d50,color:#2f5d50
+    class P1,P2,P3,P4 cong

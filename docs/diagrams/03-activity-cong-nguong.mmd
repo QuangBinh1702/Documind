@@ -1,0 +1,28 @@
+%% Cổng ngưỡng τ — quyết định trả lời hay từ chối.
+%%
+%% Đây là thành phần chống bịa của hệ thống. Nó đứng trước lượt gọi mô hình,
+%% nên khi tài liệu không có câu trả lời thì mô hình KHÔNG có cơ hội tự nghĩ ra
+%% một câu nghe hợp lý.
+%%
+%% Điểm so với τ là điểm ĐÃ qua sigmoid, không phải điểm thô của cross-encoder:
+%% điểm thô nằm trên thang không giới hạn và không so được giữa hai lần chạy.
+flowchart TB
+    A[Danh sách đoạn sau RRF] --> B[Cross-encoder chấm<br/>RERANK_CANDIDATES đoạn đầu]
+    B --> C[Sigmoid từng điểm về khoảng 0–1]
+    C --> D[Sắp giảm dần, giữ RERANK_TOP_K đoạn]
+    D --> E{Điểm cao nhất ≥ τ?}
+
+    E -->|Không| F[answer_kind = no_answer]
+    F --> G[Trả về nguyên văn câu từ chối<br/>kèm điểm cao nhất và ngưỡng]
+    G --> H[Mời người dùng hỏi ra ngoài tài liệu<br/>— việc này phải do họ chủ động bấm]
+
+    E -->|Có| I[Dựng ngữ cảnh có đánh số<br/>mỗi đoạn bọc trong delimiter]
+    I --> J[Gọi mô hình sinh câu trả lời]
+    J --> K{Mô hình vẫn trả về<br/>câu từ chối?}
+    K -->|Có| F
+    K -->|Không| L[answer_kind = grounded]
+    L --> M[Loại marker không có trong ngữ cảnh]
+    M --> N[Ghép marker còn lại về chunk<br/>→ trích dẫn bấm được]
+
+    classDef tuchoi fill:#f1f1ee,stroke:#6f6f68
+    class F,G,H tuchoi

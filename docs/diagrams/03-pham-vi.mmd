@@ -1,0 +1,29 @@
+%% Phạm vi hệ thống — DocuMind đứng ở đâu và chạm vào những gì.
+%%
+%% Điểm đáng đọc: mọi thứ trong khung "DocuMind" chạy trên máy của người dùng.
+%% Chỉ có một mũi tên duy nhất đi ra ngoài, và nó là **tuỳ chọn** — đó là toàn
+%% bộ luận điểm về quyền riêng tư của đồ án.
+flowchart LR
+    NguoiDung([Người dùng<br/>sinh viên, giảng viên])
+    Khach([Người nhận liên kết<br/>không cần tài khoản])
+
+    subgraph DocuMind["DocuMind — chạy trên máy của bạn"]
+        direction TB
+        GiaoDien[Giao diện web]
+        API[API và nghiệp vụ]
+        MoHinh[Mô hình nhúng · rerank · OCR<br/>và mô hình ngôn ngữ cục bộ]
+        Kho[(PostgreSQL + pgvector<br/>MinIO · Redis)]
+
+        GiaoDien --> API
+        API --> MoHinh
+        API --> Kho
+    end
+
+    Ngoai([Dịch vụ mô hình bên ngoài<br/>Gemini · Ollama Cloud])
+
+    NguoiDung -->|tải tài liệu, đặt câu hỏi| GiaoDien
+    Khach -->|xem và hỏi, chỉ đọc| GiaoDien
+    API -.->|CHỈ khi bật Fast Mode<br/>hoặc người dùng chủ động hỏi ra ngoài| Ngoai
+
+    classDef ngoai fill:#fff8e6,stroke:#8a5a00,color:#8a5a00
+    class Ngoai ngoai

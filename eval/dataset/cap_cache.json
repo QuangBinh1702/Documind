@@ -1,0 +1,40 @@
+{
+  "mo_ta": "Cặp câu hỏi có nhãn để hiệu chỉnh EXTERNAL_CACHE_SIMILARITY — US-064. `trung_y` = true nghĩa là hai câu hỏi CÙNG một ý, nên dùng lại câu trả lời đã lưu là đúng.",
+  "vi_sao_kho": "Với bge-m3, phân bố cosine bị nén rất cao. Hai câu tiếng Việt chẳng liên quan gì vẫn thường vượt 0.6, còn hai câu gần như giống hệt nhau nhưng KHÁC SỐ ĐIỀU lại dễ vượt 0.93 — và đó chính là ca hỏng nguy hiểm nhất, vì người dùng nhận về câu trả lời của một điều khoản khác mà không có dấu hiệu gì.",
+  "cap": [
+    { "a": "Thủ đô của nước Pháp là gì?", "b": "Paris là thủ đô của nước nào?", "trung_y": true, "ghi_chu": "diễn đạt đảo chiều, cùng một sự thật" },
+    { "a": "Machine learning là gì?", "b": "Học máy nghĩa là gì?", "trung_y": true, "ghi_chu": "thuật ngữ Anh và Việt" },
+    { "a": "Ai phát minh ra bóng đèn?", "b": "Người phát minh ra bóng đèn là ai?", "trung_y": true, "ghi_chu": "chỉ đổi trật tự từ" },
+    { "a": "GDP của Việt Nam năm 2023 là bao nhiêu?", "b": "Tổng sản phẩm quốc nội Việt Nam 2023?", "trung_y": true, "ghi_chu": "viết tắt và viết đầy đủ" },
+    { "a": "RAG là gì trong trí tuệ nhân tạo?", "b": "Retrieval-Augmented Generation nghĩa là gì?", "trung_y": true, "ghi_chu": "viết tắt và tên đầy đủ tiếng Anh" },
+    { "a": "Cách nấu phở bò?", "b": "Phở bò nấu như thế nào?", "trung_y": true, "ghi_chu": "cùng ý, đổi cấu trúc câu" },
+    { "a": "Python khác Java ở điểm nào?", "b": "So sánh Python và Java", "trung_y": true, "ghi_chu": "câu hỏi và mệnh lệnh, cùng ý" },
+    { "a": "Bao nhiêu tín chỉ thì tốt nghiệp đại học?", "b": "Số tín chỉ cần để tốt nghiệp đại học là bao nhiêu?", "trung_y": true, "ghi_chu": "gần như giống hệt" },
+    { "a": "Nhiệt độ sôi của nước là bao nhiêu?", "b": "Nước sôi ở bao nhiêu độ?", "trung_y": true, "ghi_chu": "cùng ý, khác cách nói" },
+    { "a": "Docker container là gì?", "b": "Giải thích khái niệm container trong Docker", "trung_y": true, "ghi_chu": "hỏi và yêu cầu giải thích" },
+    { "a": "dieu kien tot nghiep dai hoc la gi", "b": "Điều kiện tốt nghiệp đại học là gì?", "trung_y": true, "ghi_chu": "KHÓ: cùng một câu, một bản không dấu" },
+    { "a": "Học phí một tín chỉ bao nhiêu tiền?", "b": "Một tín chỉ giá bao nhiêu?", "trung_y": true, "ghi_chu": "cùng ý" },
+    { "a": "Thế nào là sinh viên chính quy?", "b": "Sinh viên chính quy được định nghĩa ra sao?", "trung_y": true, "ghi_chu": "cùng ý" },
+    { "a": "Vector embedding dùng để làm gì?", "b": "Mục đích của vector embedding là gì?", "trung_y": true, "ghi_chu": "cùng ý" },
+    { "a": "Khi nào bị buộc thôi học?", "b": "Trường hợp nào sinh viên bị buộc thôi học?", "trung_y": true, "ghi_chu": "cùng ý" },
+
+    { "a": "Điều 5 quy định gì?", "b": "Điều 15 quy định gì?", "trung_y": false, "ghi_chu": "KHÓ NHẤT: khác đúng một chữ số, nội dung khác hoàn toàn" },
+    { "a": "Điều 12 nói về vấn đề gì?", "b": "Điều 21 nói về vấn đề gì?", "trung_y": false, "ghi_chu": "KHÓ: hai số đảo nhau" },
+    { "a": "Khoản 2 Điều 8 quy định thế nào?", "b": "Khoản 3 Điều 8 quy định thế nào?", "trung_y": false, "ghi_chu": "KHÓ: chỉ khác số khoản" },
+    { "a": "Chương II nói về gì?", "b": "Chương III nói về gì?", "trung_y": false, "ghi_chu": "KHÓ: chỉ khác số chương" },
+    { "a": "Học phí năm 2023 là bao nhiêu?", "b": "Học phí năm 2024 là bao nhiêu?", "trung_y": false, "ghi_chu": "KHÓ: khác năm, khác con số phải trả" },
+    { "a": "Điểm chuẩn ngành Công nghệ thông tin?", "b": "Điểm chuẩn ngành Kế toán?", "trung_y": false, "ghi_chu": "KHÓ: cùng khuôn, khác ngành" },
+    { "a": "Thời gian đào tạo bậc đại học?", "b": "Thời gian đào tạo bậc thạc sĩ?", "trung_y": false, "ghi_chu": "KHÓ: cùng khuôn, khác bậc học" },
+    { "a": "Điều kiện xét học bổng loại giỏi?", "b": "Điều kiện xét học bổng loại xuất sắc?", "trung_y": false, "ghi_chu": "KHÓ: cùng khuôn, khác mức" },
+    { "a": "Sinh viên năm nhất đăng ký bao nhiêu tín chỉ?", "b": "Sinh viên năm cuối đăng ký bao nhiêu tín chỉ?", "trung_y": false, "ghi_chu": "KHÓ: cùng khuôn, khác đối tượng" },
+    { "a": "Thủ đô của nước Pháp là gì?", "b": "Thủ đô của nước Đức là gì?", "trung_y": false, "ghi_chu": "KHÓ: cùng khuôn, khác nước" },
+
+    { "a": "Thủ đô của nước Pháp là gì?", "b": "Cách nấu phở bò?", "trung_y": false, "ghi_chu": "không liên quan gì nhau" },
+    { "a": "Machine learning là gì?", "b": "Bao nhiêu tín chỉ thì tốt nghiệp?", "trung_y": false, "ghi_chu": "không liên quan" },
+    { "a": "Docker container là gì?", "b": "Nhiệt độ sôi của nước là bao nhiêu?", "trung_y": false, "ghi_chu": "không liên quan" },
+    { "a": "Ai phát minh ra bóng đèn?", "b": "Python khác Java ở điểm nào?", "trung_y": false, "ghi_chu": "không liên quan" },
+    { "a": "GDP của Việt Nam năm 2023?", "b": "Khi nào bị buộc thôi học?", "trung_y": false, "ghi_chu": "không liên quan" },
+    { "a": "Vector embedding dùng để làm gì?", "b": "Học phí một tín chỉ bao nhiêu tiền?", "trung_y": false, "ghi_chu": "không liên quan" },
+    { "a": "RAG là gì trong trí tuệ nhân tạo?", "b": "Thế nào là sinh viên chính quy?", "trung_y": false, "ghi_chu": "không liên quan" }
+  ]
+}

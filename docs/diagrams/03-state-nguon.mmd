@@ -1,0 +1,44 @@
+%% Vòng đời một nguồn tài liệu.
+%%
+%% Tập trạng thái này KHÔNG phải quy ước trong mã — nó là một CHECK constraint
+%% trong lược đồ (migration 0001):
+%%
+%%   CHECK (status IN ('queued','parsing','ocr','chunking','embedding',
+%%                     'ready','failed'))
+%%
+%% Đặt một giá trị ngoài danh sách thì Postgres từ chối cả câu UPDATE. Bài học
+%% này đã trả giá hai lần trong đồ án: thêm một giá trị vào `Literal` của Python
+%% KHÔNG nới rộng ràng buộc dưới cơ sở dữ liệu.
+stateDiagram-v2
+    [*] --> queued: nhận tệp, lưu vào MinIO<br/>API trả 202 ngay
+
+    queued --> parsing: worker nhận việc
+    parsing --> ocr: là bản scan hoặc là ảnh
+    parsing --> chunking: có lớp văn bản, qua cổng chất lượng
+    ocr --> chunking: nhận dạng xong, qua cổng chất lượng
+
+    chunking --> embedding: đã tạo được đoạn
+    embedding --> ready: đã ghi chunk và kiểm INV-1
+
+    parsing --> failed: định dạng không hỗ trợ · bảng mã cũ<br/>· là scan mà OCR đang tắt
+    ocr --> failed: không đọc được chữ nào
+    chunking --> failed: không tạo được đoạn nào
+    embedding --> failed: offset cắt lại không khớp (INV-1)
+
+    parsing --> failed: worker khởi động lại giữa chừng
+    ocr --> failed: worker khởi động lại giữa chừng
+
+    ready --> [*]: hỏi được
+    failed --> [*]: hiện lý do, mời tải lại
+
+    note right of ready
+        in_scope = true ngay khi sẵn sàng,
+        nên tài liệu vừa xử lý xong là hỏi
+        được luôn — US-022 AC-4.
+    end note
+
+    note right of failed
+        Mỗi ca hỏng ghi error_code + thông báo
+        tiếng Việt nói được PHẢI LÀM GÌ,
+        không chỉ nói cái gì sai.
+    end note

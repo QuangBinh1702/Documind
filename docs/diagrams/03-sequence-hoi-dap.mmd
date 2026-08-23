@@ -1,0 +1,57 @@
+%% Một lượt hỏi đáp có trích dẫn, từ lúc gõ tới lúc bấm được vào chip.
+%%
+%% Chú ý hai chỗ:
+%%   - Cổng ngưỡng đứng TRƯỚC lượt gọi mô hình. Không đủ căn cứ thì không gọi
+%%     mô hình nào cả — vừa rẻ hơn, vừa là thứ khiến câu từ chối đáng tin.
+%%   - Trích dẫn phát ra SAU khi câu trả lời đã sinh xong, vì chỉ khi đó mới
+%%     biết mô hình thật sự dùng những đoạn nào.
+sequenceDiagram
+    autonumber
+    actor ND as Người dùng
+    participant GD as Giao diện
+    participant API as API /chat/ask
+    participant TX as Truy xuất
+    participant RR as Reranker
+    participant LLM as Mô hình ngôn ngữ
+    participant DB as PostgreSQL
+
+    ND->>GD: gõ câu hỏi
+    GD->>API: POST (SSE)
+    API-->>GD: meta (chế độ, ngôn ngữ)
+
+    API->>API: phân loại ý định
+    API-->>GD: intent
+
+    Note over API,DB: Nếu là trò chuyện thì dừng ở đây,<br/>không truy xuất gì cả.
+
+    API-->>GD: status: đang tìm trong tài liệu
+    API->>TX: câu hỏi (đã gộp ngữ cảnh nếu cần)
+    TX->>DB: tìm theo vector (pgvector)
+    TX->>DB: tìm theo từ khoá (tsvector)
+    DB-->>TX: hai danh sách ứng viên
+    TX->>TX: hợp nhất bằng RRF (k=60)
+    TX-->>API: danh sách ứng viên
+
+    API-->>GD: status: đang xếp hạng
+    API->>RR: chấm từng cặp (câu hỏi, đoạn)
+    RR-->>API: điểm đã sigmoid
+
+    alt điểm cao nhất < τ
+        API-->>GD: no_answer + lý do
+        Note over API,LLM: Không gọi mô hình.
+    else đủ căn cứ
+        API-->>GD: external_call (chỉ khi dữ liệu rời khỏi máy)
+        API->>LLM: system prompt + đoạn đã đánh số + câu hỏi
+        loop từng mẩu
+            LLM-->>API: token
+            API-->>GD: token
+        end
+        API->>API: loại marker không tồn tại
+        API-->>GD: citation (mỗi marker một sự kiện)
+    end
+
+    API->>DB: lưu câu hỏi, câu trả lời, trích dẫn
+    API-->>GD: done + saved
+    ND->>GD: bấm chip [1]
+    GD->>API: GET /citations/{id}
+    API-->>GD: nội dung đoạn, trang, toạ độ

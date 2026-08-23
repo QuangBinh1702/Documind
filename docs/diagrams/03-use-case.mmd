@@ -1,0 +1,47 @@
+%% Use case, nhóm theo việc người dùng muốn làm.
+%%
+%% Mermaid không có sơ đồ use case chuẩn UML, nên dùng flowchart với cùng ngữ
+%% nghĩa: tác nhân bên trái, use case trong khung hệ thống.
+flowchart LR
+    ND([Người dùng đã đăng nhập])
+    NX([Người nhận liên kết chia sẻ])
+
+    subgraph HeThong["DocuMind"]
+        direction TB
+
+        subgraph TaiKhoan["Tài khoản"]
+            UC1(Đăng ký / đăng nhập)
+            UC2(Đổi mật khẩu)
+            UC3(Đổi ngôn ngữ giao diện)
+        end
+
+        subgraph KhoTaiLieu["Kho tài liệu"]
+            UC4(Tạo notebook)
+            UC5(Tải tài liệu lên<br/>PDF · DOCX · TXT · MD · ảnh)
+            UC6(Theo dõi tiến độ xử lý)
+            UC7(Chọn tài liệu để hỏi)
+            UC8(Xoá tài liệu)
+        end
+
+        subgraph HoiDap["Hỏi đáp"]
+            UC9(Đặt câu hỏi)
+            UC10(Xem đoạn được trích dẫn)
+            UC11(Mở tài liệu tại vị trí trích dẫn)
+            UC12(Hỏi ra ngoài tài liệu)
+            UC13(Xuất hội thoại ra Markdown / PDF)
+        end
+
+        subgraph ChiaSe["Chia sẻ và theo dõi"]
+            UC14(Tạo liên kết chỉ đọc)
+            UC15(Thu hồi liên kết)
+            UC16(Xem số liệu vận hành)
+        end
+    end
+
+    ND --- UC1 & UC2 & UC3
+    ND --- UC4 & UC5 & UC6 & UC7 & UC8
+    ND --- UC9 & UC10 & UC11 & UC12 & UC13
+    ND --- UC14 & UC15 & UC16
+
+    NX --- UC9
+    NX --- UC10

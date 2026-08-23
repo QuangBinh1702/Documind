@@ -1,0 +1,52 @@
+%% Pipeline nạp tài liệu, kèm nhánh OCR.
+%%
+%% Thứ tự các phép kiểm là có chủ ý: rẻ trước, đắt sau, và mỗi bước từ chối sớm
+%% nhất có thể. Kiểm đuôi tệp chỉ đọc tên; kiểm nội dung đọc vài byte đầu; nhúng
+%% là bước đắt nhất và nó đứng sau cùng.
+%%
+%% Phát hiện bản scan đứng TRƯỚC cổng chất lượng. Một bản scan không có ký tự
+%% nào cũng rớt cổng chất lượng, nhưng với chẩn đoán sai: "chỉ 0% ký tự là chữ
+%% cái" không giúp được ai, còn "tệp này là bản scan, cần OCR" thì có.
+flowchart TB
+    U[Người dùng chọn tệp] --> V1{Đuôi tệp<br/>được hỗ trợ?}
+    V1 -->|Không| X1[415 — liệt kê định dạng nhận được]
+    V1 -->|Có| V2{Notebook đã đầy?}
+    V2 -->|Có| X2[409]
+    V2 -->|Không| V3{Vượt hạn mức<br/>dung lượng?}
+    V3 -->|Có| X3[413 — ảnh có hạn mức riêng, thấp hơn]
+    V3 -->|Không| V4{Nội dung có đúng<br/>định dạng đó không?}
+    V4 -->|Không| X4[415 — đuôi tệp do người tải đặt,<br/>chỉ nội dung mới nói thật]
+    V4 -->|Có| S[Lưu MinIO · tạo hàng sources ở queued<br/>API trả 202]
+
+    S --> Q[Đẩy vào hàng đợi Celery]
+    Q --> W[Worker nhận việc]
+
+    W --> E{Loại nguồn?}
+    E -->|Ảnh| O1[Tiền xử lý: xoay EXIF,<br/>ghép nền, đưa về cỡ OCR đọc được]
+    O1 --> O2[Nhận dạng chữ]
+    E -->|Tài liệu| T1[Trích xuất kèm toạ độ<br/>PyMuPDF · python-docx · plain]
+
+    T1 --> SC{Là bản scan?<br/>≥50% trang dưới 100 ký tự}
+    SC -->|Có, OCR bật| O3[Render từng trang → OCR<br/>báo tiến độ theo trang]
+    SC -->|Có, OCR tắt| XS[failed: SCAN_NO_TEXT_LAYER]
+    SC -->|Không| CQ
+
+    O2 --> CQ
+    O3 --> CQ
+
+    CQ{Cổng chất lượng US-056} -->|Bảng mã cũ| XQ1[failed: LEGACY_ENCODING]
+    CQ -->|Điểm < ngưỡng| XQ2[failed: LOW_TEXT_QUALITY]
+    CQ -->|Đạt| CH[Chia đoạn theo tiêu đề<br/>có chồng lấn 15%]
+
+    CH --> CX{Bật Contextual Retrieval?}
+    CX -->|Có| CX1[Sinh câu bối cảnh cho từng đoạn]
+    CX -->|Không| NH
+    CX1 --> NH[Nhúng bằng bge-m3]
+
+    NH --> GH[Ghi chunk: nội dung · offset · bbox<br/>· vector · tsvector]
+    GH --> IV{Cắt lại full_text theo offset<br/>có ra đúng nội dung không?}
+    IV -->|Không| XI[failed: OFFSET_MISMATCH — INV-1]
+    IV -->|Có| R[ready · in_scope = true]
+
+    classDef loi fill:#fff8e6,stroke:#8a5a00,color:#8a5a00
+    class X1,X2,X3,X4,XS,XQ1,XQ2,XI loi

@@ -1,0 +1,39 @@
+%% Truy xuất lai: hai nhánh độc lập, hợp nhất bằng RRF.
+%%
+%% Vì sao cần cả hai nhánh — đây là lập luận trung tâm của Chương 3:
+%%
+%%   Nhánh vector bắt được câu hỏi diễn đạt khác tài liệu ("nghỉ giữa chừng"
+%%   với "nghỉ học tạm thời"), nhưng nó trượt những thứ phải khớp đúng chữ:
+%%   "Điều 15", "08/2021/TT-BGDĐT", "3,20".
+%%
+%%   Nhánh từ khoá bắt chính xác những thứ đó, nhưng mù trước cách diễn đạt
+%%   khác.
+%%
+%% RRF hợp nhất theo THỨ HẠNG chứ không theo điểm, nên không phải chuẩn hoá hai
+%% thang điểm vốn không so được với nhau.
+flowchart TB
+    Q[Câu hỏi đã gộp ngữ cảnh] --> V & B
+
+    subgraph V["Nhánh ngữ nghĩa"]
+        V1[Nhúng câu hỏi bằng bge-m3] --> V2[Tìm láng giềng gần nhất<br/>cosine, chỉ mục HNSW]
+        V2 --> V3[Top N mỗi nhánh]
+    end
+
+    subgraph B["Nhánh từ khoá"]
+        B1[Chuẩn hoá + tách từ tiếng Việt] --> B2[Tìm toàn văn Postgres<br/>ts_rank_cd trên tsvector]
+        B2 --> B3[Top N mỗi nhánh]
+    end
+
+    V3 --> R[Reciprocal Rank Fusion<br/>score = Σ 1 / k + hạng, k = 60]
+    B3 --> R
+
+    R --> L{Có lọc theo tài liệu<br/>người dùng chọn không?}
+    L -->|Có| L1[Bỏ đoạn ngoài phạm vi]
+    L -->|Không| L2[Giữ nguyên]
+    L1 --> RR
+    L2 --> RR
+
+    RR[Cross-encoder xếp hạng lại] --> OUT[Danh sách đoạn kèm điểm<br/>→ cổng ngưỡng]
+
+    Note[Mọi truy vấn đều lọc theo user_id<br/>ngay ở tầng SQL — INV-4]
+    style Note fill:#fff8e6,stroke:#8a5a00,color:#8a5a00

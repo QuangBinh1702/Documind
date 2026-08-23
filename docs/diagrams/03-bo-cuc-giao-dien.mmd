@@ -1,0 +1,50 @@
+%% Bố cục màn hình làm việc — ba cột, kéo được, và một đường đi rõ ràng.
+%%
+%% Ba cột đọc từ trái sang phải theo đúng thứ tự câu hỏi của người dùng:
+%%   "tôi có gì?" → "tôi hỏi gì?" → "câu trả lời dựa vào đâu?"
+%%
+%% Dưới 1024px chuyển sang tab. Ba cột trên màn hình điện thoại không phải là
+%% ba cột hẹp, nó là ba cột không đọc được.
+flowchart TB
+    subgraph Header["Thanh tiêu đề"]
+        direction LR
+        H1[← Notebook] --- H2[Tên notebook<br/>bấm để đổi] --- H3[n/m tài liệu đã xử lý]
+        H3 --- H4[Chia sẻ] --- H5[Nhãn: dữ liệu có rời máy không] --- H6[VI/EN] --- H7[Sáng/Tối/Theo máy]
+    end
+
+    Header --> Than
+
+    subgraph Than["Thân — ba cột kéo được, độ rộng được ghi nhớ"]
+        direction LR
+
+        subgraph C1["Cột nguồn"]
+            direction TB
+            A1[Vùng kéo thả<br/>+ dán ảnh Ctrl+V]
+            A2[Thanh tiến trình tải lên]
+            A3[Danh sách tài liệu<br/>ô chọn phạm vi hỏi]
+            A4[Trạng thái xử lý theo thời gian thực<br/>'đang nhận dạng chữ 45/120 trang']
+            A1 --> A2 --> A3 --> A4
+        end
+
+        subgraph C2["Cột hội thoại"]
+            direction TB
+            B1[Thanh xuất Markdown / PDF]
+            B2[Các lượt hỏi đáp<br/>câu trả lời hiện dần theo từng mẩu]
+            B3[Chip trích dẫn 1 2 3 — bấm được]
+            B4[Ô nhập câu hỏi]
+            B1 --> B2 --> B3 --> B4
+        end
+
+        subgraph C3["Cột tài liệu"]
+            direction TB
+            D1[Đoạn được trích dẫn<br/>tên tài liệu · trang · đường tiêu đề]
+            D2[Nút: mở cả tài liệu]
+            D3[PDF.js kèm vùng tô sáng<br/>· ảnh gốc cạnh chữ OCR<br/>· toàn văn có tô sáng]
+            D1 --> D2 --> D3
+        end
+    end
+
+    B3 -.->|bấm chip| D1
+
+    Hep[Dưới 1024px: ba tab<br/>Nguồn · Hội thoại · Tài liệu]
+    Than -.-> Hep

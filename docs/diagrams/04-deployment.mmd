@@ -1,0 +1,49 @@
+%% Triển khai bằng Docker Compose.
+%%
+%% Worker chạy `--concurrency=1`, và đó là con số quan trọng nhất trong cả sơ
+%% đồ này: tài nguyên hiếm ở đây là VRAM, không phải nhân CPU. Hai tài liệu cùng
+%% nhúng trên card 16 GB là tràn bộ nhớ, nên hàng đợi tuần tự là chủ đích chứ
+%% không phải hạn chế.
+%%
+%% `model-cache` là volume ngoài. Không có nó thì mỗi lần dựng lại ảnh phải tải
+%% lại khoảng 10 GB trọng số mô hình.
+flowchart TB
+    subgraph May["Một máy chủ — server đích 16 GB VRAM"]
+        direction TB
+
+        subgraph Web["Tầng phục vụ"]
+            FE[documind-frontend<br/>Next.js · cổng 3000]
+            API[documind-api<br/>FastAPI + Uvicorn · cổng 8000<br/>chạy alembic upgrade khi khởi động]
+        end
+
+        subgraph Xu["Tầng xử lý"]
+            WK[documind-worker<br/>Celery · concurrency=1<br/>GPU gắn vào ĐÂY]
+        end
+
+        subgraph Luu["Tầng lưu trữ"]
+            PG[(documind-postgres<br/>pgvector/pg17)]
+            RD[(documind-redis<br/>broker + tiến độ)]
+            MO[(documind-minio<br/>tệp gốc)]
+        end
+
+        VOL[["Volume<br/>postgres-data · redis-data<br/>minio-data · model-cache"]]
+    end
+
+    TrinhDuyet([Trình duyệt]) -->|3000| FE
+    TrinhDuyet -->|8000, gọi thẳng<br/>không qua proxy — proxy đệm mất streaming| API
+
+    API --> PG & RD & MO
+    API -->|đẩy việc| RD
+    RD -->|nhận việc| WK
+    WK --> PG & MO
+
+    PG -.- VOL
+    RD -.- VOL
+    MO -.- VOL
+    WK -.-|trọng số mô hình| VOL
+
+    Ngoai([Gemini · Ollama Cloud])
+    API -.->|CHỈ ở Fast Mode| Ngoai
+
+    classDef ngoai fill:#fff8e6,stroke:#8a5a00,color:#8a5a00
+    class Ngoai ngoai

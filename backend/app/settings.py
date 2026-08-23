@@ -248,7 +248,19 @@ class Settings(BaseSettings):
     default_mode: Mode = "privacy"
 
     # ── Cache câu trả lời ngoài (US-034, US-035) ────────
-    external_cache_similarity: float = Field(default=0.93, ge=0.0, le=1.0)
+    external_cache_similarity: float = Field(default=0.94, ge=0.0, le=1.0)
+    """Ngưỡng dùng lại một câu trả lời đã lưu — hiệu chỉnh ở US-064.
+
+    0.94 là ngưỡng **thấp nhất** mà không cặp câu hỏi khác ý nào trong bộ mẫu
+    lọt qua. Không lấy mức F1 tối ưu (0.85): F1 coi hai chiều hỏng là ngang
+    nhau, mà ở đây chúng không ngang. Bỏ lỡ một lượt dùng lại chỉ tốn thêm một
+    lần gọi API; dùng lại nhầm thì người hỏi về *học bổng loại giỏi* nhận câu
+    trả lời của *học bổng loại xuất sắc* mà không có dấu hiệu nào để nhận ra.
+
+    Số đo đầy đủ ở `docs/evidence/M6-hieu-chinh-cache.md`. Đổi mô hình nhúng là
+    phải đo lại.
+    """
+
     external_cache_ttl_days: int = 30
     external_calls_per_day: int = 50
 

@@ -1,0 +1,56 @@
+%% Xác thực: đăng nhập, tự làm mới, đổi mật khẩu.
+%%
+%% Chi tiết đáng nói nhất nằm ở lượt đổi mật khẩu. Access token mang một claim
+%% `pwd` là tiền tố băm của `password_hash`. Đổi mật khẩu làm băm đổi, nên mọi
+%% token cũ tự hết hiệu lực — không cần bảng thu hồi, không cần tra cơ sở dữ
+%% liệu ở mỗi request.
+sequenceDiagram
+    autonumber
+    actor ND as Người dùng
+    participant GD as Giao diện
+    participant API as /api/auth
+    participant G as Bộ chặn dò mật khẩu<br/>(Redis)
+    participant DB as PostgreSQL
+
+    rect rgb(245, 247, 246)
+    Note over ND,DB: Đăng nhập
+    ND->>GD: email + mật khẩu
+    GD->>API: POST /login
+    API->>G: email này còn bị khoá không?
+    G-->>API: 0 giây, hoặc số giây còn lại
+    alt đang bị khoá
+        API-->>GD: 429 kèm thời gian còn lại
+    else
+        API->>DB: tìm người dùng theo email
+        Note over API: Email không tồn tại vẫn chạy MỘT lượt băm thật.<br/>Không có bước này thì thời gian phản hồi tiết lộ<br/>email nào có trong hệ thống.
+        API->>API: xác minh Argon2id
+        alt sai
+            API->>G: ghi một lần thất bại
+            API-->>GD: 401 — cùng thông báo cho sai email và sai mật khẩu
+        else đúng
+            API->>G: xoá bộ đếm
+            API->>DB: lưu băm của refresh token
+            API-->>GD: access (60 phút) + refresh (7 ngày)
+        end
+    end
+    end
+
+    rect rgb(245, 247, 246)
+    Note over GD,API: Tự làm mới — người dùng không thấy gián đoạn
+    GD->>API: một lời gọi bất kỳ
+    API-->>GD: 401 (access hết hạn)
+    Note over GD: Nhiều request cùng hết hạn một lúc thì<br/>chỉ MỘT lượt refresh chạy; các request khác đợi chung.
+    GD->>API: POST /refresh
+    API->>DB: đối chiếu băm, xoay token
+    API-->>GD: cặp token mới
+    GD->>API: gửi lại đúng request cũ
+    end
+
+    rect rgb(245, 247, 246)
+    Note over ND,DB: Đổi mật khẩu — mọi phiên cũ chết theo
+    ND->>API: POST /change-password
+    API->>DB: cập nhật password_hash
+    API->>DB: xoá mọi refresh token
+    API-->>GD: cặp token mới
+    Note over API: Token cũ mang claim `pwd` của băm CŨ.<br/>Nó không còn khớp, nên tự hỏng — không cần bảng thu hồi.
+    end
