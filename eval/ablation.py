@@ -1,4 +1,4 @@
-"""Nghiên cứu loại trừ — US-046.
+﻿"""Nghiên cứu loại trừ — US-046.
 
 Câu hỏi cần trả lời: **từng thành phần đóng góp bao nhiêu?** Không có bảng này
 thì mọi lựa chọn kỹ thuật trong đồ án chỉ là làm theo hướng dẫn — hội đồng hỏi
@@ -65,32 +65,32 @@ CAU_HINH: dict[str, tuple[str, dict]] = {
     "A": ("Chỉ vector", {
         "retrieval_vector_enabled": True, "retrieval_bm25_enabled": False,
         "rerank_enabled": False, "contextual_retrieval_enabled": False,
-        "verifier_enabled": False,
+        "verifier_enabled": False, "intent_routing_enabled": False,
     }),
     "B": ("Chỉ từ khoá", {
         "retrieval_vector_enabled": False, "retrieval_bm25_enabled": True,
         "rerank_enabled": False, "contextual_retrieval_enabled": False,
-        "verifier_enabled": False,
+        "verifier_enabled": False, "intent_routing_enabled": False,
     }),
     "C": ("Hybrid + RRF", {
         "retrieval_vector_enabled": True, "retrieval_bm25_enabled": True,
         "rerank_enabled": False, "contextual_retrieval_enabled": False,
-        "verifier_enabled": False,
+        "verifier_enabled": False, "intent_routing_enabled": False,
     }),
     "D": ("Hybrid + rerank", {
         "retrieval_vector_enabled": True, "retrieval_bm25_enabled": True,
         "rerank_enabled": True, "contextual_retrieval_enabled": False,
-        "verifier_enabled": False,
+        "verifier_enabled": False, "intent_routing_enabled": False,
     }),
     "E": ("D + Contextual Retrieval", {
         "retrieval_vector_enabled": True, "retrieval_bm25_enabled": True,
         "rerank_enabled": True, "contextual_retrieval_enabled": True,
-        "verifier_enabled": False,
+        "verifier_enabled": False, "intent_routing_enabled": False,
     }),
     "F": ("D + tác tử kiểm định", {
         "retrieval_vector_enabled": True, "retrieval_bm25_enabled": True,
         "rerank_enabled": True, "contextual_retrieval_enabled": False,
-        "verifier_enabled": True,
+        "verifier_enabled": True, "intent_routing_enabled": False,
     }),
 }
 
