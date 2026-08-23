@@ -170,6 +170,27 @@ export type TrichDan = {
   heading_path: string | null;
 };
 
+export type DoTre = {
+  so_luot: number;
+  trung_binh_ms: number;
+  p95_ms: number;
+};
+
+export type ThongKe = {
+  so_notebook: number;
+  so_nguon: number;
+  so_chunk: number;
+  dung_luong_bytes: number;
+  so_luot_goi_ngoai: number;
+  so_luot_tu_cache: number;
+  ty_le_cache_hit: number;
+  so_ban_ghi_cache: number;
+  do_tre_privacy: DoTre;
+  do_tre_fast: DoTre;
+  phan_bo_answer_kind: Record<string, number>;
+  luot_hoi_theo_ngay: { ngay: string; so_luot: number }[];
+};
+
 // ── Các lời gọi cụ thể ─────────────────────────────────
 
 export const api = {
@@ -218,6 +239,8 @@ export const api = {
 
   cauHinh: () =>
     goi<{ du_lieu_roi_khoi_may: boolean; che_do: string }>("/api/config"),
+
+  thongKe: () => goi<ThongKe>("/api/stats"),
 
   trichDan: (chunkId: number) =>
     goi<{

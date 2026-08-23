@@ -64,6 +64,9 @@ export default function TrangNotebook() {
         <h1 className="text-lg font-semibold tracking-tight">Notebook của bạn</h1>
         <div className="flex items-center gap-3 text-sm text-mo">
           <span>{email}</span>
+          <Link href="/thong-ke" className="underline underline-offset-4">
+            Số liệu
+          </Link>
           <button
             onClick={() => {
               token.xoa();
