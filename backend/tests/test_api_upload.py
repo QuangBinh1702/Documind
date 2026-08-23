@@ -98,6 +98,67 @@ def _tai_len(client, headers, nb_id, ten: str, noi_dung: bytes):
 
 
 # ══════════════════════════════════════════════════════
+# Xem trước tài liệu — US-017
+# ══════════════════════════════════════════════════════
+
+
+def test_tep_goc_tra_ve_dung_byte_da_tai_len(client, phien) -> None:
+    """Trình xem dựng lại tài liệu từ đúng byte này, nên nó phải khớp tuyệt đối."""
+    headers, nb_id = phien
+    r = _tai_len(client, headers, nb_id, "quy-che.txt", TAI_LIEU.encode())
+    sid = r.json()["id"]
+
+    tep = client.get(f"/api/notebooks/{nb_id}/sources/{sid}/file", headers=headers)
+    assert tep.status_code == 200
+    assert tep.content == TAI_LIEU.encode()
+    assert tep.headers["content-type"].startswith("text/plain")
+    assert tep.headers["content-disposition"].startswith("inline")
+
+
+def test_toan_van_khop_voi_offset_cua_chunk(client, phien) -> None:
+    """INV-1 nhìn từ phía giao diện.
+
+    Cột tài liệu tô sáng bằng `full_text[char_start:char_end]`. Nếu chuỗi trả về
+    ở đây không phải chính chuỗi mà offset trỏ vào thì vùng tô sáng lệch — và nó
+    lệch một cách im lặng, chỉ thấy khi nhìn bằng mắt.
+    """
+    headers, nb_id = phien
+    sid = _tai_len(client, headers, nb_id, "quy-che.txt", TAI_LIEU.encode()).json()["id"]
+
+    van_ban = client.get(
+        f"/api/notebooks/{nb_id}/sources/{sid}/text", headers=headers
+    ).json()
+    assert van_ban["page_map"]
+
+    with session_scope() as s:
+        from app.models.knowledge import SourceChunk
+
+        chunks = s.scalars(
+            select(SourceChunk).where(SourceChunk.source_id == sid)
+        ).all()
+        assert chunks
+        for c in chunks:
+            cat = van_ban["full_text"][c.char_start : c.char_end]
+            assert cat == c.content, f"đoạn {c.chunk_index} cắt lại không khớp"
+
+
+def test_khong_xem_duoc_tep_cua_notebook_khac(client, phien) -> None:
+    headers, nb_id = phien
+    sid = _tai_len(client, headers, nb_id, "quy-che.txt", TAI_LIEU.encode()).json()["id"]
+
+    khac = client.post("/api/notebooks", json={"title": "Khác"}, headers=headers).json()["id"]
+    r = client.get(f"/api/notebooks/{khac}/sources/{sid}/file", headers=headers)
+    assert r.status_code == 404, "nguồn không thuộc notebook đó thì không đọc được"
+
+
+def test_tep_goc_doi_dang_nhap(client, phien) -> None:
+    headers, nb_id = phien
+    sid = _tai_len(client, headers, nb_id, "quy-che.txt", TAI_LIEU.encode()).json()["id"]
+    assert client.get(f"/api/notebooks/{nb_id}/sources/{sid}/file").status_code == 401
+    assert client.get(f"/api/notebooks/{nb_id}/sources/{sid}/text").status_code == 401
+
+
+# ══════════════════════════════════════════════════════
 # Luồng trạng thái — US-022
 # ══════════════════════════════════════════════════════
 

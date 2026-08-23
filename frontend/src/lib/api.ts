@@ -252,7 +252,8 @@ export const api = {
       heading_path: string | null;
       char_start: number;
       char_end: number;
-      source: { id: string; title: string };
+      bbox: { page: number; x0: number; y0: number; x1: number; y1: number }[] | null;
+      source: { id: string; title: string; kind: string; pages: number | null };
     }>(`/api/citations/${chunkId}`),
 };
 

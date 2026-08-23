@@ -203,7 +203,7 @@ export default function ManHinhNotebook() {
               onTaiTaiLieu={() => setTab("nguon")}
             />
           }
-          xemTaiLieu={<CotTaiLieu trichDan={trichDan} />}
+          xemTaiLieu={<CotTaiLieu nbId={id} trichDan={trichDan} />}
         />
       </div>
     </div>

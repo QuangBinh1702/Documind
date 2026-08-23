@@ -15,7 +15,15 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
@@ -24,7 +32,7 @@ from app.adapters.storage import minio_store
 from app.api.deps import CurrentUser, DbSession, notebook_cua_toi
 from app.models.base import session_scope
 from app.models.chat import ChatSession
-from app.models.knowledge import Notebook, Source
+from app.models.knowledge import Notebook, Source, SourceText
 from app.services import progress
 from app.services.upload import UploadError, nhan_tep
 from app.settings import settings
@@ -311,6 +319,89 @@ async def upload_source(
     return phan_hoi
 
 
+def _nguon_cua_toi(session, nb: Notebook, source_id: uuid.UUID) -> Source:
+    src = session.get(Source, source_id)
+    if src is None or src.notebook_id != nb.id:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nguồn.")
+    return src
+
+
+@router.get("/notebooks/{notebook_id}/sources/{source_id}/file",
+            summary="Tệp gốc của một nguồn")
+def source_file(
+    notebook_id: uuid.UUID, source_id: uuid.UUID,
+    user: CurrentUser, session: DbSession,
+) -> Response:
+    """US-017 — trả về đúng byte đã tải lên, để trình xem dựng lại tài liệu.
+
+    Không ký một URL tạm rồi cho trình duyệt tải thẳng từ MinIO. Làm vậy nhanh
+    hơn, nhưng nó dời việc kiểm quyền sang một hệ thống khác và sang một khoảng
+    thời gian khác: URL đã ký vẫn dùng được sau khi nguồn bị xoá hoặc bị thu hồi
+    chia sẻ. Đi qua API thì mỗi lượt xem là một lượt kiểm quyền.
+    """
+    nb = notebook_cua_toi(session, user, notebook_id)
+    src = _nguon_cua_toi(session, nb, source_id)
+
+    if src.storage_key.startswith("cli://"):
+        raise HTTPException(404, "Nguồn này nạp bằng CLI, không có bản lưu trên máy chủ.")
+
+    try:
+        data = minio_store.lay_tep(src.storage_key)
+    except Exception as exc:
+        log.warning("Không đọc được tệp %s: %s", src.storage_key, exc)
+        raise HTTPException(404, "Không tìm thấy tệp gốc của nguồn này.") from exc
+
+    return Response(
+        content=data,
+        media_type=src.mime_type,
+        headers={
+            # `inline` chứ không `attachment`: đây là để xem trong ứng dụng, còn
+            # muốn tải về thì đã có tệp gốc trên máy người dùng rồi.
+            "Content-Disposition": f'inline; filename="{src.id}"',
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
+class VanBanNguon(BaseModel):
+    source_id: uuid.UUID
+    title: str
+    kind: str
+    page_count: int | None
+    full_text: str
+    page_map: list[dict]
+
+
+@router.get("/notebooks/{notebook_id}/sources/{source_id}/text",
+            response_model=VanBanNguon, summary="Toàn văn đã chuẩn hoá của một nguồn")
+def source_text(
+    notebook_id: uuid.UUID, source_id: uuid.UUID,
+    user: CurrentUser, session: DbSession,
+) -> VanBanNguon:
+    """US-017 AC-2, AC-3 — nội dung đã chuẩn hoá, kèm bản đồ trang.
+
+    Trả **chính chuỗi** mà offset của chunk trỏ vào (INV-1). Nhờ vậy giao diện
+    tô sáng bằng cách cắt `full_text[char_start:char_end]` chứ không phải đi tìm
+    lại đoạn văn — tìm lại là cách offset bắt đầu lệch khi một đoạn xuất hiện
+    hai lần trong tài liệu.
+    """
+    nb = notebook_cua_toi(session, user, notebook_id)
+    src = _nguon_cua_toi(session, nb, source_id)
+
+    van_ban = session.get(SourceText, src.id)
+    if van_ban is None:
+        raise HTTPException(404, "Nguồn này chưa được xử lý xong.")
+
+    return VanBanNguon(
+        source_id=src.id,
+        title=src.title,
+        kind=src.kind,
+        page_count=src.page_count,
+        full_text=van_ban.full_text,
+        page_map=van_ban.page_map,
+    )
+
+
 @router.delete("/notebooks/{notebook_id}/sources/{source_id}", status_code=204,
                summary="Xoá một nguồn")
 def delete_source(
@@ -318,9 +409,7 @@ def delete_source(
     user: CurrentUser, session: DbSession,
 ) -> None:
     nb = notebook_cua_toi(session, user, notebook_id)
-    src = session.get(Source, source_id)
-    if src is None or src.notebook_id != nb.id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy nguồn.")
+    src = _nguon_cua_toi(session, nb, source_id)
 
     minio_store.xoa_tep(src.storage_key)
     session.delete(src)
@@ -335,9 +424,7 @@ def toggle_source(
 ) -> NguonResponse:
     """US-038 — chọn hỏi trong tài liệu nào."""
     nb = notebook_cua_toi(session, user, notebook_id)
-    src = session.get(Source, source_id)
-    if src is None or src.notebook_id != nb.id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy nguồn.")
+    src = _nguon_cua_toi(session, nb, source_id)
     src.in_scope = in_scope
     session.flush()
     return NguonResponse.model_validate(src)
