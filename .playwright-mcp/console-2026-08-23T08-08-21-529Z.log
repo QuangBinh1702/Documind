@@ -1,0 +1,12 @@
+[  625224ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:3000/api/chat/ask:0
+[  625236ms] TypeError: Failed to fetch
+    at c (http://127.0.0.1:3000/_next/static/chunks/app/notebooks/%5Bid%5D/page-15a85796c8525662.js:1:846)
+    at d (http://127.0.0.1:3000/_next/static/chunks/app/notebooks/%5Bid%5D/page-15a85796c8525662.js:1:964)
+    at h (http://127.0.0.1:3000/_next/static/chunks/app/notebooks/%5Bid%5D/page-15a85796c8525662.js:1:5765)
+    at g (http://127.0.0.1:3000/_next/static/chunks/app/notebooks/%5Bid%5D/page-15a85796c8525662.js:1:6876)
+    at i8 (http://127.0.0.1:3000/_next/static/chunks/4bd1b696-c023c6e3521b1417.js:1:135363)
+    at http://127.0.0.1:3000/_next/static/chunks/4bd1b696-c023c6e3521b1417.js:1:141449
+    at nz (http://127.0.0.1:3000/_next/static/chunks/4bd1b696-c023c6e3521b1417.js:1:19197)
+    at sn (http://127.0.0.1:3000/_next/static/chunks/4bd1b696-c023c6e3521b1417.js:1:136596)
+    at cc (http://127.0.0.1:3000/_next/static/chunks/4bd1b696-c023c6e3521b1417.js:1:163598)
+    at ci (http://127.0.0.1:3000/_next/static/chunks/4bd1b696-c023c6e3521b1417.js:1:163420)

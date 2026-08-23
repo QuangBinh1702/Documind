@@ -1,0 +1,42 @@
+- generic [ref=e1]:
+  - alert [ref=e15]
+  - generic [ref=e31]:
+    - banner [ref=e32]:
+      - link "← Notebook" [ref=e33] [cursor=pointer]:
+        - /url: /notebooks
+      - button "Quy chế đào tạo" [ref=e34]
+      - generic [ref=e35]: 0/1 tài liệu đã xử lý
+    - generic [ref=e37]:
+      - generic [ref=e39]:
+        - heading "Nguồn" [level=2] [ref=e41]
+        - generic [ref=e42]:
+          - paragraph [ref=e43]: Kéo thả tệp vào đây
+          - paragraph [ref=e44]: PDF · DOCX · TXT · MD, tối đa 50 MB
+          - button "Chọn tệp" [active] [ref=e45]
+        - list [ref=e46]:
+          - listitem [ref=e69]:
+            - generic [ref=e70]:
+              - checkbox "Hỏi trong tài liệu này" [checked] [disabled] [ref=e71]
+              - generic [ref=e72]:
+                - paragraph [ref=e73]: qc-dao-tao-hust-2023
+                - paragraph [ref=e74]:
+                  - text: PDF ·
+                  - generic [ref=e75]: đang đọc 15%
+              - button "✕" [ref=e76]
+      - separator "Đổi độ rộng cột nguồn" [ref=e48]
+      - generic [ref=e50]:
+        - generic [ref=e52]:
+          - paragraph [ref=e53]: Chưa có tài liệu nào sẵn sàng
+          - paragraph [ref=e54]: Tải một tệp lên ở cột bên trái. Tài liệu cần được xử lý xong trước khi hỏi.
+        - generic [ref=e56]:
+          - textbox "Chưa có tài liệu sẵn sàng" [ref=e57]
+          - button "Hỏi" [disabled] [ref=e58]
+      - separator "Đổi độ rộng cột tài liệu" [ref=e59]
+      - generic [ref=e61]:
+        - heading "Đoạn được trích dẫn" [level=2] [ref=e63]
+        - generic [ref=e65]:
+          - paragraph [ref=e66]: Chưa chọn trích dẫn nào
+          - paragraph [ref=e67]:
+            - text: Mỗi khẳng định trong câu trả lời kèm một số như
+            - generic [ref=e68] [cursor=pointer]: "1"
+            - text: . Bấm vào số đó để đọc đúng đoạn văn mà câu trả lời dựa vào.

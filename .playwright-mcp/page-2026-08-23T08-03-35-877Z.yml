@@ -1,0 +1,14 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e15]
+  - generic [ref=e18]:
+    - banner [ref=e19]:
+      - heading "Notebook của bạn" [level=1] [ref=e20]
+      - generic [ref=e21]:
+        - generic [ref=e22]: binh@documind.vn
+        - button "Đăng xuất" [ref=e23]
+    - generic [ref=e24]:
+      - 'textbox "Tên notebook mới — ví dụ: Quy chế đào tạo" [ref=e25]'
+      - button "Tạo" [disabled] [ref=e26]
+    - generic [ref=e28]:
+      - paragraph [ref=e29]: Chưa có notebook nào
+      - paragraph [ref=e30]: Tạo một notebook cho mỗi môn học hoặc mỗi bộ tài liệu, rồi tải tệp vào đó. Hỏi trong notebook nào thì chỉ tìm trong tài liệu của notebook đó.

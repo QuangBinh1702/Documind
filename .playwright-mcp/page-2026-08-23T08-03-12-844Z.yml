@@ -1,0 +1,17 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - heading "DocuMind" [level=1] [ref=e4]
+      - paragraph [ref=e5]: Hỏi đáp trên tài liệu của bạn, luôn kèm trích dẫn kiểm chứng được.
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e8]: Email
+          - textbox "Email" [ref=e9]:
+            - /placeholder: ban@truong.edu.vn
+        - generic [ref=e10]:
+          - generic [ref=e11]: Mật khẩu
+          - textbox "Mật khẩu" [ref=e12]:
+            - /placeholder: ít nhất 8 ký tự
+        - button "Đăng nhập" [disabled] [ref=e13]
+      - button "Chưa có tài khoản? Đăng ký" [ref=e14]
+  - alert [ref=e15]

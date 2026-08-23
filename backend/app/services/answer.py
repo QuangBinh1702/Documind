@@ -19,6 +19,7 @@ ra sự kiện theo đúng thứ tự giao diện cần (`SPEC-v1.md` §7.1).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -178,8 +179,24 @@ async def answer_question(
             return
 
     # ── Truy xuất ───────────────────────────────────────
+    #
+    # `retrieve` và `decide` là mã ĐỒNG BỘ và tốn CPU: nhúng câu hỏi, rồi
+    # cross-encoder chấm hàng chục cặp. Gọi thẳng trong một async generator thì
+    # chúng khoá vòng lặp sự kiện, và hậu quả nặng hơn vẻ ngoài của nó:
+    #
+    # * Mọi sự kiện đã `yield` trước đó nằm kẹt trong bộ đệm cho tới khi khối
+    #   chặn chạy xong — đo được: cả tám sự kiện của một lượt hỏi cùng đến ở
+    #   giây thứ 22, tức là streaming không hề chảy và nhãn "đang tìm trong tài
+    #   liệu" không bao giờ kịp hiện.
+    # * Cả tiến trình ngừng phục vụ mọi request khác trong ngần ấy giây.
+    #
+    # `to_thread` đẩy phần chặn sang luồng riêng. Phiên SQLAlchemy đi theo, và
+    # điều đó an toàn ở đây vì mỗi lượt hỏi có phiên riêng và không luồng nào
+    # dùng chung nó cùng lúc — thứ SQLAlchemy cấm là dùng ĐỒNG THỜI, không phải
+    # dùng lần lượt từ hai luồng.
     yield {"type": "status", "stage": "retrieving"}
-    retrieval = retrieve(
+    retrieval = await asyncio.to_thread(
+        retrieve,
         session,
         question,
         notebook_id=notebook_id,
@@ -190,7 +207,7 @@ async def answer_question(
 
     # ── Xếp hạng lại và cổng ngưỡng ─────────────────────
     yield {"type": "status", "stage": "reranking"}
-    decision = decide(question, retrieval, reranker=reranker)
+    decision = await asyncio.to_thread(decide, question, retrieval, reranker=reranker)
 
     if not decision.grounded:
         elapsed = int((time.perf_counter() - started) * 1000)

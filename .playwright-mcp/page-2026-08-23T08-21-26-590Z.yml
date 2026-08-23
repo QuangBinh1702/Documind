@@ -1,0 +1,50 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - banner [ref=f2e3]:
+      - link "← Notebook" [ref=f2e4] [cursor=pointer]:
+        - /url: /notebooks
+      - button "Quy chế đào tạo" [ref=f2e41]
+      - generic [ref=f2e6]: 1/1 tài liệu đã xử lý
+    - generic [ref=f2e8]:
+      - generic [ref=f2e10]:
+        - heading "Nguồn" [level=2] [ref=f2e12]
+        - generic [ref=f2e13]:
+          - paragraph [ref=f2e14]: Kéo thả tệp vào đây
+          - paragraph [ref=f2e15]: PDF · DOCX · TXT · MD, tối đa 50 MB
+          - button "Chọn tệp" [ref=f2e16]
+        - list [ref=f2e17]:
+          - listitem [ref=f2e42]:
+            - generic [ref=f2e43]:
+              - checkbox "Hỏi trong tài liệu này" [checked] [ref=f2e44]
+              - generic [ref=f2e45]:
+                - paragraph [ref=f2e46]: qc-dao-tao-hust-2023
+                - paragraph [ref=f2e47]: PDF · 32 trang · sẵn sàng
+              - button "✕" [ref=f2e48]
+      - separator "Đổi độ rộng cột nguồn" [ref=f2e19]
+      - generic [ref=f2e21]:
+        - generic [ref=f2e50]:
+          - paragraph [ref=f2e51]: "Bạn: Sinh viên được nghỉ học tạm thời trong những trường hợp nào?"
+          - paragraph [ref=f2e52]: Câu hỏi và các đoạn tài liệu được chọn đã gửi tới ollama-cloud:gemma4:31b.
+          - generic [ref=f2e53]:
+            - text: "Sinh viên được nghỉ học tạm thời trong các trường hợp sau: - Khi có quyết định cho phép nghỉ học tạm thời của Giám đốc ĐHBK Hà Nội"
+            - button "1" [active] [ref=f2e57] [cursor=pointer]
+            - text: ". - Các lý do cụ thể bao gồm: - Bị ốm, thai sản hoặc tai nạn buộc phải điều trị thời gian dài"
+            - button "1" [ref=f2e58] [cursor=pointer]
+            - text: . - Được điều động vào lực lượng vũ trang
+            - button "1" [ref=f2e59] [cursor=pointer]
+            - text: . - Các lý do khác (với điều kiện sinh viên phải học ít nhất một học kỳ)
+            - button "1" [ref=f2e60] [cursor=pointer]
+            - text: .
+          - paragraph [ref=f2e61]: 1 trích dẫn — bấm số để xem đoạn gốc
+        - generic [ref=f2e27]:
+          - textbox "Hỏi gì đó về tài liệu…" [ref=f2e55]
+          - button "Hỏi" [disabled] [ref=f2e62]
+      - separator "Đổi độ rộng cột tài liệu" [ref=f2e30]
+      - generic [ref=f2e32]:
+        - heading "Đoạn được trích dẫn" [level=2] [ref=f2e34]
+        - article [ref=f2e63]:
+          - paragraph [ref=f2e64]: qc-dao-tao-hust-2023
+          - paragraph [ref=f2e65]: Trang 15 · CHƯƠNG II > Điều 16. Nghỉ học tạm thời và tự nguyện thôi học
+          - generic [ref=f2e66]: "Điều 16. Nghỉ học tạm thời và tự nguyện thôi học 1. Điều kiện nghỉ học tạm thời, thời gian nghỉ học tối đa và việc tiếp nhận trở lại học được quy định như sau: a) Sinh viên được nghỉ học tạm thời nếu có quyết định cho phép nghỉ học tạm thời của Giám đốc ĐHBK Hà Nội. b) Thời gian nghỉ học tạm thời do sinh viên bị ốm, thai sản hoặc tai nạn buộc phải điều trị thời gian dài không tính vào thời gian chậm tiến độ nếu tổng cộng không vượt quá 4 học kỳ chính; thời gian nghỉ trên 4 học kỳ được tính vào thời gian học chậm tiến độ. c) Thời gian nghỉ học tạm thời do sinh viên được điều động vào lực lượng vũ trang (là thời gian được ghi trong quyết định của cấp có thẩm quyền) không tính vào thời gian học chậm tiến độ. d) Đối với trường hợp xin nghỉ học tạm thời vì những lý do khác với lý do tại điểm b và điểm c khoản 1 của Điều này, sinh viên phải học ít nhất một học kỳ. Thời gian nghỉ học tối đa cho phép là 4 học kỳ chính và được tính vào thời gian học chậm tiến độ. đ) Sinh viên phải nộp đơn đề nghị trở lại học chậm nhất 1 tuần trước khi bắt đầu học kỳ mới. Đối với trường hợp được điều động vào lực lượng vũ trang hoặc đi làm nghĩa vụ quốc tế, sinh viên phải nộp kèm theo giấy xác nhận đã hoàn thành nhiệm vụ. 2. Chế độ bảo lưu kết quả học tập khi nghỉ học tạm thời: Các học phần đăng ký học trong học kỳ đã đủ điểm đánh giá hoặc đủ điều kiện đánh giá sẽ được tính điểm học phần; kết quả sẽ được bảo lưu cùng với kết quả từ các học kỳ trước, kể cả các học phần đạt và không đạt. 3. Tự nguyện thôi học: Sinh viên thấy không có đủ điều kiện hoặc không muốn tiếp tục học tại ĐHBK Hà Nội có thể làm đơn đề nghị thôi học và được xem xét cho thôi học. Sinh viên đã có quyết định cho thôi học không được tiếp nhận trở lại."
+          - paragraph [ref=f2e67]: ký tự 33804–35563
+  - alert [ref=f2e40]

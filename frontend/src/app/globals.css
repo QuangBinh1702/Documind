@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* Bảng màu dùng chung với bàn thử ở backend, để hai giao diện nhìn không lệch
+   nhau trong lúc cả hai còn tồn tại song song. */
+@theme {
+  --color-nen: #fbfbfa;
+  --color-chu: #1c1c1a;
+  --color-mo: #6f6f68;
+  --color-vien: #e3e3de;
+  --color-the: #ffffff;
+  --color-nhan: #2f5d50;
+  --color-canh-bao: #8a5a00;
+  --color-canh-bao-nen: #fff8e6;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-nen: #161815;
+    --color-chu: #e8e8e3;
+    --color-mo: #9a9a92;
+    --color-vien: #2c2f2a;
+    --color-the: #1d201c;
+    --color-nhan: #7fbfa8;
+    --color-canh-bao: #e0b268;
+    --color-canh-bao-nen: #2a2415;
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-nen);
+  color: var(--color-chu);
+  font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+/* Chip trích dẫn [n] — bấm được, và phải nhìn ra ngay là bấm được. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: var(--color-nhan);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+
+.chip-chet {
+  background: var(--color-mo);
+  cursor: not-allowed;
+}
