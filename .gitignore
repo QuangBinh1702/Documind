@@ -80,3 +80,6 @@ desktop.ini
 # Dùng `*.pdf` chứ không phải `*pdf`: thiếu dấu chấm thì mẫu này khớp cả một
 # thư mục tên `pdf` hay một tệp tên `mypdf`.
 *.pdf
+
+# Log tạm của trình duyệt tự động, sinh lại được
+.playwright-mcp/
