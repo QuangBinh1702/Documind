@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 from app.api import auth, chat, config, health, notebooks, stats
 from app.settings import settings
-
-STATIC = Path(__file__).parent / "static"
 
 logging.basicConfig(
     level=settings.log_level,
@@ -58,11 +54,12 @@ app.include_router(stats.router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)
-def testbed() -> FileResponse:
-    """Bàn thử bộ não.
+def goc() -> dict[str, str]:
+    """Gốc của dịch vụ API.
 
-    Giao diện tạm để nhìn thấy streaming, cổng ngưỡng và chip trích dẫn hoạt
-    động thật. Bố cục ba cột của US-016 sẽ dựng bằng Next.js ở M2; trang này
-    không phải giao diện sản phẩm và sẽ bị thay thế.
+    Trước đây đây là "bàn thử": một trang HTML tĩnh gọi thẳng các endpoint hội
+    thoại khi chúng còn chưa đòi đăng nhập. Giao diện Next.js đã thay thế nó
+    hoàn toàn, và các endpoint ấy giờ đòi token — nên trang bàn thử không những
+    thừa mà còn không chạy được nữa.
     """
-    return FileResponse(STATIC / "index.html")
+    return {"service": "documind", "docs": "/api/docs", "health": "/api/health"}

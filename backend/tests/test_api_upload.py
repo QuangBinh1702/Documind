@@ -210,6 +210,7 @@ def test_tai_tai_lieu_len_roi_hoi_duoc(client, phien) -> None:
     hoi = client.post(
         "/api/chat/ask",
         json={"question": "nghỉ học tạm thời tối đa bao lâu", "notebook_id": nb_id},
+        headers=headers,
     )
     assert hoi.status_code == 200
 
@@ -222,7 +223,9 @@ def test_tai_tai_lieu_len_roi_hoi_duoc(client, phien) -> None:
     trich_dan = [e for e in events if e["type"] == "citation"]
     assert trich_dan, "câu trả lời phải kèm trích dẫn về tài liệu vừa tải"
 
-    chi_tiet = client.get(f"/api/citations/{trich_dan[0]['chunk_id']}")
+    chi_tiet = client.get(
+        f"/api/citations/{trich_dan[0]['chunk_id']}", headers=headers
+    )
     assert chi_tiet.status_code == 200
     assert chi_tiet.json()["content"]
 

@@ -8,6 +8,7 @@ làm hỏng một cách im lặng.
 from __future__ import annotations
 
 import json
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,7 +23,11 @@ from app.settings import settings
 
 pytestmark = pytest.mark.db
 
-OWNER = "api@documind.local"
+# `@example.com` chứ không phải `@documind.local`: `email-validator` từ chối
+# `.local` vì đó là tên miền dành riêng, và lượt đăng ký sẽ trả 422.
+OWNER = "api@example.com"
+NGUOI_LA = "api-nguoila@example.com"
+MAT_KHAU = "Mat-Khau-Rat-Dai-2026"
 NOTEBOOK = "api-test"
 
 DOC = """Điều 1. Thời gian đào tạo
@@ -54,15 +59,55 @@ def _providers(monkeypatch):
 def clean():
     def wipe():
         with session_scope() as s:
-            s.execute(delete(User).where(User.email == OWNER))
+            s.execute(delete(User).where(User.email.in_([OWNER, NGUOI_LA])))
 
     wipe()
     yield
     wipe()
 
 
+@pytest.fixture(autouse=True)
+def _bo_chan_dang_nhap(monkeypatch):
+    """Tắt bộ đếm chặn đăng nhập — nó cần Redis và không liên quan gì ở đây."""
+    from app.services import login_guard
+
+    monkeypatch.setattr(login_guard, "con_bao_lau", lambda email: 0)
+    monkeypatch.setattr(login_guard, "ghi_that_bai", lambda email: None)
+    monkeypatch.setattr(login_guard, "xoa_dem", lambda email: None)
+
+
+def _dang_ky(c: TestClient, email: str) -> str:
+    r = c.post("/api/auth/register", json={"email": email, "password": MAT_KHAU})
+    assert r.status_code in (200, 201), r.text
+    return r.json()["access_token"]
+
+
 @pytest.fixture
-def notebook_id(tmp_path):
+def khach() -> TestClient:
+    """Client chưa đăng nhập — dùng để kiểm chính việc bị từ chối."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def client() -> TestClient:
+    """Client đã đăng nhập bằng tài khoản chủ sở hữu.
+
+    Mọi endpoint hội thoại đều đòi token. Trước đây chúng mở, và bàn thử ở `/`
+    dựa vào điều đó — nhưng nó có nghĩa là biết `notebook_id` là hỏi được tài
+    liệu của người khác, đồng thời tiêu hạn mức gọi API của họ.
+    """
+    c = TestClient(app)
+    c.headers["Authorization"] = f"Bearer {_dang_ky(c, OWNER)}"
+    return c
+
+
+@pytest.fixture
+def notebook_id(tmp_path, client: TestClient):
+    """Phụ thuộc `client` để tài khoản được tạo qua API TRƯỚC khi nạp tài liệu.
+
+    Ngược lại thì `get_or_create_user` tạo một hàng không có mật khẩu, và lượt
+    đăng ký sau đó báo trùng email.
+    """
     p = tmp_path / "quy-che.txt"
     p.write_text(DOC, encoding="utf-8")
     with session_scope() as s:
@@ -76,11 +121,6 @@ def notebook_id(tmp_path):
         return str(nb.id)
 
 
-@pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
-
-
 def _events(response) -> list[dict]:
     out = []
     for block in response.text.split("\n\n"):
@@ -92,20 +132,6 @@ def _events(response) -> list[dict]:
 # ══════════════════════════════════════════════════════
 # Dữ liệu phụ trợ
 # ══════════════════════════════════════════════════════
-
-
-def test_liet_ke_notebook_cho_ban_thu(client: TestClient, notebook_id: str) -> None:
-    """Đường của bàn thử, không cần đăng nhập.
-
-    `/api/notebooks` mới là endpoint thật và nó đòi token — xem
-    `test_api_auth.py`. Đường này liệt kê mọi notebook nên nó bị đóng khi
-    `APP_ENV` là production.
-    """
-    r = client.get("/api/testbed/notebooks")
-    assert r.status_code == 200
-    nb = next(n for n in r.json() if n["id"] == notebook_id)
-    assert nb["source_count"] >= 1
-    assert nb["sources"][0]["status"] == "ready"
 
 
 def test_loi_he_thong_khong_lo_cau_sql_ra_giao_dien(
@@ -156,18 +182,65 @@ def test_loi_da_soan_cho_nguoi_dung_thi_giu_nguyen(
     assert "hạn mức" in err["message"]
 
 
-def test_duong_ban_thu_dong_o_moi_truong_that(client: TestClient, monkeypatch) -> None:
-    """Một endpoint liệt kê tài liệu của mọi người mà không hỏi gì là đúng thứ
-    INV-4 sinh ra để ngăn."""
-    monkeypatch.setattr(settings, "app_env", "production")
-    assert client.get("/api/testbed/notebooks").status_code == 404
+# ══════════════════════════════════════════════════════
+# Quyền truy cập
+# ══════════════════════════════════════════════════════
 
 
-def test_trang_ban_thu_tra_ve_html(client: TestClient) -> None:
-    r = client.get("/")
-    assert r.status_code == 200
-    assert "text/html" in r.headers["content-type"]
-    assert "DocuMind" in r.text
+@pytest.mark.parametrize(
+    ("phuong_thuc", "duong", "than"),
+    [
+        ("post", "/api/chat/ask", {"question": "x", "notebook_id": str(uuid.uuid4())}),
+        ("post", "/api/chat/ask-external",
+         {"question": "x", "notebook_id": str(uuid.uuid4())}),
+        ("get", f"/api/sessions?notebook_id={uuid.uuid4()}", None),
+        ("get", f"/api/sessions/{uuid.uuid4()}/messages", None),
+        ("get", "/api/citations/1", None),
+    ],
+)
+def test_moi_endpoint_hoi_thoai_deu_doi_dang_nhap(
+    khach: TestClient, phuong_thuc: str, duong: str, than: dict | None
+) -> None:
+    """Không có endpoint hội thoại nào được mở.
+
+    Đây từng là một lỗ hổng thật: biết `notebook_id` là hỏi được tài liệu của
+    người khác, và lượt gọi ra ngoài tính vào hạn mức của họ.
+    """
+    r = getattr(khach, phuong_thuc)(duong, **({"json": than} if than else {}))
+    assert r.status_code == 401, duong
+
+
+def test_notebook_cua_nguoi_khac_tra_ve_khong_tim_thay(
+    khach: TestClient, notebook_id: str
+) -> None:
+    """404 chứ không phải 403 — xem `app/api/deps.py`."""
+    khach.headers["Authorization"] = f"Bearer {_dang_ky(khach, NGUOI_LA)}"
+    r = khach.post(
+        "/api/chat/ask", json={"question": "gì đó", "notebook_id": notebook_id}
+    )
+    err = next(e for e in _events(r) if e["type"] == "error")
+    assert err["code"] == "NOT_FOUND"
+
+    assert khach.get(f"/api/sessions?notebook_id={notebook_id}").status_code == 404
+
+
+def test_trich_dan_cua_nguoi_khac_khong_doc_duoc(
+    client: TestClient, khach: TestClient, notebook_id: str
+) -> None:
+    """Đoạn trích dẫn mang nguyên văn nội dung tài liệu.
+
+    Đọc được `chunk_id` của người khác là đọc được tài liệu của họ từng mẩu một,
+    kể cả khi không mở được cả tệp.
+    """
+    r = client.post(
+        "/api/chat/ask",
+        json={"question": "thời gian đào tạo trình độ đại học", "notebook_id": notebook_id},
+    )
+    chunk_id = next(e for e in _events(r) if e["type"] == "citation")["chunk_id"]
+    assert client.get(f"/api/citations/{chunk_id}").status_code == 200
+
+    khach.headers["Authorization"] = f"Bearer {_dang_ky(khach, NGUOI_LA)}"
+    assert khach.get(f"/api/citations/{chunk_id}").status_code == 404
 
 
 # ══════════════════════════════════════════════════════

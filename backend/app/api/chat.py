@@ -29,9 +29,10 @@ from sqlalchemy import select
 from app.adapters.embedding import get_embedding_provider
 from app.adapters.llm import get_llm_provider
 from app.adapters.rerank import get_rerank_provider
+from app.api.deps import CurrentUser, DbSession
 from app.models.base import session_scope
 from app.models.chat import ChatMessage, ChatSession
-from app.models.knowledge import Notebook, Source, SourceChunk, User
+from app.models.knowledge import Notebook, Source, SourceChunk
 from app.services.chat import ask
 from app.services.external import QuotaExceeded, answer_externally
 from app.settings import Mode, settings
@@ -90,28 +91,31 @@ def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _resolve(
-    session, notebook_id: uuid.UUID, user: User | None = None
-) -> tuple[User, Notebook]:
-    """Lấy notebook kèm chủ sở hữu, kiểm quyền nếu đã biết người đăng nhập.
+def _notebook_cua(session, notebook_id: uuid.UUID, user_id: uuid.UUID) -> Notebook:
+    """Lấy notebook của chính người đang đăng nhập, hoặc 404.
 
     Notebook của người khác trả về **404**, không phải 403 — xem chú thích ở
-    `app/api/deps.py`. Không có `user` (đường bàn thử, chưa đăng nhập) thì chủ
-    sở hữu suy ra từ chính notebook; `owner_id` vẫn được truyền xuống tầng truy
-    xuất nên INV-4 giữ nguyên hiệu lực ở cả hai đường.
+    `app/api/deps.py`.
     """
     nb = session.get(Notebook, notebook_id)
-    if nb is None or (user is not None and nb.user_id != user.id):
+    if nb is None or nb.user_id != user_id:
         raise HTTPException(404, "Không tìm thấy notebook.")
-    return (user or session.get(User, nb.user_id)), nb
+    return nb
 
 
 @router.post("/chat/ask", summary="Hỏi đáp có căn cứ, trả về luồng SSE")
-async def chat_ask(req: AskRequest) -> StreamingResponse:
+async def chat_ask(req: AskRequest, user: CurrentUser) -> StreamingResponse:
+    # Chốt `user.id` NGAY tại đây thay vì mang đối tượng `User` vào trong luồng.
+    #
+    # `CurrentUser` lấy từ một phiên do FastAPI quản lý, và phiên đó đóng khi
+    # response kết thúc. Luồng SSE thì sống lâu hơn thế, nên mọi truy cập lười
+    # trên đối tượng ORM ở giữa chừng sẽ nổ. Một UUID thì không có vòng đời nào.
+    user_id = user.id
+
     async def stream() -> AsyncIterator[str]:
         with session_scope() as session:
             try:
-                user, nb = _resolve(session, req.notebook_id)
+                nb = _notebook_cua(session, req.notebook_id, user_id)
             except HTTPException as e:
                 yield _sse({"type": "error", "code": "NOT_FOUND", "message": e.detail})
                 return
@@ -135,7 +139,7 @@ async def chat_ask(req: AskRequest) -> StreamingResponse:
                     embedder=get_embedding_provider(),
                     reranker=get_rerank_provider(),
                     llm=get_llm_provider(req.mode),
-                    owner_id=user.id if user else None,
+                    owner_id=user_id,
                     source_ids=req.source_ids,
                 ):
                     yield _sse(event)
@@ -151,17 +155,18 @@ async def chat_ask(req: AskRequest) -> StreamingResponse:
 
 
 @router.post("/chat/ask-external", summary="Hỏi bằng kiến thức ngoài tài liệu")
-async def chat_ask_external(req: ExternalRequest) -> StreamingResponse:
+async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> StreamingResponse:
     """US-032 — chỉ chạy khi người dùng chủ động bấm nút.
 
     Không có đường nào tự động gọi tới endpoint này; hệ thống chỉ hiển thị nút
     mời sau khi cổng ngưỡng kết luận tài liệu không đủ căn cứ.
     """
+    user_id = user.id
 
     async def stream() -> AsyncIterator[str]:
         with session_scope() as session:
             try:
-                user, _ = _resolve(session, req.notebook_id)
+                _notebook_cua(session, req.notebook_id, user_id)
             except HTTPException as e:
                 yield _sse({"type": "error", "code": "NOT_FOUND", "message": e.detail})
                 return
@@ -177,7 +182,7 @@ async def chat_ask_external(req: ExternalRequest) -> StreamingResponse:
                 async for event in answer_externally(
                     session,
                     req.question,
-                    user_id=user.id,
+                    user_id=user_id,
                     embedder=get_embedding_provider(),
                     llm=get_llm_provider("fast"),
                 ):
@@ -198,111 +203,100 @@ async def chat_ask_external(req: ExternalRequest) -> StreamingResponse:
 # ── Dữ liệu phụ trợ cho giao diện ──────────────────────
 
 
-@router.get("/testbed/notebooks", summary="Danh sách notebook cho bàn thử")
-def list_notebooks_testbed() -> list[dict[str, Any]]:
-    """Danh sách MỌI notebook, không cần đăng nhập — chỉ dùng cho bàn thử.
+def _phien_cua_toi(session, session_id: uuid.UUID, user_id: uuid.UUID) -> ChatSession:
+    """Phiên hội thoại của chính người đăng nhập, hoặc 404.
 
-    `/api/notebooks` mới là endpoint thật: nó đòi token và chỉ trả về notebook
-    của chính người đăng nhập. Đường này tồn tại để bàn thử ở `/` còn dùng được
-    khi phát triển, và vì thế nó **phải** đóng ở môi trường thật — một endpoint
-    liệt kê tài liệu của mọi người mà không hỏi gì là đúng thứ INV-4 sinh ra để
-    ngăn.
+    Đi qua `notebooks` để về `users`: `chat_sessions` không mang `user_id`, chủ
+    sở hữu của nó là chủ sở hữu của notebook chứa nó.
     """
-    if settings.is_production:
-        raise HTTPException(404, "Không tìm thấy.")
-
-    with session_scope() as session:
-        rows = session.execute(
-            select(Notebook, User.email)
-            .join(User, User.id == Notebook.user_id)
-            .order_by(Notebook.updated_at.desc())
-        ).all()
-        out = []
-        for nb, email in rows:
-            sources = session.scalars(
-                select(Source).where(Source.notebook_id == nb.id)
-            ).all()
-            out.append({
-                "id": str(nb.id),
-                "title": nb.title,
-                "owner": email,
-                "source_count": len(sources),
-                "sources": [
-                    {"id": str(s.id), "title": s.title, "status": s.status,
-                     "pages": s.page_count, "kind": s.kind}
-                    for s in sources
-                ],
-            })
-        return out
+    phien = session.scalar(
+        select(ChatSession)
+        .join(Notebook, Notebook.id == ChatSession.notebook_id)
+        .where(ChatSession.id == session_id, Notebook.user_id == user_id)
+    )
+    if phien is None:
+        raise HTTPException(404, "Không tìm thấy phiên hội thoại.")
+    return phien
 
 
 @router.get("/citations/{chunk_id}", summary="Chi tiết một trích dẫn")
-def get_citation(chunk_id: int) -> dict[str, Any]:
+def get_citation(chunk_id: int, user: CurrentUser, session: DbSession) -> dict[str, Any]:
     """US-015 — dữ liệu để mở đúng vị trí và tô sáng."""
-    with session_scope() as session:
-        chunk = session.get(SourceChunk, chunk_id)
-        if chunk is None:
-            raise HTTPException(404, "Đoạn trích dẫn không còn tồn tại.")
-        source = session.get(Source, chunk.source_id)
-        return {
-            "chunk_id": chunk.id,
-            "content": chunk.content,
-            "page_no": chunk.page_no,
-            "char_start": chunk.char_start,
-            "char_end": chunk.char_end,
-            "bbox": chunk.bbox,
-            "heading_path": chunk.heading_path,
-            "source": {
-                "id": str(source.id),
-                "title": source.title,
-                "kind": source.kind,
-                "pages": source.page_count,
-            },
-        }
+    chunk = session.scalar(
+        select(SourceChunk)
+        .join(Notebook, Notebook.id == SourceChunk.notebook_id)
+        .where(SourceChunk.id == chunk_id, Notebook.user_id == user.id)
+    )
+    # Cùng một câu trả lời cho "không tồn tại" và "của người khác". Đoạn trích
+    # dẫn mang nguyên văn nội dung tài liệu, nên phân biệt được hai ca này là đủ
+    # để dò nội dung của người khác từng mẩu một.
+    if chunk is None:
+        raise HTTPException(404, "Đoạn trích dẫn không còn tồn tại.")
+
+    source = session.get(Source, chunk.source_id)
+    return {
+        "chunk_id": chunk.id,
+        "content": chunk.content,
+        "page_no": chunk.page_no,
+        "char_start": chunk.char_start,
+        "char_end": chunk.char_end,
+        "bbox": chunk.bbox,
+        "heading_path": chunk.heading_path,
+        "source": {
+            "id": str(source.id),
+            "title": source.title,
+            "kind": source.kind,
+            "pages": source.page_count,
+        },
+    }
 
 
 @router.get("/sessions", summary="Lịch sử hội thoại của một notebook")
-def list_sessions(notebook_id: uuid.UUID) -> list[dict[str, Any]]:
-    with session_scope() as session:
-        sessions = session.scalars(
-            select(ChatSession)
-            .where(ChatSession.notebook_id == notebook_id)
-            .order_by(ChatSession.updated_at.desc())
-        ).all()
-        return [
-            {"id": str(s.id), "title": s.title, "updated_at": s.updated_at.isoformat()}
-            for s in sessions
-        ]
+def list_sessions(
+    notebook_id: uuid.UUID, user: CurrentUser, session: DbSession
+) -> list[dict[str, Any]]:
+    _notebook_cua(session, notebook_id, user.id)
+    sessions = session.scalars(
+        select(ChatSession)
+        .where(ChatSession.notebook_id == notebook_id)
+        .order_by(ChatSession.updated_at.desc())
+    ).all()
+    return [
+        {"id": str(s.id), "title": s.title, "updated_at": s.updated_at.isoformat()}
+        for s in sessions
+    ]
 
 
 @router.get("/sessions/{session_id}/messages", summary="Tin nhắn của một phiên")
-def list_messages(session_id: uuid.UUID) -> list[dict[str, Any]]:
+def list_messages(
+    session_id: uuid.UUID, user: CurrentUser, session: DbSession
+) -> list[dict[str, Any]]:
     """US-018 AC-3 — chip trích dẫn phải hiển thị lại đầy đủ và bấm được."""
-    with session_scope() as session:
-        messages = session.scalars(
-            select(ChatMessage)
-            .where(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.seq)
-        ).all()
-        return [
-            {
-                "id": str(m.id),
-                "role": m.role,
-                "content": m.content,
-                "answer_kind": m.answer_kind,
-                "model_used": m.model_used,
-                "latency_ms": m.latency_ms,
-                "citations": [
-                    {
-                        "marker": c.marker,
-                        "chunk_id": c.chunk_id,
-                        "snippet": c.snippet,
-                        "page": c.page_no,
-                        # chunk_id NULL nghĩa là nguồn đã bị xoá — US-020 AC-4.
-                        "deleted": c.chunk_id is None,
-                    }
-                    for c in m.citations
-                ],
-            }
-            for m in messages
-        ]
+    _phien_cua_toi(session, session_id, user.id)
+    messages = session.scalars(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.seq)
+    ).all()
+    return [
+        {
+            "id": str(m.id),
+            "role": m.role,
+            "content": m.content,
+            "answer_kind": m.answer_kind,
+            "model_used": m.model_used,
+            "latency_ms": m.latency_ms,
+            "citations": [
+                {
+                    "marker": c.marker,
+                    "chunk_id": c.chunk_id,
+                    "snippet": c.snippet,
+                    "page": c.page_no,
+                    # chunk_id NULL nghĩa là nguồn đã bị xoá — US-020 AC-4.
+                    "deleted": c.chunk_id is None,
+                }
+                for c in m.citations
+            ],
+        }
+        for m in messages
+    ]
