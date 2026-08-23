@@ -193,6 +193,23 @@ export type ThongKe = {
   luot_hoi_theo_ngay: { ngay: string; so_luot: number }[];
 };
 
+export type LienKetChiaSe = {
+  token: string;
+  duong_dan: string;
+  con_hieu_luc: boolean;
+};
+
+export type NotebookChiaSe = {
+  title: string;
+  nguon: {
+    id: string;
+    title: string;
+    kind: string;
+    page_count: number | null;
+    status: string;
+  }[];
+};
+
 // ── Các lời gọi cụ thể ─────────────────────────────────
 
 export const api = {
@@ -243,6 +260,22 @@ export const api = {
     goi<{ du_lieu_roi_khoi_may: boolean; che_do: string }>("/api/config"),
 
   thongKe: () => goi<ThongKe>("/api/stats"),
+
+  lienKetChiaSe: (nbId: string) =>
+    goi<LienKetChiaSe | null>(`/api/notebooks/${nbId}/share`),
+
+  taoLienKetChiaSe: (nbId: string) =>
+    goi<LienKetChiaSe>(`/api/notebooks/${nbId}/share`, { method: "POST" }),
+
+  thuHoiLienKetChiaSe: (nbId: string) =>
+    goi<void>(`/api/notebooks/${nbId}/share`, { method: "DELETE" }),
+
+  /** Đường của người xem — cố ý KHÔNG đi qua `goi()` vì nó không cần token. */
+  notebookChiaSe: (token: string) =>
+    fetch(`${GOC_API}/api/shared/${token}`).then(async (r) => {
+      if (!r.ok) throw new ApiError(r.status, "Liên kết không còn hiệu lực.");
+      return (await r.json()) as NotebookChiaSe;
+    }),
 
   trichDan: (chunkId: number) =>
     goi<{

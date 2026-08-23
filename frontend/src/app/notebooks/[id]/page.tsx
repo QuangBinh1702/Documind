@@ -25,6 +25,7 @@ import { CotTaiLieu } from "@/components/CotTaiLieu";
 import { NhanQuyenRiengTu } from "@/components/NhanQuyenRiengTu";
 import { NutChuDe } from "@/components/NutChuDe";
 import { MatKetNoi } from "@/components/MatKetNoi";
+import { NutChiaSe } from "@/components/NutChiaSe";
 
 export default function ManHinhNotebook() {
   const { id } = useParams<{ id: string }>();
@@ -176,6 +177,7 @@ export default function ManHinhNotebook() {
             ? "chưa có tài liệu"
             : `${nguon.filter((s) => s.status === "ready").length}/${nguon.length} tài liệu đã xử lý`}
         </span>
+        <NutChiaSe nbId={id} />
         <NhanQuyenRiengTu />
         <NutChuDe />
       </header>

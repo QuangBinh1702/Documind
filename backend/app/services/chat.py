@@ -47,8 +47,30 @@ async def ask(
     llm: LLMProvider,
     owner_id: uuid.UUID | None = None,
     source_ids: list[uuid.UUID] | None = None,
+    luu_lich_su: bool = True,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Chạy một lượt hỏi đáp đầy đủ, phát sự kiện cho giao diện."""
+    """Chạy một lượt hỏi đáp đầy đủ, phát sự kiện cho giao diện.
+
+    `luu_lich_su=False` dành cho đường chia sẻ chỉ đọc (US-039): người xem hỏi
+    được, nhưng câu hỏi của họ **không** đi vào lịch sử hội thoại của chủ sở
+    hữu. Chia sẻ tài liệu không đồng nghĩa với đồng ý cho câu hỏi của người lạ
+    nằm lẫn trong lịch sử của mình — và cũng không có lượt nào trước đó để gộp
+    ngữ cảnh, nên bước condense bị bỏ qua luôn.
+    """
+    if not luu_lich_su:
+        async for event in answer_question(
+            session,
+            question,
+            notebook_id=notebook_id,
+            embedder=embedder,
+            reranker=reranker,
+            llm=llm,
+            owner_id=owner_id,
+            source_ids=source_ids,
+        ):
+            yield event
+        return
+
     if chat_session is None:
         chat_session = repo.create_session(session, notebook_id, question, source_ids)
         yield {

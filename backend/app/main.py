@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, chat, config, health, notebooks, stats
+from app.api import auth, chat, config, health, notebooks, share, stats
 from app.settings import settings
 
 logging.basicConfig(
@@ -51,6 +51,7 @@ app.include_router(config.router, prefix="/api")
 app.include_router(notebooks.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
+app.include_router(share.router, prefix="/api")
 
 
 @app.get("/", include_in_schema=False)
