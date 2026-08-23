@@ -108,6 +108,54 @@ def test_liet_ke_notebook_cho_ban_thu(client: TestClient, notebook_id: str) -> N
     assert nb["sources"][0]["status"] == "ready"
 
 
+def test_loi_he_thong_khong_lo_cau_sql_ra_giao_dien(
+    client: TestClient, notebook_id: str, monkeypatch
+) -> None:
+    """Thông báo lỗi của SQLAlchemy mang theo cả câu lệnh và tham số.
+
+    Đã gặp thật: một `CheckViolation` làm nguyên văn câu INSERT — kèm nội dung
+    tin nhắn, khoá chính, tên bảng và tên cột — hiện lên khung chat. Vừa là rò
+    rỉ cấu trúc cơ sở dữ liệu, vừa là thứ người dùng không làm gì được.
+    """
+    import app.api.chat as mod
+
+    class VoTinh(Exception):
+        """Ngoại lệ hệ thống bất kỳ — không phải loại đã soạn cho người dùng."""
+
+    async def no_vo(*a, **kw):
+        raise VoTinh(
+            "[SQL: INSERT INTO chat_messages ...] [parameters: {'content': 'bí mật'}]"
+        )
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(mod, "ask", no_vo)
+    r = client.post("/api/chat/ask", json={"question": "x", "notebook_id": notebook_id})
+    err = next(e for e in _events(r) if e["type"] == "error")
+
+    assert "SQL" not in err["message"]
+    assert "bí mật" not in err["message"]
+    assert "INSERT" not in err["message"]
+    assert err["code"] == "VoTinh", "mã lỗi vẫn phải giữ để đối chiếu với log"
+
+
+def test_loi_da_soan_cho_nguoi_dung_thi_giu_nguyen(
+    client: TestClient, notebook_id: str, monkeypatch
+) -> None:
+    """Adapter mô hình ném `RuntimeError` với câu đã viết sẵn cho người dùng —
+    hết hạn mức, sai khoá. Nuốt mất câu đó là bỏ đi thứ duy nhất giúp họ tự sửa.
+    """
+    import app.api.chat as mod
+
+    async def het_han_muc(*a, **kw):
+        raise RuntimeError("Đã hết hạn mức gọi trong ngày. Đổi GEMINI_MODEL.")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(mod, "ask", het_han_muc)
+    r = client.post("/api/chat/ask", json={"question": "x", "notebook_id": notebook_id})
+    err = next(e for e in _events(r) if e["type"] == "error")
+    assert "hạn mức" in err["message"]
+
+
 def test_duong_ban_thu_dong_o_moi_truong_that(client: TestClient, monkeypatch) -> None:
     """Một endpoint liệt kê tài liệu của mọi người mà không hỏi gì là đúng thứ
     INV-4 sinh ra để ngăn."""

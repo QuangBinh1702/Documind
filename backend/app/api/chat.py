@@ -59,6 +59,32 @@ class ExternalRequest(BaseModel):
     gửi câu hỏi ra dịch vụ bên ngoài."""
 
 
+def _loi_nguoi_doc_duoc(exc: Exception) -> dict[str, Any]:
+    """Đổi một ngoại lệ thành thông báo gửi ra ngoài được — US-028 AC-4.
+
+    **Không đưa `str(exc)` ra giao diện.** Với lỗi cơ sở dữ liệu, SQLAlchemy nhét
+    cả câu lệnh và toàn bộ tham số vào thông báo, nên nó đổ nguyên văn nội dung
+    tin nhắn, khoá chính và cấu trúc bảng lên màn hình người dùng. Đã gặp thật:
+    một `CheckViolation` làm cả câu INSERT hiện ra trong khung chat.
+
+    Đó vừa là rò rỉ thông tin — kẻ tấn công đọc được tên bảng, tên cột, ràng
+    buộc — vừa là thứ người dùng không làm gì được với nó. Traceback đầy đủ
+    thuộc về log máy chủ; ra ngoài chỉ đưa một câu nói được và một mã để đối
+    chiếu với log.
+    """
+    ma = type(exc).__name__
+    if isinstance(exc, RuntimeError):
+        # Adapter mô hình ném `RuntimeError` với câu đã soạn sẵn cho người dùng
+        # — hết hạn mức, sai khoá API, không kết nối được máy chủ cục bộ.
+        return {"type": "error", "code": ma, "message": str(exc)}
+    return {
+        "type": "error",
+        "code": ma,
+        "message": "Có lỗi khi xử lý câu hỏi. Hãy thử lại; nếu vẫn lỗi thì "
+                   "xem log máy chủ để biết chi tiết.",
+    }
+
+
 def _sse(event: dict[str, Any]) -> str:
     payload = {k: v for k, v in event.items() if k not in _INTERNAL_KEYS}
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -114,13 +140,8 @@ async def chat_ask(req: AskRequest) -> StreamingResponse:
                 ):
                     yield _sse(event)
             except Exception as exc:
-                # Traceback đầy đủ vào log máy chủ, thông báo tiếng Việt ra
-                # giao diện — US-028 AC-4.
                 log.exception("Lỗi khi trả lời câu hỏi")
-                yield _sse(
-                    {"type": "error", "code": type(exc).__name__,
-                     "message": f"Có lỗi khi xử lý câu hỏi: {exc}"}
-                )
+                yield _sse(_loi_nguoi_doc_duoc(exc))
 
     return StreamingResponse(
         stream(),
@@ -165,9 +186,7 @@ async def chat_ask_external(req: ExternalRequest) -> StreamingResponse:
                 yield _sse({"type": "error", "code": "QUOTA_EXCEEDED", "message": str(exc)})
             except Exception as exc:
                 log.exception("Lỗi khi hỏi ra ngoài")
-                yield _sse(
-                    {"type": "error", "code": type(exc).__name__, "message": str(exc)}
-                )
+                yield _sse(_loi_nguoi_doc_duoc(exc))
 
     return StreamingResponse(
         stream(),
