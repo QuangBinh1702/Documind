@@ -147,13 +147,35 @@ async def ingest_file(
             chars_per_page=settings.scan_chars_per_page_threshold,
             page_ratio=settings.scan_page_ratio_threshold,
         )
-        if source.is_scanned:
+        if source.is_scanned and settings.ocr_enabled:
+            # ── Nhận dạng chữ (US-024) ──────────────────────
+            #
+            # Không thay thế kết quả cũ một cách mù quáng: OCR có thể đọc ra rác
+            # nếu ảnh mờ hoặc mô hình sai ngôn ngữ, và rác đi qua cổng chất
+            # lượng ngay sau đây. Cái được là tài liệu scan từ chỗ **không dùng
+            # được gì** thành có nội dung tìm kiếm và trích dẫn được.
+            from app.adapters.extract.scanned import extract_scanned_pdf
+            from app.adapters.ocr import get_ocr_provider
+
+            ocr = get_ocr_provider()
+            step(f"Nhận dạng chữ {result.page_count} trang bằng {ocr.name} …")
+            source.status = "ocr"
+            source.ocr_engine = ocr.name
+            session.flush()
+
+            result = extract_scanned_pdf(path, ocr)
+            quality = result.quality
+            source.page_count = result.page_count
+            source.text_quality = quality.score
+
+        elif source.is_scanned:
             empty = len(result.scanned_pages(settings.scan_chars_per_page_threshold))
             source.status = "failed"
             source.error_code = "SCAN_NO_TEXT_LAYER"
             source.error_message = (
                 f"Tệp là bản scan: {empty}/{result.page_count} trang không có lớp "
-                f"văn bản. Cần nhận dạng ký tự (OCR) mới đọc được nội dung."
+                f"văn bản, và nhận dạng chữ đang tắt (OCR_ENABLED=false). "
+                f"Bật nó lên để đọc được nội dung tệp này."
             )
             session.flush()
             raise ExtractionError(source.error_code, source.error_message)

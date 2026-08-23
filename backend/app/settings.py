@@ -1,4 +1,4 @@
-"""Cấu hình hệ thống — nguồn duy nhất cho mọi tham số.
+﻿"""Cấu hình hệ thống — nguồn duy nhất cho mọi tham số.
 
 Quy tắc D7 của Definition of Done (SPEC.md §A.4): không hardcode ngưỡng, giới
 hạn, tên mô hình hay top-k ở bất kỳ nơi nào khác. Nếu một con số ảnh hưởng đến
@@ -72,8 +72,38 @@ class Settings(BaseSettings):
     scan_chars_per_page_threshold: int = 100
     scan_page_ratio_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     text_quality_min: float = Field(default=0.60, ge=0.0, le=1.0)
-    ocr_engine: str = "paddle"
+    ocr_enabled: bool = True
+    """Tắt thì bản scan bị từ chối kèm lý do rõ ràng thay vì đọc bằng OCR.
+
+    Có cờ này vì OCR đắt — hàng chục giây mỗi trang trên CPU — nên lúc phát
+    triển hoặc chạy test thường không muốn nó chạy. Nó cũng là trục để US-048 so
+    "có OCR" với "không OCR".
+    """
+
+    ocr_engine: Literal["rapid", "paddle"] = "rapid"
+    """`rapid` chạy PP-OCRv5 qua ONNX Runtime; `paddle` chạy qua PaddlePaddle.
+
+    Mặc định là `rapid` vì `paddle` **hiện không chạy được**: PaddleOCR 3.x tải
+    về mô hình mà PaddlePaddle 3.0.0 từ chối nạp
+    (`ValueError: Type of attribute: strides is not right`). Adapter `paddle`
+    vẫn giữ lại vì US-048 cần so nhiều engine, và vì lỗi này thuộc về phiên bản
+    chứ không thuộc về thiết kế.
+    """
+
+    ocr_lang: str = "vi"
+    """Ngôn ngữ cho engine `paddle`."""
+
     ocr_dpi: int = 300
+    ocr_min_confidence: float = Field(default=0.60, ge=0.0, le=1.0)
+    """Dòng dưới ngưỡng này được đánh dấu để người rà (US-027), không bị bỏ."""
+
+    # Nhóm mô hình nhận dạng cho engine `rapid`. **Không để mặc định `ch`**: đo
+    # thật cho thấy nó đọc tiếng Việt mất sạch dấu mà vẫn tự báo tin cậy 0.98.
+    #
+    # `latin` là lựa chọn tốt nhất hiện có, nhưng vẫn thiếu ư/ơ/ă/đ nên "thư"
+    # thành "thur" và "đại học" thành "dai hoc". Xem chú thích ở
+    # `app/adapters/ocr/rapid.py` — có mô hình tiếng Việt riêng thì đổi ở đây.
+    ocr_rec_lang: str = "latin"
 
     # ── Mô hình ─────────────────────────────────────────
     # `fake` dùng adapter băm tất định: chạy được trên laptop không GPU, nhưng
@@ -189,6 +219,7 @@ class Settings(BaseSettings):
         "embedding_device", "rerank_device", "ocr_device",
         "embedding_revision", "rerank_revision",
         "gemini_api_key", "ollama_cloud_api_key",
+        
         mode="before",
     )
     @classmethod

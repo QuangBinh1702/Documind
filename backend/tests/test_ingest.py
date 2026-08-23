@@ -24,6 +24,7 @@ from app.models.base import session_scope
 from app.models.knowledge import Notebook, Source, SourceChunk, SourceText, User
 from app.repositories import knowledge as repo
 from app.services.ingest import ingest_file_sync
+from app.settings import settings
 
 pytestmark = pytest.mark.db
 
@@ -267,14 +268,21 @@ def test_van_ban_bang_ma_cu_bi_chan(tmp_path: Path, emb) -> None:
         assert s.scalar(_OWNED_CHUNKS) == 0
 
 
-def test_ban_scan_bi_chan_voi_chan_doan_dung(scanned_pdf: Path, emb) -> None:
-    """US-023 — bản scan phải nhận đúng tên gọi của nó.
+def test_ban_scan_bi_chan_voi_chan_doan_dung(
+    scanned_pdf: Path, emb, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """US-023 — bản scan phải nhận đúng tên gọi của nó khi OCR tắt.
 
     Bản scan cũng rớt cổng chất lượng vì không có ký tự nào, nhưng lý do ghi ra
     khi đó là *"chỉ 0% ký tự là chữ cái, có thể là bảng biểu hoặc mục lục"* —
     sai, và không cho người dùng biết phải làm gì. Mã lỗi cũng là thứ định
     tuyến sang đường OCR ở US-024, nên nó phải phân biệt được.
+
+    Ghim `ocr_enabled=False` chứ không dựa vào `.env`: máy phát triển bật OCR,
+    và khi đó test này sẽ nạp mô hình thật rồi chạy mất vài phút.
     """
+    monkeypatch.setattr(settings, "ocr_enabled", False)
+
     with session_scope() as s, pytest.raises(ExtractionError) as exc:
         ingest_file_sync(s, scanned_pdf, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
     assert exc.value.code == "SCAN_NO_TEXT_LAYER"
@@ -286,6 +294,40 @@ def test_ban_scan_bi_chan_voi_chan_doan_dung(scanned_pdf: Path, emb) -> None:
         assert src.status == "failed"
         assert src.is_scanned is True
         assert s.scalar(_OWNED_CHUNKS) == 0
+
+
+def test_ban_scan_duoc_OCR_thi_nap_binh_thuong(
+    scanned_pdf: Path, emb, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """US-024 — cùng tệp đó, bật OCR thì đi hết đường ống và tìm kiếm được.
+
+    Đây là điểm khác biệt của cả user story: từ **không dùng được gì** thành có
+    chunk, có nhúng, và có trích dẫn về đúng trang. Dùng engine giả để test đo
+    *đường ống*, không đo mô hình — chất lượng mô hình đo riêng ở US-048.
+    """
+    import app.adapters.ocr as mo_dun_ocr
+    from tests.test_ocr import FakeOcr, dong
+
+    noi_dung = [
+        dong("Điều 1. Phạm vi điều chỉnh", y=100),
+        dong("Quy chế này quy định về tổ chức và quản lý đào tạo trình độ đại học.", y=130),
+        dong("Người học được cấp bằng khi hoàn thành chương trình đào tạo.", y=160),
+    ]
+    gia = FakeOcr({1: noi_dung, 2: noi_dung, 3: noi_dung})
+    monkeypatch.setattr(mo_dun_ocr, "get_ocr_provider", lambda: gia)
+
+    result = _ingest(scanned_pdf, emb)
+
+    assert result.method == "ocr:fake-ocr"
+    assert result.chunk_count > 0
+    assert result.invariant_holds, "INV-1 phải đúng cả trên tài liệu scan"
+
+    with session_scope() as s:
+        src = _own_source(s)
+        assert src.status == "ready"
+        assert src.is_scanned is True
+        assert src.ocr_engine == "fake-ocr", "phải ghi lại ai đã đọc — US-048"
+        assert s.scalar(_OWNED_CHUNKS) > 0
 
 
 def test_pdf_co_text_khong_bi_danh_dau_la_scan(make_pdf, emb) -> None:
