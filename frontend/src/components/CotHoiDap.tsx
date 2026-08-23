@@ -35,10 +35,13 @@ export function CotHoiDap({
   nbId,
   sanSang,
   onChonTrichDan,
+  onTaiTaiLieu,
 }: {
   nbId: string;
   sanSang: boolean;
   onChonTrichDan: (t: TrichDan) => void;
+  /** Đưa người dùng tới chỗ tải tệp — trên màn hình hẹp cột nguồn đang bị ẩn. */
+  onTaiTaiLieu: () => void;
 }) {
   const [luot, setLuot] = useState<Luot[]>([]);
   const [cauHoi, setCauHoi] = useState("");
@@ -172,8 +175,17 @@ export function CotHoiDap({
             <p className="mt-1 text-sm text-mo">
               {sanSang
                 ? "Mỗi khẳng định trong câu trả lời sẽ kèm số đoạn. Bấm vào số đó để đọc đúng đoạn văn gốc."
-                : "Tải một tệp lên ở cột bên trái. Tài liệu cần được xử lý xong trước khi hỏi."}
+                : "Tài liệu cần được xử lý xong trước khi hỏi."}
             </p>
+            {/* US-042 AC-1 — lời gọi hành động, không chỉ mô tả tình trạng. */}
+            {!sanSang && (
+              <button
+                onClick={onTaiTaiLieu}
+                className="mt-4 rounded-md bg-nhan px-4 py-2 text-sm font-medium text-nen"
+              >
+                Tải tài liệu đầu tiên lên
+              </button>
+            )}
           </div>
         )}
 

@@ -72,7 +72,12 @@ export function CotTaiLieu({ trichDan }: { trichDan: TrichDan | null }) {
             </p>
           </div>
         ) : dangTai ? (
-          <p className="text-sm text-mo">Đang tải…</p>
+          // Khung xương có hình dạng của nội dung sắp tới — US-042 AC-2.
+          <div className="space-y-2">
+            <div className="h-4 w-2/3 animate-pulse rounded bg-vien" />
+            <div className="h-3 w-1/3 animate-pulse rounded bg-vien" />
+            <div className="mt-3 h-28 animate-pulse rounded-md bg-vien" />
+          </div>
         ) : loi ? (
           <p className="text-sm text-canh-bao">{loi}</p>
         ) : chiTiet ? (
@@ -87,12 +92,6 @@ export function CotTaiLieu({ trichDan }: { trichDan: TrichDan | null }) {
               {chiTiet.content}
             </pre>
 
-            {/* Toạ độ ký tự là cầu nối tới tô sáng theo vị trí trên trang
-                (US-015). Hiện ra để kiểm chứng được rằng trích dẫn trỏ vào một
-                khoảng cụ thể chứ không phải cả tài liệu. */}
-            <p className="mt-2 text-xs text-mo">
-              ký tự {chiTiet.char_start}–{chiTiet.char_end}
-            </p>
           </article>
         ) : null}
       </div>

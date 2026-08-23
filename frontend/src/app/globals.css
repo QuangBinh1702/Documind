@@ -1,29 +1,85 @@
 @import "tailwindcss";
 
-/* Bảng màu dùng chung với bàn thử ở backend, để hai giao diện nhìn không lệch
-   nhau trong lúc cả hai còn tồn tại song song. */
-@theme {
-  --color-nen: #fbfbfa;
-  --color-chu: #1c1c1a;
-  --color-mo: #6f6f68;
-  --color-vien: #e3e3de;
-  --color-the: #ffffff;
-  --color-nhan: #2f5d50;
-  --color-canh-bao: #8a5a00;
-  --color-canh-bao-nen: #fff8e6;
+/* Chế độ tối — US-043.
+ *
+ * Ba trạng thái, không phải hai: sáng, tối, và **theo hệ điều hành**. Trạng
+ * thái thứ ba là mặc định, và nó là lý do bảng màu phải viết theo kiểu này.
+ *
+ *   :root                      → bảng sáng, luôn có mặt
+ *   @media (prefers dark)      → đè khi hệ đang tối VÀ người dùng chưa chọn sáng
+ *   :root[data-theme="dark"]   → đè khi người dùng chủ động chọn tối
+ *
+ * Dòng thứ hai phải có `:not([data-theme="light"])`. Thiếu nó thì người dùng
+ * chọn "sáng" trên một máy đang để tối sẽ không đổi được gì — media query luôn
+ * thắng vì nó đứng sau.
+ *
+ * `@theme inline` để Tailwind sinh ra `bg-nen`, `text-mo`… trỏ tới biến chứ
+ * không nội suy giá trị lúc build; có vậy việc đổi biến ở runtime mới ăn.
+ */
+
+@theme inline {
+  --color-nen: var(--nen);
+  --color-chu: var(--chu);
+  --color-mo: var(--mo);
+  --color-vien: var(--vien);
+  --color-the: var(--the);
+  --color-nhan: var(--nhan);
+  --color-canh-bao: var(--canh-bao);
+  --color-canh-bao-nen: var(--canh-bao-nen);
+}
+
+:root {
+  --nen: #fbfbfa;
+  --chu: #1c1c1a;
+  --mo: #61615a;
+  --vien: #e3e3de;
+  --the: #ffffff;
+  --nhan: #2f5d50;
+  --canh-bao: #8a5a00;
+  --canh-bao-nen: #fff8e6;
+
+  /* Vùng tô sáng trích dẫn. Tách riêng khỏi bảng chung vì nó nằm **trên** nền
+     tài liệu chứ không phải trên nền giao diện, và phải đọc được ở cả hai chế
+     độ (AC-2). Nền vàng nhạt + chữ giữ nguyên màu, thay vì đảo màu chữ. */
+  --to-sang: #fde68a;
+  --to-sang-vien: #d9a441;
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  @theme {
-    --color-nen: #161815;
-    --color-chu: #e8e8e3;
-    --color-mo: #9a9a92;
-    --color-vien: #2c2f2a;
-    --color-the: #1d201c;
-    --color-nhan: #7fbfa8;
-    --color-canh-bao: #e0b268;
-    --color-canh-bao-nen: #2a2415;
+  :root:not([data-theme="light"]) {
+    --nen: #161815;
+    --chu: #e8e8e3;
+    --mo: #a3a39b;
+    --vien: #2c2f2a;
+    --the: #1d201c;
+    --nhan: #7fbfa8;
+    --canh-bao: #e0b268;
+    --canh-bao-nen: #2a2415;
+
+    /* Vàng nhạt trên nền tối làm chữ đen thành không đọc được. Ở chế độ tối
+       dùng nền hổ phách trầm, giữ chữ sáng. */
+    --to-sang: #5b4a1b;
+    --to-sang-vien: #a37f2c;
+
+    color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --nen: #161815;
+  --chu: #e8e8e3;
+  --mo: #a3a39b;
+  --vien: #2c2f2a;
+  --the: #1d201c;
+  --nhan: #7fbfa8;
+  --canh-bao: #e0b268;
+  --canh-bao-nen: #2a2415;
+  --to-sang: #5b4a1b;
+  --to-sang-vien: #a37f2c;
+
+  color-scheme: dark;
 }
 
 html,
@@ -32,8 +88,8 @@ body {
 }
 
 body {
-  background: var(--color-nen);
-  color: var(--color-chu);
+  background: var(--nen);
+  color: var(--chu);
   font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
 }
 
@@ -47,8 +103,10 @@ body {
   padding: 0 5px;
   margin: 0 1px;
   border-radius: 5px;
-  background: var(--color-nhan);
-  color: #fff;
+  background: var(--nhan);
+  /* Không dùng #fff cứng: ở chế độ tối `--nhan` là màu bạc hà sáng, và chữ
+     trắng trên nền đó gần như biến mất. */
+  color: var(--nen);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -56,6 +114,22 @@ body {
 }
 
 .chip-chet {
-  background: var(--color-mo);
+  background: var(--mo);
   cursor: not-allowed;
+}
+
+/* Đoạn văn được trích dẫn, tô sáng trong cột tài liệu — US-015, US-043 AC-2. */
+.to-sang {
+  background: var(--to-sang);
+  box-shadow: inset 0 0 0 1px var(--to-sang-vien);
+  border-radius: 3px;
+  padding: 1px 2px;
+}
+
+/* Khung xương lúc chờ dữ liệu — US-042 AC-2. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse {
+    animation: none;
+    opacity: 0.6;
+  }
 }

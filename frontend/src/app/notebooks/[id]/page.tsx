@@ -18,11 +18,13 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type Nguon, type Notebook, type TrichDan, api, token } from "@/lib/api";
 import { theoDoi, type SuKien } from "@/lib/stream";
-import { BaCot } from "@/components/BaCot";
+import { BaCot, type Tab } from "@/components/BaCot";
 import { CotHoiDap } from "@/components/CotHoiDap";
 import { CotNguon } from "@/components/CotNguon";
 import { CotTaiLieu } from "@/components/CotTaiLieu";
 import { NhanQuyenRiengTu } from "@/components/NhanQuyenRiengTu";
+import { NutChuDe } from "@/components/NutChuDe";
+import { MatKetNoi } from "@/components/MatKetNoi";
 
 export default function ManHinhNotebook() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +36,7 @@ export default function ManHinhNotebook() {
   const [loi, setLoi] = useState<string | null>(null);
   const [dangSuaTen, setDangSuaTen] = useState(false);
   const [vuaXong, setVuaXong] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("hoi");
   const daXong = useRef<Set<string>>(new Set());
 
   const tai = useCallback(async () => {
@@ -134,6 +137,7 @@ export default function ManHinhNotebook() {
 
   return (
     <div className="flex h-full flex-col">
+      <MatKetNoi />
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-vien px-5 py-3">
         <Link href="/notebooks" className="text-sm text-mo hover:text-chu">
           ← Notebook
@@ -173,6 +177,7 @@ export default function ManHinhNotebook() {
             : `${nguon.filter((s) => s.status === "ready").length}/${nguon.length} tài liệu đã xử lý`}
         </span>
         <NhanQuyenRiengTu />
+        <NutChuDe />
       </header>
 
       {/* US-022 AC-4 — báo khi tài liệu sẵn sàng, rồi tự biến mất. */}
@@ -187,9 +192,16 @@ export default function ManHinhNotebook() {
 
       <div className="min-h-0 flex-1">
         <BaCot
+          tab={tab}
+          onDoiTab={setTab}
           nguon={<CotNguon nbId={id} nguon={nguon} onDoiThay={() => void tai()} />}
           hoiDap={
-            <CotHoiDap nbId={id} sanSang={sanSang} onChonTrichDan={setTrichDan} />
+            <CotHoiDap
+              nbId={id}
+              sanSang={sanSang}
+              onChonTrichDan={setTrichDan}
+              onTaiTaiLieu={() => setTab("nguon")}
+            />
           }
           xemTaiLieu={<CotTaiLieu trichDan={trichDan} />}
         />

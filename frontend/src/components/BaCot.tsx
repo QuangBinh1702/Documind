@@ -17,20 +17,28 @@ const KHOA = "documind.docrong";
 const MIN = 220;
 const MAX = 560;
 
-type Tab = "nguon" | "hoi" | "xem";
+export type Tab = "nguon" | "hoi" | "xem";
 
 export function BaCot({
   nguon,
   hoiDap,
   xemTaiLieu,
+  tab: tabNgoai,
+  onDoiTab,
 }: {
   nguon: React.ReactNode;
   hoiDap: React.ReactNode;
   xemTaiLieu: React.ReactNode;
+  /** Điều khiển từ ngoài khi có chỗ khác cần mở một tab — ví dụ nút "tải tài
+   *  liệu đầu tiên lên" nằm trong cột hội thoại. Bỏ trống thì tự quản lý. */
+  tab?: Tab;
+  onDoiTab?: (t: Tab) => void;
 }) {
   const [rongTrai, setRongTrai] = useState(280);
   const [rongPhai, setRongPhai] = useState(380);
-  const [tab, setTab] = useState<Tab>("hoi");
+  const [tabTrong, setTabTrong] = useState<Tab>("hoi");
+  const tab = tabNgoai ?? tabTrong;
+  const setTab = onDoiTab ?? setTabTrong;
   const [hep, setHep] = useState(false);
   const keo = useRef<"trai" | "phai" | null>(null);
 
