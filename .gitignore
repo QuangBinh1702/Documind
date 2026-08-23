@@ -43,8 +43,12 @@ models/
 
 # ── Kết quả spike & đánh giá ──────────────────────────────
 spikes/out/
+# Số đo của một máy cụ thể tại một thời điểm cụ thể. Số liệu cuối cùng đi vào
+# báo cáo, không vào repo. Riêng `dataset/questions.json` thì ĐƯỢC commit —
+# US-044 AC-5 yêu cầu bộ test nằm trong repo để chạy lại được.
 eval/results/*.json
 eval/results/*.csv
+eval/results/*.svg
 !eval/results/.gitkeep
 
 # ── Danh sách tải: sinh lại được từ nguon.csv ─────────────
