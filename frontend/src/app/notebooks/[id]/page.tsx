@@ -18,6 +18,7 @@ import { BaCot } from "@/components/BaCot";
 import { CotHoiDap } from "@/components/CotHoiDap";
 import { CotNguon } from "@/components/CotNguon";
 import { CotTaiLieu } from "@/components/CotTaiLieu";
+import { NhanQuyenRiengTu } from "@/components/NhanQuyenRiengTu";
 
 const NHIP_HOI_LAI_MS = 2000;
 
@@ -128,6 +129,7 @@ export default function ManHinhNotebook() {
             ? "chưa có tài liệu"
             : `${nguon.filter((s) => s.status === "ready").length}/${nguon.length} tài liệu đã xử lý`}
         </span>
+        <NhanQuyenRiengTu />
       </header>
 
       <div className="min-h-0 flex-1">

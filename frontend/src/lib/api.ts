@@ -216,6 +216,9 @@ export const api = {
       method: "PATCH",
     }),
 
+  cauHinh: () =>
+    goi<{ du_lieu_roi_khoi_may: boolean; che_do: string }>("/api/config"),
+
   trichDan: (chunkId: number) =>
     goi<{
       chunk_id: number;

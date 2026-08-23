@@ -270,6 +270,43 @@ def test_notebook_cua_nguoi_khac_tra_ve_404_khong_phai_403(client: TestClient) -
         assert goi().status_code == 404
 
 
+def test_cau_hinh_khong_lo_ten_mo_hinh(client: TestClient, monkeypatch) -> None:
+    """Giao diện chỉ cần biết dữ liệu có rời khỏi máy không.
+
+    Bản đầu hiện thẳng `ollama-cloud:gemma4:31b` và chữ "Privacy Mode" lên màn
+    hình. Đó là định danh nội bộ và tên một biến trong `.env` — người dùng không
+    làm gì được với chúng, nhưng vẫn phải đọc ở mọi câu trả lời. Tên mô hình
+    thuộc về log và siêu dữ liệu, không thuộc về giao diện.
+    """
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "default_mode", "fast")
+    tokens = _dang_ky(client)
+    body = client.get("/api/config", headers=_headers(tokens)).json()
+
+    assert body["du_lieu_roi_khoi_may"] is True
+    assert body["che_do"] == "nhanh"
+
+    tho = str(body).lower()
+    for lo in ("gemma", "gemini", "ollama", "bge", "model", "provider", "api_key"):
+        assert lo not in tho, f"cấu hình lộ '{lo}' ra giao diện"
+
+
+def test_cau_hinh_doi_khoi_dang_o_che_do_rieng_tu(client: TestClient, monkeypatch) -> None:
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "default_mode", "privacy")
+    tokens = _dang_ky(client)
+    body = client.get("/api/config", headers=_headers(tokens)).json()
+    assert body["du_lieu_roi_khoi_may"] is False
+    assert body["che_do"] == "rieng-tu"
+
+
+def test_cau_hinh_doi_dang_nhap(client: TestClient) -> None:
+    """Đây là thông tin về cách máy chủ xử lý dữ liệu của một tài khoản."""
+    assert client.get("/api/config").status_code == 401
+
+
 def test_chi_thay_notebook_cua_minh(client: TestClient) -> None:
     a = _dang_ky(client, EMAIL)
     b = _dang_ky(client, EMAIL_2)
