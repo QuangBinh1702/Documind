@@ -35,6 +35,10 @@ dependencies = [
     "pymupdf>=1.24,<2",
     "python-docx>=1.1",
     "markdown-it-py>=3.0",
+    # Ảnh tải lên đi qua Pillow để xoay theo EXIF và đưa về kích thước OCR đọc
+    # được (US-026). Nằm ở phụ thuộc lõi chứ không ở nhóm `ml`: bước tiền xử lý
+    # chạy cả khi engine OCR chưa được cài, và test của nó cũng vậy.
+    "pillow>=11.0",
     "python-magic-bin>=0.4.14; sys_platform == 'win32'",
     "python-magic>=0.4.27; sys_platform != 'win32'",
 
@@ -57,6 +61,13 @@ ml = [
     # KHÔNG dùng FlagEmbedding: nó gọi `tokenizer.prepare_for_model`, một API đã
     # bị gỡ ở transformers 5, nên reranker chết ngay lượt chấm đầu tiên.
     "sentence-transformers>=3.3",
+    # OCR mặc định — cùng họ mô hình PP-OCRv5 nhưng chạy qua ONNX Runtime, vài
+    # chục MB thay vì vài trăm.
+    "rapidocr>=3.0",
+    "onnxruntime>=1.19",
+    # Giữ lại cho US-048 (so nhiều engine). Hiện KHÔNG chạy được:
+    # paddlepaddle 3.0.0 từ chối nạp chính mô hình mà paddleocr tải về
+    # (`ValueError: Type of attribute: strides is not right`).
     "paddleocr>=3.0",
 ]
 dev = [

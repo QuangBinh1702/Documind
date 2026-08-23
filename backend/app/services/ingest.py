@@ -29,7 +29,15 @@ from app.settings import settings
 from app.text.chunker import chunk_document
 from app.text.quality import TextQuality
 
-__all__ = ["SUFFIX_TO_KIND", "IngestResult", "ingest_file", "ingest_file_sync"]
+__all__ = [
+    "KINDS_CAN_OCR",
+    "MIME_BY_SUFFIX",
+    "SUFFIX_TO_KIND",
+    "IngestResult",
+    "ingest_file",
+    "ingest_file_sync",
+    "mime_cho",
+]
 
 log = logging.getLogger(__name__)
 
@@ -38,14 +46,33 @@ SUFFIX_TO_KIND = {
     ".docx": "docx",
     ".txt": "txt",
     ".md": "md",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
 }
 
-MIME_BY_KIND = {
-    "pdf": "application/pdf",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "txt": "text/plain",
-    "md": "text/markdown",
+# MIME tra theo **đuôi tệp**, không tra theo `kind`. Bốn đuôi ảnh cùng cho ra
+# `kind='image'` nhưng là bốn kiểu MIME khác nhau, và MinIO trả lại đúng kiểu
+# nào thì trình duyệt hiển thị được ảnh — sai kiểu thì nó tải về thay vì mở.
+MIME_BY_SUFFIX = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
 }
+
+# Loại nguồn phải đi qua nhận dạng chữ vì bản thân nó không có lớp văn bản nào.
+KINDS_CAN_OCR = {"image"}
+
+
+def mime_cho(filename: str | Path) -> str:
+    """Kiểu MIME của một tệp theo đuôi của nó."""
+    return MIME_BY_SUFFIX.get(Path(filename).suffix.lower(), "application/octet-stream")
 
 
 @dataclass
@@ -122,12 +149,40 @@ async def ingest_file(
             # tiền tố để phân biệt được với nguồn tải lên qua API.
             storage_key=f"cli://{path.resolve().as_posix()}",
             kind=kind,
-            mime_type=MIME_BY_KIND[kind],
+            mime_type=mime_cho(path),
             size_bytes=path.stat().st_size,
         )
 
-    step(f"Trích xuất {path.name} …")
-    result = extract(path, kind)
+    if kind in KINDS_CAN_OCR:
+        # ── Ảnh (US-025) ────────────────────────────────
+        #
+        # Không có lớp văn bản để thử trước, nên đi thẳng OCR. Tắt OCR thì nói
+        # rõ điều đó thay vì báo "không trích xuất được" — nguyên nhân và cách
+        # sửa nằm ở hai chỗ khác nhau.
+        if not settings.ocr_enabled:
+            source.status = "failed"
+            source.error_code = "OCR_DISABLED"
+            source.error_message = (
+                "Ảnh chỉ đọc được bằng nhận dạng chữ, mà tính năng này đang tắt "
+                "(OCR_ENABLED=false)."
+            )
+            session.flush()
+            raise ExtractionError(source.error_code, source.error_message)
+
+        from app.adapters.extract.image import extract_image
+        from app.adapters.ocr import get_ocr_provider
+
+        ocr = get_ocr_provider()
+        step(f"Nhận dạng chữ trong ảnh bằng {ocr.name} …")
+        source.status = "ocr"
+        source.ocr_engine = ocr.name
+        session.flush()
+
+        result = extract_image(path, ocr)
+    else:
+        step(f"Trích xuất {path.name} …")
+        result = extract(path, kind)
+
     quality = result.quality
 
     source.page_count = result.page_count

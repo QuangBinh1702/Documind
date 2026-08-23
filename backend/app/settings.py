@@ -93,6 +93,16 @@ class Settings(BaseSettings):
     ocr_lang: str = "vi"
     """Ngôn ngữ cho engine `paddle`."""
 
+    image_min_side: int = 1600
+    """Phóng ảnh nhỏ lên tới cạnh dài này trước khi OCR — US-026.
+
+    Mô hình nhận dạng cần chữ cao khoảng 32 px. Ảnh chụp màn hình một đoạn chữ
+    thường thấp hơn nhiều, và OCR trả về rỗng chứ không báo lỗi gì.
+    """
+
+    image_max_side: int = 3200
+    """Thu ảnh lớn về cạnh dài này. Ảnh 12 MP không đọc tốt hơn ảnh 4 MP."""
+
     ocr_dpi: int = 300
     ocr_min_confidence: float = Field(default=0.60, ge=0.0, le=1.0)
     """Dòng dưới ngưỡng này được đánh dấu để người rà (US-027), không bị bỏ."""

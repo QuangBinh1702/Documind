@@ -8,7 +8,7 @@
  * ra thì người dùng hỏi rồi tưởng hệ thống dốt.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, type Nguon, api, taiLen } from "@/lib/api";
 
 const BIEU_TUONG: Record<string, string> = {
@@ -16,7 +16,10 @@ const BIEU_TUONG: Record<string, string> = {
   docx: "DOC",
   txt: "TXT",
   md: "MD",
+  image: "ẢNH",
 };
+
+const DUOI_NHAN = ".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp";
 
 const NHAN_TRANG_THAI: Record<string, string> = {
   queued: "đang chờ",
@@ -42,10 +45,11 @@ export function CotNguon({
   const [keoVao, setKeoVao] = useState(false);
   const chonTep = useRef<HTMLInputElement>(null);
 
-  async function tai(files: FileList | null) {
-    if (!files?.length) return;
+  async function tai(files: Iterable<File> | FileList | null) {
+    const ds = files ? Array.from(files) : [];
+    if (!ds.length) return;
     setLoi(null);
-    for (const f of Array.from(files)) {
+    for (const f of ds) {
       setDangTai({ ten: f.name, phanTram: 0 });
       try {
         await taiLen(nbId, f, (p) => setDangTai({ ten: f.name, phanTram: p }));
@@ -56,6 +60,45 @@ export function CotNguon({
     }
     setDangTai(null);
   }
+
+  /**
+   * Dán ảnh từ clipboard — US-025 AC-3.
+   *
+   * Ảnh chụp màn hình không có tên tệp: `getAsFile()` trả về một `File` tên
+   * "image.png" hoặc rỗng. Đặt tên theo thời điểm dán để danh sách nguồn còn
+   * phân biệt được nhiều ảnh dán liên tiếp với nhau.
+   *
+   * Nghe ở `window` chứ không ở một ô nhập: người dùng vừa chụp màn hình xong
+   * thì con trỏ đang ở đâu là chuyện ngẫu nhiên. Nhưng bỏ qua khi họ đang gõ,
+   * vì dán chữ vào ô câu hỏi là việc khác hẳn.
+   */
+  useEffect(() => {
+    function danh(e: ClipboardEvent) {
+      const dich = e.target as HTMLElement | null;
+      if (dich?.closest("input, textarea, [contenteditable='true']")) return;
+
+      const anh = Array.from(e.clipboardData?.items ?? [])
+        .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+        .map((it) => it.getAsFile())
+        .filter((f): f is File => f !== null)
+        .map((f, i) => {
+          const duoi = f.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png";
+          const dau = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+          return new File([f], `anh-dan-${dau}${i ? `-${i + 1}` : ""}.${duoi}`, {
+            type: f.type,
+          });
+        });
+
+      if (anh.length) {
+        e.preventDefault();
+        void tai(anh);
+      }
+    }
+
+    window.addEventListener("paste", danh);
+    return () => window.removeEventListener("paste", danh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nbId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -79,7 +122,8 @@ export function CotNguon({
         }`}
       >
         <p className="text-sm">Kéo thả tệp vào đây</p>
-        <p className="mt-1 text-xs text-mo">PDF · DOCX · TXT · MD, tối đa 50 MB</p>
+        <p className="mt-1 text-xs text-mo">PDF · DOCX · TXT · MD · ảnh</p>
+        <p className="mt-0.5 text-xs text-mo">hoặc dán ảnh bằng Ctrl+V</p>
         <button
           onClick={() => chonTep.current?.click()}
           className="mt-3 rounded-md border border-nhan px-3 py-1.5 text-sm text-nhan"
@@ -90,7 +134,7 @@ export function CotNguon({
           ref={chonTep}
           type="file"
           multiple
-          accept=".pdf,.docx,.txt,.md"
+          accept={DUOI_NHAN}
           className="hidden"
           onChange={(e) => {
             void tai(e.target.files);
@@ -142,7 +186,8 @@ export function CotNguon({
                   </p>
                   <p className="mt-0.5 text-xs text-mo">
                     {BIEU_TUONG[s.kind] ?? s.kind.toUpperCase()}
-                    {s.page_count ? ` · ${s.page_count} trang` : ""} ·{" "}
+                    {/* Ảnh luôn là "1 trang" — một con số không nói gì thêm. */}
+                    {s.kind !== "image" && s.page_count ? ` · ${s.page_count} trang` : ""} ·{" "}
                     <TrangThai nguon={s} />
                   </p>
                   {s.status === "failed" && s.error_message && (

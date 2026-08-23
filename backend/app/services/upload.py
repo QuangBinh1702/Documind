@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.storage import minio_store
 from app.models.knowledge import Notebook, Source
-from app.services.ingest import MIME_BY_KIND, SUFFIX_TO_KIND
+from app.services.ingest import SUFFIX_TO_KIND, mime_cho
 from app.settings import settings
 
 __all__ = ["UploadError", "nhan_tep"]
@@ -46,6 +46,17 @@ _CHU_KY: dict[str, tuple[bytes, ...]] = {
 # txt và md không có chữ ký. Kiểm bằng cách khác: giải mã được UTF-8 hoặc không
 # chứa byte NUL — tệp nhị phân đổi đuôi thành .txt gần như luôn có byte NUL.
 _TEXT_KINDS = {"txt", "md"}
+
+# Ảnh kiểm theo đuôi chứ không theo `kind`, vì cả bốn đuôi đều cho `kind='image'`
+# nhưng có chữ ký khác hẳn nhau. Không tách ra thì một tệp PNG đổi tên thành
+# `.jpg` vẫn lọt, và Pillow sẽ mở được nó — nhưng MIME ghi vào MinIO thì sai, và
+# trình duyệt tải ảnh về thay vì hiển thị.
+_CHU_KY_ANH: dict[str, tuple[bytes, ...]] = {
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".webp": (b"RIFF",),
+}
 
 
 class UploadError(Exception):
@@ -75,13 +86,29 @@ def _kiem_duoi(ten: str) -> str:
     return kind
 
 
-def _kiem_noi_dung(data: bytes, kind: str) -> None:
+def _kiem_noi_dung(data: bytes, kind: str, suffix: str) -> None:
     """AC-5 — xác minh bằng nội dung, không chỉ bằng phần mở rộng."""
     if kind in _TEXT_KINDS:
         if b"\x00" in data[:8192]:
             raise UploadError(
                 "Tệp khai là văn bản nhưng nội dung là dữ liệu nhị phân.",
                 "CONTENT_MISMATCH",
+            )
+        return
+
+    if kind == "image":
+        chu_ky_anh = _CHU_KY_ANH.get(suffix, ())
+        if not any(data.startswith(c) for c in chu_ky_anh):
+            raise UploadError(
+                f"Nội dung tệp không phải ảnh {suffix.lstrip('.').upper()} "
+                f"dù phần mở rộng nói vậy.",
+                "CONTENT_MISMATCH",
+            )
+        # RIFF là vỏ chung của nhiều định dạng (WAV, AVI). Chỉ WebP mới có
+        # `WEBP` ở byte 8 — không kiểm thì một tệp âm thanh lọt qua.
+        if suffix == ".webp" and data[8:12] != b"WEBP":
+            raise UploadError(
+                "Tệp có vỏ RIFF nhưng không phải ảnh WebP.", "CONTENT_MISMATCH"
             )
         return
 
@@ -102,6 +129,7 @@ def nhan_tep(
 ) -> KetQuaNhan:
     """Kiểm tra, lưu vào MinIO, tạo bản ghi `sources` ở trạng thái `queued`."""
     kind = _kiem_duoi(filename)
+    suffix = Path(filename).suffix.lower()
 
     dang_co = session.scalar(
         select(func.count()).select_from(Source).where(Source.notebook_id == notebook.id)
@@ -113,24 +141,27 @@ def nhan_tep(
             "TOO_MANY_SOURCES",
         )
 
-    gioi_han = settings.max_file_mb * 1024 * 1024
-    if len(data) > gioi_han:
+    # Ảnh có hạn mức riêng và thấp hơn nhiều. Một tấm ảnh 50 MB gần như chắc
+    # chắn là ảnh máy ảnh chưa nén — nó chỉ làm OCR chậm chứ không đọc ra được
+    # nhiều chữ hơn, vì `image_max_side` sẽ thu nó lại ngay sau đó.
+    mb = settings.max_image_mb if kind == "image" else settings.max_file_mb
+    if len(data) > mb * 1024 * 1024:
         raise UploadError(
-            f"Tệp {len(data) / 1024 / 1024:.1f} MB vượt giới hạn "
-            f"{settings.max_file_mb} MB.",
+            f"Tệp {len(data) / 1024 / 1024:.1f} MB vượt giới hạn {mb} MB.",
             "FILE_TOO_LARGE",
         )
     if not data:
         raise UploadError("Tệp rỗng.", "FILE_EMPTY")
 
-    _kiem_noi_dung(data, kind)
+    _kiem_noi_dung(data, kind, suffix)
 
+    mime = mime_cho(filename)
     storage_key = minio_store.luu_tep(
         data,
         user_id=notebook.user_id,
         notebook_id=notebook.id,
-        suffix=Path(filename).suffix,
-        content_type=MIME_BY_KIND[kind],
+        suffix=suffix,
+        content_type=mime,
     )
 
     source = Source(
@@ -139,7 +170,7 @@ def nhan_tep(
         original_name=filename,
         storage_key=storage_key,
         kind=kind,
-        mime_type=MIME_BY_KIND[kind],
+        mime_type=mime,
         size_bytes=len(data),
         status="queued",
         progress=0,

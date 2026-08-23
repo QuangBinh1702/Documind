@@ -330,6 +330,63 @@ def test_ban_scan_duoc_OCR_thi_nap_binh_thuong(
         assert s.scalar(_OWNED_CHUNKS) > 0
 
 
+def test_anh_nap_duoc_qua_OCR(tmp_path: Path, emb, monkeypatch: pytest.MonkeyPatch) -> None:
+    """US-025 — ảnh là một loại nguồn thật, không phải ngoại lệ.
+
+    `ALLOWED_EXTENSIONS` đã liệt kê png/jpg/webp từ đầu nhưng `SUFFIX_TO_KIND`
+    thì không, nên tải ảnh lên là lỗi `KIND_UNSUPPORTED` — cấu hình hứa một
+    đằng, mã làm một nẻo.
+    """
+    import app.adapters.ocr as mo_dun_ocr
+    from tests.test_ocr import FakeOcr, dong
+
+    pil = pytest.importorskip("PIL.Image", reason="cần Pillow")
+    p = tmp_path / "bang-diem.png"
+    pil.new("RGB", (1600, 900), "white").save(p)
+
+    gia = FakeOcr(
+        {
+            1: [
+                dong("Điều 1. Phạm vi điều chỉnh", y=100),
+                dong("Quy chế này quy định về tổ chức đào tạo trình độ đại học.", y=140),
+            ]
+        }
+    )
+    monkeypatch.setattr(mo_dun_ocr, "get_ocr_provider", lambda: gia)
+
+    result = _ingest(p, emb)
+    assert result.kind == "image"
+    assert result.method == "image-ocr:fake-ocr"
+    assert result.chunk_count > 0
+    assert result.invariant_holds
+
+    with session_scope() as s:
+        src = _own_source(s)
+        assert src.status == "ready"
+        assert src.kind == "image"
+        assert src.mime_type == "image/png"
+        assert src.ocr_engine == "fake-ocr"
+
+
+def test_anh_khi_tat_OCR_bao_dung_ly_do(
+    tmp_path: Path, emb, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tắt OCR thì ảnh không đọc được — nhưng phải nói đúng vì sao.
+
+    "Không trích xuất được" và "tính năng đang tắt" dẫn tới hai cách sửa khác
+    hẳn nhau.
+    """
+    pil = pytest.importorskip("PIL.Image", reason="cần Pillow")
+    p = tmp_path / "anh.png"
+    pil.new("RGB", (800, 600), "white").save(p)
+
+    monkeypatch.setattr(settings, "ocr_enabled", False)
+
+    with session_scope() as s, pytest.raises(ExtractionError) as exc:
+        ingest_file_sync(s, p, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER)
+    assert exc.value.code == "OCR_DISABLED"
+
+
 def test_pdf_co_text_khong_bi_danh_dau_la_scan(make_pdf, emb) -> None:
     from tests.conftest import VI_PARAGRAPHS
 
