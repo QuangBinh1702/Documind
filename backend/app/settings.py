@@ -103,6 +103,18 @@ class Settings(BaseSettings):
     image_max_side: int = 3200
     """Thu ảnh lớn về cạnh dài này. Ảnh 12 MP không đọc tốt hơn ảnh 4 MP."""
 
+    translate_query_enabled: bool = True
+    """Dịch câu hỏi sang tiếng Việt trước khi truy xuất — US-037.
+
+    Chỉ chạy khi câu hỏi **không** phải tiếng Việt, nên nó không tốn gì với đại
+    đa số lượt hỏi. Tắt thì hỏi bằng tiếng Anh gần như luôn nhận "không tìm thấy
+    thông tin này": cross-encoder chấm cặp khác ngôn ngữ thấp hơn hẳn, và cổng
+    ngưỡng chặn lại. Số đo ở `app/services/translate.py`.
+
+    Đây cũng là một trục của bảng ablation: tắt nó đi để đo đúng phần mà bước
+    dịch đóng góp.
+    """
+
     worker_mode: Literal["celery", "inline"] = "celery"
     """Ai chạy việc nạp tài liệu — US-021.
 

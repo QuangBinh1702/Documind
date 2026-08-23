@@ -6,6 +6,7 @@ import pytest
 
 from app.services import prompt as P
 from app.services.intent import chitchat_system_prompt
+from app.services.translate import dich_de_truy_xuat
 from app.text.language import nhan_dien
 
 
@@ -104,3 +105,82 @@ def test_system_prompt_tieng_anh_nhac_cau_tu_choi_tieng_anh():
 def test_prompt_tro_chuyen_cung_doi_theo_ngon_ngu():
     assert "in English" in chitchat_system_prompt("en")
     assert "tiếng Việt" in chitchat_system_prompt("vi")
+
+
+# ═══════════════════════════════════════════════════════
+# Dịch câu hỏi để truy xuất
+# ═══════════════════════════════════════════════════════
+
+
+class LLMGia:
+    """Trả về một bản dịch cố định, hoặc ném lỗi."""
+
+    is_local = True
+    name = "gia"
+
+    def __init__(self, tra_ve: str = "Điều kiện tốt nghiệp là gì?", hong: bool = False):
+        self.tra_ve = tra_ve
+        self.hong = hong
+        self.so_lan_goi = 0
+
+    async def stream(self, system, messages, **kw):
+        self.so_lan_goi += 1
+        if self.hong:
+            raise ConnectionError("mô hình không phản hồi")
+        yield self.tra_ve
+
+
+async def test_cau_tieng_viet_khong_goi_mo_hinh():
+    """Đại đa số lượt hỏi là tiếng Việt — bước này phải miễn phí với chúng."""
+    llm = LLMGia()
+    ket, da_dich = await dich_de_truy_xuat("điều kiện tốt nghiệp", llm=llm, ngon_ngu="vi")
+
+    assert ket == "điều kiện tốt nghiệp"
+    assert da_dich is False
+    assert llm.so_lan_goi == 0, "không được gọi mô hình cho câu tiếng Việt"
+
+
+async def test_cau_tieng_anh_duoc_dich():
+    """Đo thật: không dịch thì câu hỏi tiếng Anh chỉ được 0.1428 và bị cổng
+    ngưỡng chặn, dù tài liệu chứa đúng câu trả lời."""
+    llm = LLMGia()
+    ket, da_dich = await dich_de_truy_xuat(
+        "What are the graduation requirements?", llm=llm, ngon_ngu="en"
+    )
+
+    assert ket == "Điều kiện tốt nghiệp là gì?"
+    assert da_dich is True
+
+
+async def test_mo_hinh_hong_thi_dung_cau_goc():
+    """Một lượt dịch hỏng làm truy xuất kém đi; ném lỗi làm hỏng cả câu hỏi."""
+    ket, da_dich = await dich_de_truy_xuat(
+        "What are the graduation requirements?", llm=LLMGia(hong=True), ngon_ngu="en"
+    )
+
+    assert ket == "What are the graduation requirements?"
+    assert da_dich is False
+
+
+async def test_bo_phan_giai_thich_thua():
+    """Mô hình hay trả về nhiều dòng dù đã dặn chỉ trả bản dịch."""
+    llm = LLMGia(tra_ve='"Điều kiện tốt nghiệp là gì?"\n\nGiải thích: đây là...')
+    ket, _ = await dich_de_truy_xuat("x?", llm=llm, ngon_ngu="en")
+    assert ket == "Điều kiện tốt nghiệp là gì?"
+
+
+async def test_ban_dich_rong_thi_giu_cau_goc():
+    ket, da_dich = await dich_de_truy_xuat("x?", llm=LLMGia(tra_ve="   "), ngon_ngu="en")
+    assert ket == "x?"
+    assert da_dich is False
+
+
+async def test_van_ban_qua_dai_khong_dich():
+    """Câu dài như vậy là một đoạn dán vào, không phải câu hỏi."""
+    llm = LLMGia()
+    dai = "word " * 200
+    ket, da_dich = await dich_de_truy_xuat(dai, llm=llm, ngon_ngu="en")
+
+    assert ket == dai
+    assert da_dich is False
+    assert llm.so_lan_goi == 0

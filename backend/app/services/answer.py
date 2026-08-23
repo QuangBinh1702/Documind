@@ -36,6 +36,7 @@ from app.services import prompt as P
 from app.services.grounding import GroundingDecision, decide
 from app.services.intent import chitchat_system_prompt, classify
 from app.services.retrieval import ScoredChunk, retrieve
+from app.services.translate import dich_de_truy_xuat
 from app.services.verifier import STRICTER_HINT, verify_answer
 from app.settings import settings
 from app.text.language import nhan_dien as nhan_dien_ngon_ngu
@@ -213,11 +214,26 @@ async def answer_question(
     # điều đó an toàn ở đây vì mỗi lượt hỏi có phiên riêng và không luồng nào
     # dùng chung nó cùng lúc — thứ SQLAlchemy cấm là dùng ĐỒNG THỜI, không phải
     # dùng lần lượt từ hai luồng.
+    # Câu hỏi khác ngôn ngữ tài liệu thì dịch TRƯỚC KHI truy xuất — US-037.
+    #
+    # Không có bước này thì tính năng song ngữ chỉ đúng một nửa: đo thật cho
+    # thấy "What are the graduation requirements?" chỉ được 0.1428 trên đúng tài
+    # liệu chứa câu trả lời, nên cổng ngưỡng chặn lại và người dùng luôn nhận
+    # "không tìm thấy". Xem `app/services/translate.py`.
+    #
+    # Chỉ đổi câu dùng để TÌM. Câu gốc vẫn là thứ đưa cho mô hình sinh câu trả
+    # lời, nên câu trả lời vẫn bằng tiếng của người hỏi.
+    cau_tim = question
+    if settings.translate_query_enabled:
+        cau_tim, da_dich = await dich_de_truy_xuat(question, llm=llm, ngon_ngu=ngon_ngu)
+        if da_dich:
+            yield {"type": "condensed", "query": cau_tim}
+
     yield {"type": "status", "stage": "retrieving"}
     retrieval = await asyncio.to_thread(
         retrieve,
         session,
-        question,
+        cau_tim,
         notebook_id=notebook_id,
         embedder=embedder,
         owner_id=owner_id,
@@ -226,7 +242,7 @@ async def answer_question(
 
     # ── Xếp hạng lại và cổng ngưỡng ─────────────────────
     yield {"type": "status", "stage": "reranking"}
-    decision = await asyncio.to_thread(decide, question, retrieval, reranker=reranker)
+    decision = await asyncio.to_thread(decide, cau_tim, retrieval, reranker=reranker)
 
     if not decision.grounded:
         elapsed = int((time.perf_counter() - started) * 1000)
