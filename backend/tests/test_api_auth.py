@@ -315,3 +315,40 @@ def test_chi_thay_notebook_cua_minh(client: TestClient) -> None:
 
     cua_a = client.get("/api/notebooks", headers=_headers(a)).json()
     assert [n["title"] for n in cua_a] == ["Của A"]
+
+
+# ══════════════════════════════════════════════════════
+# Ngôn ngữ giao diện — US-036
+# ══════════════════════════════════════════════════════
+
+
+def test_ngon_ngu_mac_dinh_la_tieng_viet(client: TestClient) -> None:
+    """Đồ án phục vụ người dùng Việt trước; tiếng Anh là lựa chọn thêm."""
+    tokens = _dang_ky(client)
+    assert client.get("/api/auth/me", headers=_headers(tokens)).json()["locale"] == "vi"
+
+
+def test_doi_ngon_ngu_va_nho_qua_lan_dang_nhap_sau(client: TestClient) -> None:
+    """AC-2 — lưu theo TÀI KHOẢN, nên đăng nhập ở máy khác vẫn đúng.
+
+    Lưu ở localStorage cũng nhớ được, nhưng nhớ theo máy — và đó chính là ca
+    test này bắt: đăng nhập lại là một client mới, không mang theo gì cả.
+    """
+    tokens = _dang_ky(client)
+    r = client.patch("/api/auth/me", json={"locale": "en"}, headers=_headers(tokens))
+    assert r.status_code == 200
+    assert r.json()["locale"] == "en"
+
+    lai = client.post("/api/auth/login", json={"email": EMAIL, "password": MAT_KHAU})
+    assert client.get("/api/auth/me", headers=_headers(lai.json())).json()["locale"] == "en"
+
+
+def test_ngon_ngu_la_bi_tu_choi(client: TestClient) -> None:
+    """Giao diện chỉ có hai bảng chuỗi; nhận thêm giá trị nào cũng là nói dối."""
+    tokens = _dang_ky(client)
+    r = client.patch("/api/auth/me", json={"locale": "fr"}, headers=_headers(tokens))
+    assert r.status_code == 422
+
+
+def test_doi_ngon_ngu_doi_dang_nhap(client: TestClient) -> None:
+    assert client.patch("/api/auth/me", json={"locale": "en"}).status_code == 401

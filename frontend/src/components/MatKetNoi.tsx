@@ -15,12 +15,14 @@
 
 import { useEffect, useState } from "react";
 import { GOC_API } from "@/lib/api";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 const NHIP_DAU_MS = 2000;
 const NHIP_TOI_DA_MS = 30_000;
 
 export function MatKetNoi() {
   const [mat, setMat] = useState(false);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     let dung = false;
@@ -78,7 +80,7 @@ export function MatKetNoi() {
       role="alert"
       className="shrink-0 border-b border-canh-bao bg-canh-bao-nen px-5 py-2 text-sm text-canh-bao"
     >
-      Mất kết nối tới máy chủ. Đang tự thử lại — công việc của bạn không bị mất.
+      {t("chung.matKetNoi")}
     </div>
   );
 }

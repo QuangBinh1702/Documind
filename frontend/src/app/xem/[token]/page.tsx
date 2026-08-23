@@ -14,6 +14,8 @@ import { useParams } from "next/navigation";
 import { GOC_API, type NotebookChiaSe, api } from "@/lib/api";
 import { type SuKien } from "@/lib/stream";
 import { NutChuDe } from "@/components/NutChuDe";
+import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import type { Khoa } from "@/lib/i18n";
 
 type Luot = {
   cauHoi: string;
@@ -24,10 +26,10 @@ type Luot = {
   loi: string | null;
 };
 
-const NHAN_BUOC: Record<string, string> = {
-  retrieving: "đang tìm trong tài liệu",
-  reranking: "đang xếp hạng đoạn liên quan",
-  generating: "đang viết câu trả lời",
+const KHOA_BUOC: Record<string, Khoa> = {
+  retrieving: "buoc.retrieving",
+  reranking: "buoc.reranking",
+  generating: "buoc.generating",
 };
 
 export default function TrangXemChiaSe() {
@@ -39,14 +41,13 @@ export default function TrangXemChiaSe() {
   const [dangHoi, setDangHoi] = useState(false);
   const [doan, setDoan] = useState<{ title: string; content: string } | null>(null);
   const cuoiRef = useRef<HTMLDivElement>(null);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     api
       .notebookChiaSe(token)
       .then(setNb)
-      .catch(() =>
-        setLoi("Liên kết này không tồn tại hoặc đã bị thu hồi."),
-      );
+      .catch(() => setLoi(t("chiaSe.hetHieuLuc")));
   }, [token]);
 
   useEffect(() => {
@@ -107,7 +108,13 @@ export default function TrangXemChiaSe() {
           }
           switch (e.type) {
             case "status":
-              capNhat((l) => ({ ...l, trangThai: NHAN_BUOC[String(e.stage)] ?? null }));
+              capNhat((l) => ({
+                ...l,
+                trangThai:
+                  String(e.stage) in KHOA_BUOC
+                    ? t(KHOA_BUOC[String(e.stage)])
+                    : null,
+              }));
               break;
             case "token":
               capNhat((l) => ({ ...l, traLoi: l.traLoi + String(e.text) }));
@@ -134,7 +141,7 @@ export default function TrangXemChiaSe() {
         }
       }
     } catch {
-      capNhat((l) => ({ ...l, loi: "Không kết nối được tới máy chủ.", xong: true }));
+      capNhat((l) => ({ ...l, loi: t("auth.khongKetNoi"), xong: true }));
     } finally {
       setDangHoi(false);
     }
@@ -146,7 +153,7 @@ export default function TrangXemChiaSe() {
         <div>
           <p className="font-medium">{loi}</p>
           <p className="mt-1 text-sm text-mo">
-            Hỏi người đã gửi liên kết để nhận một liên kết mới.
+            {t("chiaSe.xinLienKetMoi")}
           </p>
         </div>
       </main>
@@ -158,9 +165,10 @@ export default function TrangXemChiaSe() {
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-vien px-5 py-3">
         <span className="font-medium tracking-tight">{nb?.title ?? "…"}</span>
         <span className="rounded-md border border-vien px-1.5 py-0.5 text-[11px] text-mo">
-          chỉ đọc
+          {t("chiaSe.chiDoc")}
         </span>
         <div className="ml-auto flex items-center gap-3">
+          <NutNgonNgu />
           <NutChuDe />
         </div>
       </header>
@@ -168,7 +176,7 @@ export default function TrangXemChiaSe() {
       <div className="grid min-h-0 flex-1 lg:grid-cols-[260px_1fr_320px]">
         <aside className="hidden overflow-y-auto border-r border-vien bg-the lg:block">
           <p className="border-b border-vien px-4 py-3 text-xs font-semibold uppercase tracking-wider text-mo">
-            Tài liệu
+            {t("cot.taiLieu")}
           </p>
           <ul>
             {(nb?.nguon ?? []).map((s) => (
@@ -176,7 +184,7 @@ export default function TrangXemChiaSe() {
                 <p className="truncate text-sm font-medium">{s.title}</p>
                 <p className="mt-0.5 text-xs text-mo">
                   {s.kind.toUpperCase()}
-                  {s.kind !== "image" && s.page_count ? ` · ${s.page_count} trang` : ""}
+                  {s.kind !== "image" && s.page_count ? ` · ${s.page_count} ${t("chung.trang")}` : ""}
                 </p>
               </li>
             ))}
@@ -187,10 +195,9 @@ export default function TrangXemChiaSe() {
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             {luot.length === 0 && (
               <div className="mx-auto max-w-[68ch] rounded-lg border border-dashed border-vien px-5 py-10 text-center">
-                <p className="font-medium">Hỏi gì đó về tài liệu này</p>
+                <p className="font-medium">{t("chat.batDau")}</p>
                 <p className="mt-1 text-sm text-mo">
-                  Mỗi khẳng định trong câu trả lời sẽ kèm số đoạn. Bấm vào số đó
-                  để đọc đúng đoạn văn gốc.
+                  {t("chat.batDauMoTa")}
                 </p>
               </div>
             )}
@@ -199,7 +206,7 @@ export default function TrangXemChiaSe() {
               {luot.map((l, i) => (
                 <div key={i}>
                   <p className="text-sm text-mo">
-                    <b className="font-semibold text-chu">Bạn:</b> {l.cauHoi}
+                    <b className="font-semibold text-chu">{t("chat.ban")}</b> {l.cauHoi}
                   </p>
                   <div
                     className={`mt-2 whitespace-pre-wrap rounded-xl border px-4 py-3.5 ${
@@ -212,7 +219,7 @@ export default function TrangXemChiaSe() {
                       <VanBanCoChip text={l.traLoi} trichDan={l.trichDan} onChon={moDoan} />
                     ) : (
                       <span className="text-sm italic text-mo">
-                        {l.trangThai ?? "đang xử lý"}…
+                        {l.trangThai ?? t("chung.dangXuLy")}…
                       </span>
                     )}
                   </div>
@@ -228,7 +235,7 @@ export default function TrangXemChiaSe() {
                 value={cauHoi}
                 onChange={(e) => setCauHoi(e.target.value)}
                 disabled={dangHoi}
-                placeholder="Hỏi gì đó về tài liệu…"
+                placeholder={t("chat.oNhap")}
                 className="flex-1 rounded-md border border-vien bg-the px-3 py-2 outline-none focus:border-nhan disabled:opacity-60"
               />
               <button
@@ -236,7 +243,7 @@ export default function TrangXemChiaSe() {
                 disabled={!cauHoi.trim() || dangHoi}
                 className="rounded-md bg-nhan px-5 py-2 font-medium text-nen disabled:opacity-45"
               >
-                {dangHoi ? "…" : "Hỏi"}
+                {dangHoi ? "…" : t("chat.hoi")}
               </button>
             </div>
           </form>
@@ -244,7 +251,7 @@ export default function TrangXemChiaSe() {
 
         <aside className="hidden overflow-y-auto border-l border-vien bg-the p-4 lg:block">
           <p className="text-xs font-semibold uppercase tracking-wider text-mo">
-            Đoạn được trích dẫn
+            {t("xem.doanTrichDan")}
           </p>
           {doan ? (
             <>
@@ -255,8 +262,7 @@ export default function TrangXemChiaSe() {
             </>
           ) : (
             <p className="mt-3 text-xs text-mo">
-              Bấm một số như <span className="chip">1</span> trong câu trả lời để
-              đọc đoạn văn gốc.
+              {t("xem.huongDanChip")}
             </p>
           )}
         </aside>

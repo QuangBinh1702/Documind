@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.auth import (
@@ -79,6 +82,25 @@ def refresh(req: LamMoiRequest, session: DbSession) -> TokenResponse:
 
 @router.get("/me", response_model=UserResponse, summary="Thông tin tài khoản")
 def me(user: CurrentUser) -> UserResponse:
+    return UserResponse.model_validate(user)
+
+
+class DoiNgonNgu(BaseModel):
+    locale: Literal["vi", "en"]
+
+
+@router.patch("/me", response_model=UserResponse, summary="Đổi ngôn ngữ giao diện")
+def doi_ngon_ngu(
+    req: DoiNgonNgu, user: CurrentUser, session: DbSession
+) -> UserResponse:
+    """US-036 AC-2 — lựa chọn ngôn ngữ theo tài khoản, không theo trình duyệt.
+
+    `localStorage` cũng nhớ được, nhưng nó nhớ theo máy. Người dùng đăng nhập
+    trên máy khác sẽ gặp lại giao diện tiếng Việt mà họ đã đổi đi rồi — nên chỗ
+    đúng để lưu là `users.locale`.
+    """
+    user.locale = req.locale
+    session.flush()
     return UserResponse.model_validate(user)
 
 

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type Notebook, api, token } from "@/lib/api";
 import { NutChuDe } from "@/components/NutChuDe";
+import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
 
 export default function TrangNotebook() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function TrangNotebook() {
   const [email, setEmail] = useState("");
   const [tieuDe, setTieuDe] = useState("");
   const [loi, setLoi] = useState<string | null>(null);
+  const { t } = useNgonNgu();
 
   const tai = useCallback(async () => {
     try {
@@ -32,7 +34,7 @@ export default function TrangNotebook() {
         router.replace("/");
         return;
       }
-      setLoi("Không tải được danh sách notebook.");
+      setLoi(t("nb.khongTaiDuoc"));
       setDs([]);
     }
   }, [router]);
@@ -47,27 +49,29 @@ export default function TrangNotebook() {
 
   async function tao(e: React.FormEvent) {
     e.preventDefault();
-    const t = tieuDe.trim();
-    if (!t) return;
+    // Không đặt tên biến này là `t`: nó sẽ che mất hàm dịch cùng tên.
+    const ten = tieuDe.trim();
+    if (!ten) return;
     try {
-      const nb = await api.taoNotebook(t);
+      const nb = await api.taoNotebook(ten);
       setTieuDe("");
       // AC-2: mở ra ngay, không bắt bấm thêm một lần nữa.
       router.push(`/notebooks/${nb.id}`);
     } catch {
-      setLoi("Không tạo được notebook.");
+      setLoi(t("nb.khongTaoDuoc"));
     }
   }
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">Notebook của bạn</h1>
+        <h1 className="text-lg font-semibold tracking-tight">{t("nb.cuaBan")}</h1>
         <div className="flex items-center gap-3 text-sm text-mo">
           <span>{email}</span>
+          <NutNgonNgu />
           <NutChuDe />
           <Link href="/thong-ke" className="underline underline-offset-4">
-            Số liệu
+            {t("nb.soLieu")}
           </Link>
           <button
             onClick={() => {
@@ -76,7 +80,7 @@ export default function TrangNotebook() {
             }}
             className="underline underline-offset-4"
           >
-            Đăng xuất
+            {t("auth.dangXuat")}
           </button>
         </div>
       </header>
@@ -85,7 +89,7 @@ export default function TrangNotebook() {
         <input
           value={tieuDe}
           onChange={(e) => setTieuDe(e.target.value)}
-          placeholder="Tên notebook mới — ví dụ: Quy chế đào tạo"
+          placeholder={t("nb.tenMoi")}
           className="flex-1 rounded-md border border-vien bg-the px-3 py-2 outline-none focus:border-nhan"
         />
         <button
@@ -93,7 +97,7 @@ export default function TrangNotebook() {
           disabled={!tieuDe.trim()}
           className="rounded-md bg-nhan px-4 py-2 font-medium text-white disabled:opacity-45"
         >
-          Tạo
+          {t("nb.tao")}
         </button>
       </form>
 
@@ -109,7 +113,7 @@ export default function TrangNotebook() {
             }}
             className="rounded-md border border-canh-bao px-2.5 py-1 text-xs text-canh-bao"
           >
-            Thử lại
+            {t("chung.thuLai")}
           </button>
         </div>
       )}
@@ -130,11 +134,9 @@ export default function TrangNotebook() {
           // Trạng thái rỗng phải hướng dẫn, không phải khoảng trắng — US-042 AC-1.
           <div className="rounded-lg border border-dashed border-vien px-5 py-12 text-center">
             <ThuMucRong />
-            <p className="mt-4 font-medium">Chưa có notebook nào</p>
+            <p className="mt-4 font-medium">{t("nb.chuaCo")}</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-mo">
-              Tạo một notebook cho mỗi môn học hoặc mỗi bộ tài liệu, rồi tải tệp
-              vào đó. Hỏi trong notebook nào thì chỉ tìm trong tài liệu của
-              notebook đó.
+              {t("nb.chuaCoMoTa")}
             </p>
           </div>
         ) : (
@@ -148,10 +150,13 @@ export default function TrangNotebook() {
                   <span className="font-medium">{nb.title}</span>
                   <span className="shrink-0 text-sm text-mo">
                     {nb.source_count === 0
-                      ? "chưa có tài liệu"
+                      ? t("nb.chuaCoTaiLieu")
                       : nb.ready_count === nb.source_count
-                        ? `${nb.source_count} tài liệu`
-                        : `${nb.ready_count}/${nb.source_count} tài liệu đã xử lý`}
+                        ? t("nb.soTaiLieu", { so: nb.source_count })
+                        : t("nb.daXuLy", {
+                            xong: nb.ready_count,
+                            tong: nb.source_count,
+                          })}
                   </span>
                 </Link>
               </li>

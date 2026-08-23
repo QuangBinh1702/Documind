@@ -17,14 +17,23 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type ThongKe, api, token } from "@/lib/api";
+import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import type { Khoa } from "@/lib/i18n";
 
-const NHAN_KIND: Record<string, string> = {
-  grounded: "Có căn cứ trong tài liệu",
-  no_answer: "Từ chối vì không đủ căn cứ",
-  external: "Hỏi ra ngoài tài liệu",
-  cached_external: "Lấy lại từ bộ nhớ đệm",
-  chitchat: "Trò chuyện",
+type Dich = (khoa: Khoa, tham?: Record<string, string | number>) => string;
+
+const KHOA_KIND: Record<string, Khoa> = {
+  grounded: "kind.grounded",
+  no_answer: "kind.no_answer",
+  external: "kind.external",
+  cached_external: "kind.cached_external",
+  chitchat: "kind.chitchat",
 };
+
+/** Loại lạ thì hiện nguyên mã: xấu nhưng trung thực, và lộ ra để bổ sung. */
+function nhanKind(t: Dich, kind: string): string {
+  return kind in KHOA_KIND ? t(KHOA_KIND[kind]) : kind;
+}
 
 const MAU_KIND: Record<string, string> = {
   grounded: "#2563eb",
@@ -38,6 +47,7 @@ export default function TrangThongKe() {
   const router = useRouter();
   const [tk, setTk] = useState<ThongKe | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
+  const { t } = useNgonNgu();
 
   const tai = useCallback(async () => {
     setLoi(null);
@@ -49,7 +59,7 @@ export default function TrangThongKe() {
         router.replace("/");
         return;
       }
-      setLoi("Không tải được số liệu.");
+      setLoi(t("tk.khongTaiDuoc"));
     }
   }, [router]);
 
@@ -64,10 +74,13 @@ export default function TrangThongKe() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">Số liệu hệ thống</h1>
-        <Link href="/notebooks" className="text-sm text-mo underline underline-offset-4">
-          ← Về danh sách notebook
-        </Link>
+        <h1 className="text-lg font-semibold tracking-tight">{t("tk.tieuDe")}</h1>
+        <div className="flex items-center gap-3">
+          <NutNgonNgu />
+          <Link href="/notebooks" className="text-sm text-mo underline underline-offset-4">
+            ← {t("nb.veDanhSach")}
+          </Link>
+        </div>
       </header>
 
       {loi && (
@@ -77,7 +90,7 @@ export default function TrangThongKe() {
             onClick={() => void tai()}
             className="mt-2 rounded-md border border-nhan px-3 py-1.5 text-sm text-nhan"
           >
-            Thử lại
+            {t("chung.thuLai")}
           </button>
         </div>
       )}
@@ -87,52 +100,50 @@ export default function TrangThongKe() {
       {tk && (
         <div className="mt-8 space-y-10">
           <section>
-            <TieuDe>Kho tri thức</TieuDe>
+            <TieuDe>{t("tk.khoTriThuc")}</TieuDe>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <O nhan="Notebook" so={tk.so_notebook} />
-              <O nhan="Tài liệu" so={tk.so_nguon} />
-              <O nhan="Đoạn tri thức" so={tk.so_chunk} />
-              <O nhan="Dung lượng" so={dungLuong(tk.dung_luong_bytes)} />
+              <O nhan={t("tk.notebook")} so={tk.so_notebook} />
+              <O nhan={t("tk.taiLieu")} so={tk.so_nguon} />
+              <O nhan={t("tk.doanTriThuc")} so={tk.so_chunk} />
+              <O nhan={t("tk.dungLuong")} so={dungLuong(tk.dung_luong_bytes)} />
             </div>
           </section>
 
           <section>
-            <TieuDe>Loại câu trả lời</TieuDe>
+            <TieuDe>{t("tk.loaiCauTraLoi")}</TieuDe>
             <p className="mt-1 text-sm text-mo">
-              Tỉ lệ câu trả lời dựa trên tài liệu là thước đo trực tiếp của việc
-              hệ thống có làm đúng việc nó hứa hay không.
+              {t("tk.moTaLoaiCauTraLoi")}
             </p>
-            <PhanBo phanBo={tk.phan_bo_answer_kind} />
+            <PhanBo phanBo={tk.phan_bo_answer_kind} t={t} />
           </section>
 
           <section>
-            <TieuDe>Độ trễ theo chế độ</TieuDe>
+            <TieuDe>{t("tk.doTre")}</TieuDe>
             <p className="mt-1 text-sm text-mo">
-              Đo trên máy đang chạy. Con số của máy phát triển không thay được
-              con số của máy đích.
+              {t("tk.moTaDoTre")}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <TheDoTre nhan="Xử lý trên máy" doTre={tk.do_tre_privacy} />
-              <TheDoTre nhan="Có gửi ra ngoài" doTre={tk.do_tre_fast} />
+              <TheDoTre nhan={t("tk.trenMay")} doTre={tk.do_tre_privacy} t={t} />
+              <TheDoTre nhan={t("tk.guiRaNgoai")} doTre={tk.do_tre_fast} t={t} />
             </div>
           </section>
 
           <section>
-            <TieuDe>Gọi ra ngoài và bộ nhớ đệm</TieuDe>
+            <TieuDe>{t("tk.goiNgoai")}</TieuDe>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <O nhan="Lượt gọi thật" so={tk.so_luot_goi_ngoai} />
-              <O nhan="Lượt lấy từ đệm" so={tk.so_luot_tu_cache} />
+              <O nhan={t("tk.luotGoiThat")} so={tk.so_luot_goi_ngoai} />
+              <O nhan={t("tk.luotTuDem")} so={tk.so_luot_tu_cache} />
               <O
-                nhan="Tỉ lệ dùng lại"
+                nhan={t("tk.tiLeDungLai")}
                 so={`${Math.round(tk.ty_le_cache_hit * 100)}%`}
               />
-              <O nhan="Câu đang lưu" so={tk.so_ban_ghi_cache} />
+              <O nhan={t("tk.cauDangLuu")} so={tk.so_ban_ghi_cache} />
             </div>
           </section>
 
           <section>
-            <TieuDe>Lượt hỏi 30 ngày gần nhất</TieuDe>
-            <BieuDoCot diem={tk.luot_hoi_theo_ngay} />
+            <TieuDe>{t("tk.luotHoi30Ngay")}</TieuDe>
+            <BieuDoCot diem={tk.luot_hoi_theo_ngay} t={t} />
           </section>
         </div>
       )}
@@ -153,16 +164,24 @@ function O({ nhan, so }: { nhan: string; so: number | string }) {
   );
 }
 
-function TheDoTre({ nhan, doTre }: { nhan: string; doTre: ThongKe["do_tre_privacy"] }) {
+function TheDoTre({
+  nhan,
+  doTre,
+  t,
+}: {
+  nhan: string;
+  doTre: ThongKe["do_tre_privacy"];
+  t: Dich;
+}) {
   return (
     <div className="rounded-lg border border-vien bg-the px-4 py-3">
       <p className="text-sm font-medium">{nhan}</p>
       {doTre.so_luot === 0 ? (
-        <p className="mt-2 text-sm text-mo">Chưa có lượt nào ở chế độ này.</p>
+        <p className="mt-2 text-sm text-mo">{t("tk.chuaCoLuotNao")}</p>
       ) : (
         <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
           <div>
-            <dt className="text-xs text-mo">Trung bình</dt>
+            <dt className="text-xs text-mo">{t("tk.trungBinh")}</dt>
             <dd className="tabular-nums">{giay(doTre.trung_binh_ms)}</dd>
           </div>
           <div>
@@ -170,7 +189,7 @@ function TheDoTre({ nhan, doTre }: { nhan: string; doTre: ThongKe["do_tre_privac
             <dd className="tabular-nums">{giay(doTre.p95_ms)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-mo">Số lượt</dt>
+            <dt className="text-xs text-mo">{t("tk.soLuot")}</dt>
             <dd className="tabular-nums">{doTre.so_luot}</dd>
           </div>
         </dl>
@@ -186,14 +205,14 @@ function TheDoTre({ nhan, doTre }: { nhan: string; doTre: ThongKe["do_tre_privac
  * so với so sánh diện tích các múi, và nó cũng đọc được khi bị thu nhỏ trong
  * một slide.
  */
-function PhanBo({ phanBo }: { phanBo: Record<string, number> }) {
+function PhanBo({ phanBo, t }: { phanBo: Record<string, number>; t: Dich }) {
   const muc = Object.entries(phanBo).sort((a, b) => b[1] - a[1]);
   const tong = muc.reduce((s, [, n]) => s + n, 0);
 
   if (tong === 0) {
     return (
       <p className="mt-3 rounded-lg border border-dashed border-vien px-4 py-6 text-center text-sm text-mo">
-        Chưa có câu trả lời nào. Hỏi vài câu rồi quay lại đây.
+        {t("tk.chuaCoCauTraLoi")}
       </p>
     );
   }
@@ -205,7 +224,7 @@ function PhanBo({ phanBo }: { phanBo: Record<string, number> }) {
           <div
             key={kind}
             style={{ width: `${(n / tong) * 100}%`, background: MAU_KIND[kind] ?? "#64748b" }}
-            title={`${NHAN_KIND[kind] ?? kind}: ${n}`}
+            title={`${nhanKind(t, kind)}: ${n}`}
           />
         ))}
       </div>
@@ -216,7 +235,7 @@ function PhanBo({ phanBo }: { phanBo: Record<string, number> }) {
               className="h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ background: MAU_KIND[kind] ?? "#64748b" }}
             />
-            <span className="flex-1">{NHAN_KIND[kind] ?? kind}</span>
+            <span className="flex-1">{nhanKind(t, kind)}</span>
             <span className="tabular-nums text-mo">
               {n} · {Math.round((n / tong) * 100)}%
             </span>
@@ -227,11 +246,17 @@ function PhanBo({ phanBo }: { phanBo: Record<string, number> }) {
   );
 }
 
-function BieuDoCot({ diem }: { diem: { ngay: string; so_luot: number }[] }) {
+function BieuDoCot({
+  diem,
+  t,
+}: {
+  diem: { ngay: string; so_luot: number }[];
+  t: Dich;
+}) {
   if (diem.length === 0) {
     return (
       <p className="mt-3 rounded-lg border border-dashed border-vien px-4 py-6 text-center text-sm text-mo">
-        Chưa có lượt hỏi nào trong 30 ngày qua.
+        {t("tk.chuaCoLuotHoi")}
       </p>
     );
   }
@@ -245,7 +270,7 @@ function BieuDoCot({ diem }: { diem: { ngay: string; so_luot: number }[] }) {
   return (
     <div className="mt-3 overflow-x-auto rounded-lg border border-vien bg-the p-4">
       <svg viewBox={`0 0 ${W} ${H}`} className="h-40 w-full" role="img"
-           aria-label="Số lượt hỏi theo ngày">
+           aria-label={t("tk.bieuDoNhan")}>
         {diem.map((d, i) => {
           const cao = dinh ? ((H - dem) * d.so_luot) / dinh : 0;
           return (
@@ -258,7 +283,7 @@ function BieuDoCot({ diem }: { diem: { ngay: string; so_luot: number }[] }) {
               rx={2}
               fill="#2563eb"
             >
-              <title>{`${d.ngay}: ${d.so_luot} lượt`}</title>
+              <title>{t("tk.luotNgay", { ngay: d.ngay, so: d.so_luot })}</title>
             </rect>
           );
         })}

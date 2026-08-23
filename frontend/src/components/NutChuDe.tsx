@@ -13,16 +13,17 @@
  */
 
 import { useEffect, useState } from "react";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 export type ChuDe = "sang" | "toi" | "he-thong";
 
 export const KHOA_CHU_DE = "documind.chu-de";
 
-const NHAN: Record<ChuDe, string> = {
-  sang: "Sáng",
-  toi: "Tối",
-  "he-thong": "Theo máy",
-};
+const KHOA_NHAN = {
+  sang: "gd.sang",
+  toi: "gd.toi",
+  "he-thong": "gd.theoMay",
+} as const;
 
 export function apDung(chuDe: ChuDe) {
   const goc = document.documentElement;
@@ -35,11 +36,12 @@ export function apDung(chuDe: ChuDe) {
 
 export function NutChuDe() {
   const [chuDe, setChuDe] = useState<ChuDe>("he-thong");
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     try {
       const luu = localStorage.getItem(KHOA_CHU_DE) as ChuDe | null;
-      if (luu && luu in NHAN) setChuDe(luu);
+      if (luu && luu in KHOA_NHAN) setChuDe(luu);
     } catch {
       /* trình duyệt chặn localStorage — dùng mặc định, không cần báo gì */
     }
@@ -58,10 +60,10 @@ export function NutChuDe() {
   return (
     <div
       role="group"
-      aria-label="Chế độ hiển thị"
+      aria-label={t("gd.cheDoHienThi")}
       className="flex items-center gap-0.5 rounded-md border border-vien p-0.5"
     >
-      {(Object.keys(NHAN) as ChuDe[]).map((k) => (
+      {(Object.keys(KHOA_NHAN) as ChuDe[]).map((k) => (
         <button
           key={k}
           onClick={() => doi(k)}
@@ -70,7 +72,7 @@ export function NutChuDe() {
             chuDe === k ? "bg-nhan text-nen" : "text-mo hover:text-chu"
           }`}
         >
-          {NHAN[k]}
+          {t(KHOA_NHAN[k])}
         </button>
       ))}
     </div>

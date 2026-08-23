@@ -30,6 +30,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GOC_API, goiTho } from "@/lib/api";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 export type HopToaDo = {
   page: number;
@@ -61,6 +62,7 @@ export function XemPdf({
   const [loi, setLoi] = useState<string | null>(null);
   const [dangVe, setDangVe] = useState(true);
   const [kichThuoc, setKichThuoc] = useState({ rong: 0, cao: 0 });
+  const { t } = useNgonNgu();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tepRef = useRef<unknown>(null);
@@ -81,7 +83,7 @@ export function XemPdf({
         const buf = await r.arrayBuffer();
         if (!huy) setTep(buf);
       } catch {
-        if (!huy) setLoi("Không mở được tệp gốc của tài liệu này.");
+        if (!huy) setLoi(t("xem.khongMoDuoc"));
       }
     })();
 
@@ -113,7 +115,7 @@ export function XemPdf({
         tepRef.current = doc;
         setTongTrang(doc.numPages);
       } catch {
-        if (!huy) setLoi("Tệp PDF này không đọc được.");
+        if (!huy) setLoi(t("xem.khongDocDuocPdf"));
       }
     })();
 
@@ -198,7 +200,7 @@ export function XemPdf({
         <select
           value={phong}
           onChange={(e) => setPhong(Number(e.target.value))}
-          aria-label="Mức phóng"
+          aria-label={t("xem.mucPhong")}
           className="ml-auto rounded border border-vien bg-the px-1.5 py-1 text-mo"
         >
           {MUC_PHONG.map((m) => (
@@ -240,7 +242,7 @@ export function XemPdf({
 
           {dangVe && (
             <div className="absolute inset-0 grid place-items-center bg-nen/60 text-xs text-mo">
-              đang dựng trang…
+              {t("xem.dangDungTrang")}
             </div>
           )}
         </div>

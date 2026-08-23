@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { NgonNguProvider } from "@/components/NgonNguProvider";
 
+/**
+ * Siêu dữ liệu trang. Cố ý **không** dịch — Next dựng nó ở máy chủ, trước khi
+ * biết người mở trang chọn ngôn ngữ nào. Chuỗi này chỉ xuất hiện ở thẻ mô tả
+ * cho công cụ tìm kiếm và ở tiêu đề tab, không phải trong giao diện.
+ */
 export const metadata: Metadata = {
   title: "DocuMind",
   description: "Hỏi đáp trên tài liệu của bạn, luôn kèm trích dẫn kiểm chứng được",
@@ -21,6 +27,8 @@ try {
   var c = localStorage.getItem("documind.chu-de");
   if (c === "toi") document.documentElement.dataset.theme = "dark";
   else if (c === "sang") document.documentElement.dataset.theme = "light";
+  var n = localStorage.getItem("documind.ngon-ngu");
+  if (n === "vi" || n === "en") document.documentElement.lang = n;
 } catch (e) {}
 `;
 
@@ -30,7 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: AP_CHU_DE }} />
       </head>
-      <body className="h-full antialiased">{children}</body>
+      <body className="h-full antialiased">
+        <NgonNguProvider>{children}</NgonNguProvider>
+      </body>
     </html>
   );
 }

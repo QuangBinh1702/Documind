@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 const KHOA = "documind.docrong";
 const MIN = 220;
@@ -41,6 +42,7 @@ export function BaCot({
   const setTab = onDoiTab ?? setTabTrong;
   const [hep, setHep] = useState(false);
   const keo = useRef<"trai" | "phai" | null>(null);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     try {
@@ -111,10 +113,10 @@ export function BaCot({
         <nav className="flex shrink-0 border-b border-vien bg-the" role="tablist">
           {(
             [
-              ["nguon", "Nguồn"],
-              ["hoi", "Hội thoại"],
-              ["xem", "Tài liệu"],
-            ] as const
+              ["nguon", t("cot.nguon")],
+              ["hoi", t("cot.hoiThoai")],
+              ["xem", t("cot.taiLieu")],
+            ] as [Tab, string][]
           ).map(([ma, nhan]) => (
             <button
               key={ma}
@@ -139,11 +141,11 @@ export function BaCot({
       <div style={{ width: rongTrai }} className="shrink-0 overflow-y-auto border-r border-vien bg-the">
         {nguon}
       </div>
-      <ThanhKeo onMouseDown={() => batDauKeo("trai")} nhan="Đổi độ rộng cột nguồn" />
+      <ThanhKeo onMouseDown={() => batDauKeo("trai")} nhan={t("cot.keoCotNguon")} />
 
       <div className="min-w-0 flex-1 overflow-y-auto">{hoiDap}</div>
 
-      <ThanhKeo onMouseDown={() => batDauKeo("phai")} nhan="Đổi độ rộng cột tài liệu" />
+      <ThanhKeo onMouseDown={() => batDauKeo("phai")} nhan={t("cot.keoCotTaiLieu")} />
       <div style={{ width: rongPhai }} className="shrink-0 overflow-y-auto border-l border-vien bg-the">
         {xemTaiLieu}
       </div>

@@ -227,6 +227,12 @@ export const api = {
 
   toiLaAi: () => goi<NguoiDung>("/api/auth/me"),
 
+  doiNgonNgu: (locale: "vi" | "en") =>
+    goi<NguoiDung>("/api/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify({ locale }),
+    }),
+
   danhSachNotebook: () => goi<Notebook[]>("/api/notebooks"),
 
   taoNotebook: (title: string) =>

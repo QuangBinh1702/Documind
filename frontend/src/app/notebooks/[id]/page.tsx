@@ -26,6 +26,7 @@ import { NhanQuyenRiengTu } from "@/components/NhanQuyenRiengTu";
 import { NutChuDe } from "@/components/NutChuDe";
 import { MatKetNoi } from "@/components/MatKetNoi";
 import { NutChiaSe } from "@/components/NutChiaSe";
+import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
 
 export default function ManHinhNotebook() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +39,7 @@ export default function ManHinhNotebook() {
   const [dangSuaTen, setDangSuaTen] = useState(false);
   const [vuaXong, setVuaXong] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("hoi");
+  const { t } = useNgonNgu();
   const daXong = useRef<Set<string>>(new Set());
 
   const tai = useCallback(async () => {
@@ -54,9 +56,9 @@ export default function ManHinhNotebook() {
         token.xoa();
         router.replace("/");
       } else if (err instanceof ApiError && err.status === 404) {
-        setLoi("Không tìm thấy notebook này.");
+        setLoi(t("nb.khongTimThay"));
       } else {
-        setLoi("Không tải được notebook.");
+        setLoi(t("nb.khongTaiDuoc"));
       }
       return [];
     }
@@ -127,7 +129,7 @@ export default function ManHinhNotebook() {
         <div>
           <p className="font-medium">{loi}</p>
           <Link href="/notebooks" className="mt-3 inline-block text-sm text-nhan underline">
-            Về danh sách notebook
+            {t("nb.veDanhSach")}
           </Link>
         </div>
       </main>
@@ -141,7 +143,7 @@ export default function ManHinhNotebook() {
       <MatKetNoi />
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-vien px-5 py-3">
         <Link href="/notebooks" className="text-sm text-mo hover:text-chu">
-          ← Notebook
+          ← {t("tk.notebook")}
         </Link>
 
         {dangSuaTen && nb ? (
@@ -165,7 +167,7 @@ export default function ManHinhNotebook() {
         ) : (
           <button
             onClick={() => setDangSuaTen(true)}
-            title="Bấm để đổi tên"
+            title={t("nb.doiTen")}
             className="font-medium tracking-tight"
           >
             {nb?.title ?? "…"}
@@ -174,11 +176,15 @@ export default function ManHinhNotebook() {
 
         <span className="ml-auto text-xs text-mo">
           {nguon.length === 0
-            ? "chưa có tài liệu"
-            : `${nguon.filter((s) => s.status === "ready").length}/${nguon.length} tài liệu đã xử lý`}
+            ? t("nb.chuaCoTaiLieu")
+            : t("nb.daXuLy", {
+                xong: nguon.filter((s) => s.status === "ready").length,
+                tong: nguon.length,
+              })}
         </span>
         <NutChiaSe nbId={id} />
         <NhanQuyenRiengTu />
+        <NutNgonNgu />
         <NutChuDe />
       </header>
 
@@ -188,7 +194,7 @@ export default function ManHinhNotebook() {
           role="status"
           className="shrink-0 border-b border-vien bg-nhan/5 px-5 py-2 text-sm"
         >
-          <b className="font-medium">{vuaXong}</b> đã xử lý xong — hỏi được rồi.
+          {t("nguon.datXong", { ten: vuaXong })}
         </div>
       )}
 

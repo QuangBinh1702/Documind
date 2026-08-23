@@ -10,26 +10,37 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ApiError, type Nguon, api, taiLen } from "@/lib/api";
+import { useNgonNgu } from "@/components/NgonNguProvider";
+import type { Khoa } from "@/lib/i18n";
 
 const BIEU_TUONG: Record<string, string> = {
   pdf: "PDF",
   docx: "DOC",
   txt: "TXT",
   md: "MD",
-  image: "ẢNH",
+  image: "IMG",
 };
 
 const DUOI_NHAN = ".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp";
 
-const NHAN_TRANG_THAI: Record<string, string> = {
-  queued: "đang chờ",
-  parsing: "đang đọc",
-  ocr: "đang nhận dạng chữ",
-  chunking: "đang chia đoạn",
-  embedding: "đang lập chỉ mục",
-  ready: "sẵn sàng",
-  failed: "lỗi",
-};
+/**
+ * Nhãn trạng thái, dịch theo ngôn ngữ đang chọn — US-022 AC-2, US-036 AC-3.
+ *
+ * Khoá là **từ vựng của lược đồ** (`sources.status`), không phải chuỗi hiển
+ * thị. Trạng thái nào chưa có nhãn thì hiện nguyên mã trạng thái — xấu, nhưng
+ * đúng, và nó lộ ra ngay để bổ sung.
+ */
+const NHAN_TRANG_THAI = (t: Dich): Record<string, string> => ({
+  queued: t("trangThai.queued"),
+  parsing: t("trangThai.parsing"),
+  ocr: t("trangThai.ocr"),
+  chunking: t("trangThai.chunking"),
+  embedding: t("trangThai.embedding"),
+  ready: t("trangThai.ready"),
+  failed: t("trangThai.failed"),
+});
+
+type Dich = (khoa: Khoa, tham?: Record<string, string | number>) => string;
 
 export function CotNguon({
   nbId,
@@ -44,6 +55,7 @@ export function CotNguon({
   const [loi, setLoi] = useState<string | null>(null);
   const [keoVao, setKeoVao] = useState(false);
   const chonTep = useRef<HTMLInputElement>(null);
+  const { t } = useNgonNgu();
 
   async function tai(files: Iterable<File> | FileList | null) {
     const ds = files ? Array.from(files) : [];
@@ -55,7 +67,11 @@ export function CotNguon({
         await taiLen(nbId, f, (p) => setDangTai({ ten: f.name, phanTram: p }));
         onDoiThay();
       } catch (err) {
-        setLoi(err instanceof ApiError ? err.message : `Không tải được ${f.name}.`);
+        setLoi(
+          err instanceof ApiError
+            ? err.message
+            : t("nguon.khongTaiDuoc", { ten: f.name }),
+        );
       }
     }
     setDangTai(null);
@@ -103,7 +119,9 @@ export function CotNguon({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-vien px-4 py-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-mo">Nguồn</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-mo">
+          {t("nguon.tieuDe")}
+        </h2>
       </div>
 
       <div
@@ -121,14 +139,14 @@ export function CotNguon({
           keoVao ? "border-nhan bg-nhan/5" : "border-vien"
         }`}
       >
-        <p className="text-sm">Kéo thả tệp vào đây</p>
-        <p className="mt-1 text-xs text-mo">PDF · DOCX · TXT · MD · ảnh</p>
-        <p className="mt-0.5 text-xs text-mo">hoặc dán ảnh bằng Ctrl+V</p>
+        <p className="text-sm">{t("nguon.keoTha")}</p>
+        <p className="mt-1 text-xs text-mo">{t("nguon.dinhDang")}</p>
+        <p className="mt-0.5 text-xs text-mo">{t("nguon.danAnh")}</p>
         <button
           onClick={() => chonTep.current?.click()}
           className="mt-3 rounded-md border border-nhan px-3 py-1.5 text-sm text-nhan"
         >
-          Chọn tệp
+          {t("nguon.chonTep")}
         </button>
         <input
           ref={chonTep}
@@ -163,7 +181,7 @@ export function CotNguon({
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {nguon.length === 0 ? (
           <li className="px-4 py-3 text-sm text-mo">
-            Chưa có tài liệu nào. Tải một tệp lên để bắt đầu hỏi.
+            {t("nguon.chuaCo")}
           </li>
         ) : (
           nguon.map((s) => (
@@ -177,7 +195,7 @@ export function CotNguon({
                     await api.doiPhamVi(nbId, s.id, !s.in_scope);
                     onDoiThay();
                   }}
-                  title="Hỏi trong tài liệu này"
+                  title={t("nguon.hoiTrong")}
                   className="mt-1 accent-nhan"
                 />
                 <div className="min-w-0 flex-1">
@@ -187,8 +205,11 @@ export function CotNguon({
                   <p className="mt-0.5 text-xs text-mo">
                     {BIEU_TUONG[s.kind] ?? s.kind.toUpperCase()}
                     {/* Ảnh luôn là "1 trang" — một con số không nói gì thêm. */}
-                    {s.kind !== "image" && s.page_count ? ` · ${s.page_count} trang` : ""} ·{" "}
-                    <TrangThai nguon={s} />
+                    {s.kind !== "image" && s.page_count
+                      ? ` · ${s.page_count} ${t("chung.trang")}`
+                      : ""}{" "}
+                    ·{" "}
+                    <TrangThai nguon={s} t={t} />
                   </p>
                   {s.status === "failed" && s.error_message && (
                     <p className="mt-1 text-xs text-canh-bao">{s.error_message}</p>
@@ -196,12 +217,12 @@ export function CotNguon({
                 </div>
                 <button
                   onClick={async () => {
-                    if (!confirm(`Xoá "${s.title}"?`)) return;
+                    if (!confirm(t("nguon.xoaHoi", { ten: s.title }))) return;
                     await api.xoaNguon(nbId, s.id);
                     onDoiThay();
                   }}
                   className="text-xs text-mo hover:text-canh-bao"
-                  title="Xoá nguồn"
+                  title={t("chung.xoa")}
                 >
                   ✕
                 </button>
@@ -214,8 +235,14 @@ export function CotNguon({
   );
 }
 
-function TrangThai({ nguon }: { nguon: Nguon }) {
-  const nhan = NHAN_TRANG_THAI[nguon.status] ?? nguon.status;
+function TrangThai({
+  nguon,
+  t,
+}: {
+  nguon: Nguon;
+  t: Dich;
+}) {
+  const nhan = NHAN_TRANG_THAI(t)[nguon.status] ?? nguon.status;
   if (nguon.status === "ready") return <span className="text-nhan">{nhan}</span>;
   if (nguon.status === "failed") return <span className="text-canh-bao">{nhan}</span>;
 

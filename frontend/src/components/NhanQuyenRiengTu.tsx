@@ -19,9 +19,11 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 export function NhanQuyenRiengTu() {
   const [roiKhoiMay, setRoiKhoiMay] = useState<boolean | null>(null);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     api
@@ -34,17 +36,17 @@ export function NhanQuyenRiengTu() {
 
   return roiKhoiMay ? (
     <span
-      title="Câu hỏi và những đoạn tài liệu liên quan được gửi tới một dịch vụ xử lý bên ngoài. Muốn mọi thứ ở lại máy này thì đổi cấu hình sang chế độ riêng tư."
+      title={t("rt.ngoaiMoTa")}
       className="rounded-full border border-canh-bao px-2 py-0.5 text-[11px] text-canh-bao"
     >
-      Xử lý bên ngoài
+      {t("rt.ngoai")}
     </span>
   ) : (
     <span
-      title="Toàn bộ xử lý diễn ra trên máy này. Không có nội dung nào được gửi đi đâu cả."
+      title={t("rt.cucBoMoTa")}
       className="rounded-full border border-vien px-2 py-0.5 text-[11px] text-mo"
     >
-      Xử lý trên máy này
+      {t("rt.cucBo")}
     </span>
   );
 }

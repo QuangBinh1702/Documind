@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { type TrichDan, api, goiTho } from "@/lib/api";
 import { type HopToaDo, XemPdf } from "@/components/XemPdf";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 type ChiTiet = {
   chunk_id: number;
@@ -44,6 +45,7 @@ export function CotTaiLieu({
   const [loi, setLoi] = useState<string | null>(null);
   const [dangTai, setDangTai] = useState(false);
   const [muc, setMuc] = useState<Muc>("doan");
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     if (!trichDan) {
@@ -63,7 +65,7 @@ export function CotTaiLieu({
         if (!huy) setChiTiet(d as ChiTiet);
       })
       .catch(() => {
-        if (!huy) setLoi("Không tải được đoạn trích dẫn. Nguồn có thể đã bị xoá.");
+        if (!huy) setLoi(t("xem.khongTaiDuocTrichDan"));
       })
       .finally(() => {
         if (!huy) setDangTai(false);
@@ -77,14 +79,14 @@ export function CotTaiLieu({
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-vien px-4 py-3">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-mo">
-          {muc === "doan" ? "Đoạn được trích dẫn" : "Tài liệu"}
+          {muc === "doan" ? t("xem.doanTrichDan") : t("xem.taiLieu")}
         </h2>
         {chiTiet && (
           <button
             onClick={() => setMuc((m) => (m === "doan" ? "tai-lieu" : "doan"))}
             className="ml-auto rounded-md border border-vien px-2 py-0.5 text-xs text-mo hover:border-nhan hover:text-nhan"
           >
-            {muc === "doan" ? "Mở cả tài liệu" : "← Về đoạn trích"}
+            {muc === "doan" ? t("xem.moCaTaiLieu") : t("xem.veDoanTrich")}
           </button>
         )}
       </div>
@@ -97,12 +99,8 @@ export function CotTaiLieu({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {!trichDan ? (
             <div className="rounded-lg border border-dashed border-vien px-4 py-8 text-center">
-              <p className="text-sm font-medium">Chưa chọn trích dẫn nào</p>
-              <p className="mt-1 text-xs text-mo">
-                Mỗi khẳng định trong câu trả lời kèm một số như{" "}
-                <span className="chip">1</span>. Bấm vào số đó để đọc đúng đoạn văn
-                mà câu trả lời dựa vào.
-              </p>
+              <p className="text-sm font-medium">{t("xem.chuaChon")}</p>
+              <p className="mt-1 text-xs text-mo">{t("xem.huongDanChip")}</p>
             </div>
           ) : dangTai ? (
             <KhungCho />
@@ -112,7 +110,9 @@ export function CotTaiLieu({
             <article>
               <p className="text-sm font-semibold">{chiTiet.source.title}</p>
               <p className="mt-0.5 text-xs text-mo">
-                {chiTiet.page_no ? `Trang ${chiTiet.page_no}` : "Không rõ trang"}
+                {chiTiet.page_no
+                  ? t("xem.trangSo", { so: chiTiet.page_no })
+                  : t("xem.khongRoTrang")}
                 {chiTiet.heading_path ? ` · ${chiTiet.heading_path}` : ""}
               </p>
 
@@ -154,6 +154,7 @@ function XemTaiLieu({ nbId, chiTiet }: { nbId: string; chiTiet: ChiTiet }) {
  */
 function XemAnh({ nbId, chiTiet }: { nbId: string; chiTiet: ChiTiet }) {
   const url = useTepBlob(`/api/notebooks/${nbId}/sources/${chiTiet.source.id}/file`);
+  const { t } = useNgonNgu();
 
   return (
     <div className="h-full overflow-y-auto p-3">
@@ -168,7 +169,7 @@ function XemAnh({ nbId, chiTiet }: { nbId: string; chiTiet: ChiTiet }) {
         <div className="h-48 animate-pulse rounded-md bg-vien" />
       )}
       <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-mo">
-        Chữ đọc được từ ảnh
+        {t("xem.chuTuAnh")}
       </p>
       <pre className="mt-1.5 whitespace-pre-wrap rounded-md border border-vien bg-nen p-3 text-[13px] leading-relaxed">
         {chiTiet.content}
@@ -188,6 +189,7 @@ function XemAnh({ nbId, chiTiet }: { nbId: string; chiTiet: ChiTiet }) {
 function XemVanBan({ nbId, chiTiet }: { nbId: string; chiTiet: ChiTiet }) {
   const [text, setText] = useState<string | null>(null);
   const [loi, setLoi] = useState(false);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     let huy = false;
@@ -209,7 +211,8 @@ function XemVanBan({ nbId, chiTiet }: { nbId: string; chiTiet: ChiTiet }) {
     if (text) document.getElementById("doan-duoc-trich")?.scrollIntoView({ block: "center" });
   }, [text]);
 
-  if (loi) return <p className="p-4 text-sm text-canh-bao">Không tải được nội dung tài liệu.</p>;
+  if (loi)
+    return <p className="p-4 text-sm text-canh-bao">{t("xem.khongTaiDuocNoiDung")}</p>;
   if (text === null) {
     return (
       <div className="space-y-2 p-4">

@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, api, token } from "@/lib/api";
+import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
 
 const EMAIL_HOP_LE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAT_KHAU_TOI_THIEU = 8;
@@ -25,6 +26,7 @@ export default function TrangDangNhap() {
   const [loi, setLoi] = useState<string | null>(null);
   const [dangGui, setDangGui] = useState(false);
   const [dangKiemTra, setDangKiemTra] = useState(true);
+  const { t } = useNgonNgu();
 
   // Đã có phiên còn hạn thì vào thẳng, không bắt đăng nhập lại.
   useEffect(() => {
@@ -41,10 +43,11 @@ export default function TrangDangNhap() {
       });
   }, [router]);
 
-  const loiEmail = email && !EMAIL_HOP_LE.test(email) ? "Email không đúng định dạng." : null;
+  const loiEmail =
+    email && !EMAIL_HOP_LE.test(email) ? t("auth.emailSai") : null;
   const loiMatKhau =
     matKhau && matKhau.length < MAT_KHAU_TOI_THIEU
-      ? `Mật khẩu phải có ít nhất ${MAT_KHAU_TOI_THIEU} ký tự.`
+      ? t("auth.matKhauNgan", { so: MAT_KHAU_TOI_THIEU })
       : null;
   const guiDuoc =
     EMAIL_HOP_LE.test(email) && matKhau.length >= MAT_KHAU_TOI_THIEU && !dangGui;
@@ -59,7 +62,7 @@ export default function TrangDangNhap() {
       token.luu(cap);
       router.replace("/notebooks");
     } catch (err) {
-      setLoi(err instanceof ApiError ? err.message : "Không kết nối được máy chủ.");
+      setLoi(err instanceof ApiError ? err.message : t("auth.khongKetNoi"));
       setDangGui(false);
     }
   }
@@ -67,7 +70,7 @@ export default function TrangDangNhap() {
   if (dangKiemTra) {
     return (
       <main className="grid h-full place-items-center">
-        <p className="text-sm text-mo">Đang kiểm tra phiên đăng nhập…</p>
+        <p className="text-sm text-mo">{t("auth.dangKiemTra")}</p>
       </main>
     );
   }
@@ -75,14 +78,15 @@ export default function TrangDangNhap() {
   return (
     <main className="grid h-full place-items-center px-6">
       <div className="w-full max-w-sm">
-        <h1 className="text-xl font-semibold tracking-tight">DocuMind</h1>
-        <p className="mt-1 text-sm text-mo">
-          Hỏi đáp trên tài liệu của bạn, luôn kèm trích dẫn kiểm chứng được.
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="text-xl font-semibold tracking-tight">DocuMind</h1>
+          <NutNgonNgu />
+        </div>
+        <p className="mt-1 text-sm text-mo">{t("auth.gioiThieu")}</p>
 
         <form onSubmit={gui} className="mt-8 space-y-4" noValidate>
           <Truong
-            nhan="Email"
+            nhan={t("auth.email")}
             loi={loiEmail}
             input={
               <input
@@ -97,7 +101,7 @@ export default function TrangDangNhap() {
           />
 
           <Truong
-            nhan="Mật khẩu"
+            nhan={t("auth.matKhau")}
             loi={loiMatKhau}
             input={
               <input
@@ -106,7 +110,7 @@ export default function TrangDangNhap() {
                 value={matKhau}
                 onChange={(e) => setMatKhau(e.target.value)}
                 className="w-full rounded-md border border-vien bg-the px-3 py-2 outline-none focus:border-nhan"
-                placeholder="ít nhất 8 ký tự"
+                placeholder={t("auth.matKhauGoiY")}
               />
             }
           />
@@ -125,7 +129,11 @@ export default function TrangDangNhap() {
             disabled={!guiDuoc}
             className="w-full rounded-md bg-nhan px-4 py-2 font-medium text-white disabled:opacity-45"
           >
-            {dangGui ? "Đang xử lý…" : dangKy ? "Tạo tài khoản" : "Đăng nhập"}
+            {dangGui
+              ? t("auth.dangXuLy")
+              : dangKy
+                ? t("auth.dangKy")
+                : t("auth.dangNhap")}
           </button>
         </form>
 
@@ -136,7 +144,7 @@ export default function TrangDangNhap() {
           }}
           className="mt-5 text-sm text-nhan underline underline-offset-4"
         >
-          {dangKy ? "Đã có tài khoản? Đăng nhập" : "Chưa có tài khoản? Đăng ký"}
+          {dangKy ? t("auth.daCoTaiKhoan") : t("auth.chuaCoTaiKhoan")}
         </button>
       </div>
     </main>

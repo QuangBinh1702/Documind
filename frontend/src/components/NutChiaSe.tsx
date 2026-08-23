@@ -14,12 +14,14 @@
 
 import { useEffect, useState } from "react";
 import { type LienKetChiaSe, api } from "@/lib/api";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 export function NutChiaSe({ nbId }: { nbId: string }) {
   const [mo, setMo] = useState(false);
   const [lienKet, setLienKet] = useState<LienKetChiaSe | null>(null);
   const [dangLam, setDangLam] = useState(false);
   const [daChep, setDaChep] = useState(false);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     if (!mo) return;
@@ -67,7 +69,7 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
         aria-expanded={mo}
         className="rounded-md border border-vien px-2 py-0.5 text-xs text-mo hover:border-nhan hover:text-nhan"
       >
-        Chia sẻ
+        {t("chiaSe.nut")}
       </button>
 
       {mo && (
@@ -75,13 +77,12 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
           {/* Bấm ra ngoài thì đóng — không có nó thì hộp dính lại trên màn hình. */}
           <div className="fixed inset-0 z-10" onClick={() => setMo(false)} />
           <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-vien bg-the p-4 shadow-lg">
-            <p className="text-sm font-medium">Chia sẻ chỉ đọc</p>
+            <p className="text-sm font-medium">{t("chiaSe.tieuDe")}</p>
 
             {lienKet ? (
               <>
                 <p className="mt-1 text-xs text-mo">
-                  Ai có liên kết này đều xem tài liệu và hỏi đáp được, kể cả khi
-                  chưa đăng nhập. Họ không sửa hay xoá được gì.
+                  {t("chiaSe.daCoMoTa")}
                 </p>
                 <input
                   readOnly
@@ -94,32 +95,31 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
                     onClick={() => void chep()}
                     className="rounded-md bg-nhan px-3 py-1.5 text-xs font-medium text-nen"
                   >
-                    {daChep ? "Đã chép" : "Chép liên kết"}
+                    {daChep ? t("chiaSe.daChep") : t("chiaSe.chep")}
                   </button>
                   <button
                     onClick={() => void thuHoi()}
                     disabled={dangLam}
                     className="rounded-md border border-vien px-3 py-1.5 text-xs text-mo hover:border-canh-bao hover:text-canh-bao disabled:opacity-45"
                   >
-                    Thu hồi
+                    {t("chiaSe.thuHoi")}
                   </button>
                 </div>
                 <p className="mt-3 border-t border-vien pt-2 text-xs text-mo">
-                  Lượt hỏi của người xem tính vào hạn mức của bạn.
+                  {t("chiaSe.hanMuc")}
                 </p>
               </>
             ) : (
               <>
                 <p className="mt-1 text-xs text-mo">
-                  Tạo một liên kết để người khác đọc tài liệu và hỏi đáp trong
-                  notebook này. Thu hồi được bất cứ lúc nào.
+                  {t("chiaSe.chuaCoMoTa")}
                 </p>
                 <button
                   onClick={() => void tao()}
                   disabled={dangLam}
                   className="mt-3 rounded-md bg-nhan px-3 py-1.5 text-xs font-medium text-nen disabled:opacity-45"
                 >
-                  {dangLam ? "…" : "Tạo liên kết"}
+                  {dangLam ? "…" : t("chiaSe.tao")}
                 </button>
               </>
             )}

@@ -11,7 +11,31 @@
 
 import { useEffect, useRef, useState } from "react";
 import { type TrichDan, taiVe } from "@/lib/api";
+import { useNgonNgu } from "@/components/NgonNguProvider";
+import type { Khoa } from "@/lib/i18n";
 import { hoi, type SuKien } from "@/lib/stream";
+
+/**
+ * Nhãn cho từng bước xử lý — khoá là `stage` trong sự kiện SSE.
+ *
+ * Bước lạ trả về `null` thay vì hiện mã bước: `stage` là từ vựng của máy chủ,
+ * và một chuỗi như `reranking` giữa cuộc hội thoại không nói gì với người dùng.
+ * Giao diện rơi về "đang xử lý".
+ */
+const KHOA_BUOC: Record<string, Khoa> = {
+  retrieving: "buoc.retrieving",
+  reranking: "buoc.reranking",
+  generating: "buoc.generating",
+  verifying: "buoc.verifying",
+  regenerating: "buoc.regenerating",
+};
+
+function nhanBuoc(
+  t: (khoa: Khoa, tham?: Record<string, string | number>) => string,
+  stage: string,
+): string | null {
+  return stage in KHOA_BUOC ? t(KHOA_BUOC[stage]) : null;
+}
 
 type Luot = {
   cauHoi: string;
@@ -21,14 +45,6 @@ type Luot = {
   trangThai: string | null;
   xong: boolean;
   loi: string | null;
-};
-
-const NHAN_BUOC: Record<string, string> = {
-  retrieving: "đang tìm trong tài liệu",
-  reranking: "đang xếp hạng đoạn liên quan",
-  generating: "đang viết câu trả lời",
-  verifying: "đang kiểm định",
-  regenerating: "đang viết lại",
 };
 
 export function CotHoiDap({
@@ -51,6 +67,7 @@ export function CotHoiDap({
   const [phienId, setPhienId] = useState<string | null>(null);
   const [dangXuat, setDangXuat] = useState(false);
   const cuoiRef = useRef<HTMLDivElement>(null);
+  const { t } = useNgonNgu();
 
   useEffect(() => {
     cuoiRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -93,7 +110,7 @@ export function CotHoiDap({
         case "external_call":
           break;
         case "status":
-          capNhat((l) => ({ ...l, trangThai: NHAN_BUOC[String(e.stage)] ?? null }));
+          capNhat((l) => ({ ...l, trangThai: nhanBuoc(t, String(e.stage)) }));
           break;
         case "token":
           capNhat((l) => ({ ...l, traLoi: l.traLoi + String(e.text) }));
@@ -135,7 +152,7 @@ export function CotHoiDap({
     } catch {
       setLuot((cu) =>
         cu.map((l, i) =>
-          i === cu.length - 1 ? { ...l, loi: "Không xuất được tệp. Thử lại sau." } : l,
+          i === cu.length - 1 ? { ...l, loi: t("chat.khongXuatDuoc") } : l,
         ),
       );
     } finally {
@@ -148,7 +165,7 @@ export function CotHoiDap({
       {/* Thanh xuất chỉ hiện khi đã có gì để xuất — US-040. */}
       {phienId && luot.some((l) => l.xong) && (
         <div className="flex shrink-0 items-center justify-end gap-2 border-b border-vien px-6 py-2">
-          <span className="mr-auto text-xs text-mo">Lưu lại cuộc hỏi đáp này</span>
+          <span className="mr-auto text-xs text-mo">{t("chat.luuLai")}</span>
           <button
             onClick={() => void xuat("md")}
             disabled={dangXuat}
@@ -170,12 +187,10 @@ export function CotHoiDap({
         {luot.length === 0 && (
           <div className="mx-auto max-w-[68ch] rounded-lg border border-dashed border-vien px-5 py-10 text-center">
             <p className="font-medium">
-              {sanSang ? "Hỏi gì đó về tài liệu của bạn" : "Chưa có tài liệu nào sẵn sàng"}
+              {sanSang ? t("chat.batDau") : t("chat.chuaCoTaiLieu")}
             </p>
             <p className="mt-1 text-sm text-mo">
-              {sanSang
-                ? "Mỗi khẳng định trong câu trả lời sẽ kèm số đoạn. Bấm vào số đó để đọc đúng đoạn văn gốc."
-                : "Tài liệu cần được xử lý xong trước khi hỏi."}
+              {sanSang ? t("chat.batDauMoTa") : t("chat.canXuLyXong")}
             </p>
             {/* US-042 AC-1 — lời gọi hành động, không chỉ mô tả tình trạng. */}
             {!sanSang && (
@@ -183,7 +198,7 @@ export function CotHoiDap({
                 onClick={onTaiTaiLieu}
                 className="mt-4 rounded-md bg-nhan px-4 py-2 text-sm font-medium text-nen"
               >
-                Tải tài liệu đầu tiên lên
+                {t("chat.taiLenDauTien")}
               </button>
             )}
           </div>
@@ -193,7 +208,7 @@ export function CotHoiDap({
           {luot.map((l, i) => (
             <div key={i}>
               <p className="text-sm text-mo">
-                <b className="font-semibold text-chu">Bạn:</b> {l.cauHoi}
+                <b className="font-semibold text-chu">{t("chat.ban")}</b> {l.cauHoi}
               </p>
 
               <div
@@ -215,14 +230,14 @@ export function CotHoiDap({
                   />
                 ) : (
                   <span className="text-sm italic text-mo">
-                    {l.trangThai ?? "đang xử lý"}…
+                    {l.trangThai ?? t("chung.dangXuLy")}…
                   </span>
                 )}
               </div>
 
               {l.xong && !l.loi && l.trangThai === null && Object.keys(l.trichDan).length > 0 && (
                 <p className="mt-2 text-xs text-mo">
-                  {Object.keys(l.trichDan).length} trích dẫn — bấm số để xem đoạn gốc
+                  {t("chat.soTrichDan", { so: Object.keys(l.trichDan).length })}
                 </p>
               )}
             </div>
@@ -237,7 +252,7 @@ export function CotHoiDap({
             value={cauHoi}
             onChange={(e) => setCauHoi(e.target.value)}
             disabled={dangHoi}
-            placeholder={sanSang ? "Hỏi gì đó về tài liệu…" : "Chưa có tài liệu sẵn sàng"}
+            placeholder={sanSang ? t("chat.oNhap") : t("chat.chuaSanSang")}
             className="flex-1 rounded-md border border-vien bg-the px-3 py-2 outline-none focus:border-nhan disabled:opacity-60"
           />
           <button
@@ -245,7 +260,7 @@ export function CotHoiDap({
             disabled={!cauHoi.trim() || dangHoi}
             className="rounded-md bg-nhan px-5 py-2 font-medium text-white disabled:opacity-45"
           >
-            {dangHoi ? "…" : "Hỏi"}
+            {dangHoi ? "…" : t("chat.hoi")}
           </button>
         </div>
       </form>
@@ -263,6 +278,7 @@ function VanBanCoChip({
   trichDan: Record<number, TrichDan>;
   onChon: (t: TrichDan) => void;
 }) {
+  const { t } = useNgonNgu();
   const phan = text.split(/(\[\d{1,2}\])/g);
   return (
     <>
@@ -271,15 +287,15 @@ function VanBanCoChip({
         if (!khop) return <span key={i}>{p}</span>;
 
         const so = Number(khop[1]);
-        const t = trichDan[so];
+        const cite = trichDan[so];
         return (
           <button
             key={i}
             type="button"
-            disabled={!t}
-            onClick={() => t && onChon(t)}
-            className={`chip${t ? "" : " chip-chet"}`}
-            title={t ? "Xem đoạn gốc" : "Trích dẫn không tồn tại"}
+            disabled={!cite}
+            onClick={() => cite && onChon(cite)}
+            className={`chip${cite ? "" : " chip-chet"}`}
+            title={cite ? t("chip.xemDoanGoc") : t("chip.khongTonTai")}
           >
             {so}
           </button>
