@@ -157,6 +157,8 @@ export type Nguon = {
   error_message: string | null;
   in_scope: boolean;
   created_at: string;
+  /** Chỉ luồng SSE gửi trường này — mô tả cụ thể bước đang chạy (US-022). */
+  message?: string;
 };
 
 export type TrichDan = {

@@ -218,9 +218,13 @@ function TrangThai({ nguon }: { nguon: Nguon }) {
   const nhan = NHAN_TRANG_THAI[nguon.status] ?? nguon.status;
   if (nguon.status === "ready") return <span className="text-nhan">{nhan}</span>;
   if (nguon.status === "failed") return <span className="text-canh-bao">{nhan}</span>;
+
+  // `message` do luồng SSE gửi kèm và nói cụ thể hơn hẳn nhãn trạng thái —
+  // "đang nhận dạng chữ 45/120 trang" thay vì "đang nhận dạng chữ" (US-022
+  // AC-3). Không có luồng thì rơi về nhãn tĩnh.
   return (
     <span className="text-mo">
-      {nhan} {nguon.progress}%
+      {nguon.message ? nguon.message.replace(/…$/, "") : nhan} {nguon.progress}%
     </span>
   );
 }

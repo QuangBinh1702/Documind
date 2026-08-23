@@ -1,4 +1,4 @@
-"""Nạp một tài liệu vào kho tri thức.
+﻿"""Nạp một tài liệu vào kho tri thức.
 
 Đây là chỗ **nối** những mảnh rời rạc thành một luồng chạy được:
 
@@ -24,6 +24,7 @@ from app.models.knowledge import Source
 from app.ports.embedding import EmbeddingProvider
 from app.ports.llm import LLMProvider
 from app.repositories import knowledge as repo
+from app.services import progress
 from app.services.contextual import build_prefixes, indexed_text
 from app.settings import settings
 from app.text.chunker import chunk_document
@@ -117,10 +118,24 @@ async def ingest_file(
     gốc thành mồ côi.
     """
 
-    def step(message: str) -> None:
+    def step(message: str, *, trang_thai: str | None = None, phan_tram: int | None = None) -> None:
+        """Ghi nhật ký, báo cho chỗ gọi, và đẩy tiến độ ra ngoài transaction.
+
+        Ba việc chứ không phải một, vì hàm này chạy trong một transaction dài:
+        mọi thứ ghi vào hàng `sources` chỉ hiện ra khi transaction đó commit.
+        `progress.dat` đi qua Redis nên giao diện thấy được ngay — xem chú thích
+        đầu `app/services/progress.py`.
+        """
         log.info(message)
         if on_progress:
             on_progress(message)
+        if trang_thai is not None:
+            progress.dat(
+                source.id,
+                status=trang_thai,
+                progress=phan_tram if phan_tram is not None else 0,
+                message=message,
+            )
 
     kind = SUFFIX_TO_KIND.get(path.suffix.lower())
     if kind is None:
@@ -173,14 +188,14 @@ async def ingest_file(
         from app.adapters.ocr import get_ocr_provider
 
         ocr = get_ocr_provider()
-        step(f"Nhận dạng chữ trong ảnh bằng {ocr.name} …")
+        step("Đang nhận dạng chữ trong ảnh …", trang_thai="ocr", phan_tram=25)
         source.status = "ocr"
         source.ocr_engine = ocr.name
         session.flush()
 
         result = extract_image(path, ocr)
     else:
-        step(f"Trích xuất {path.name} …")
+        step(f"Đang đọc {path.name} …", trang_thai="parsing", phan_tram=20)
         result = extract(path, kind)
 
     quality = result.quality
@@ -213,12 +228,24 @@ async def ingest_file(
             from app.adapters.ocr import get_ocr_provider
 
             ocr = get_ocr_provider()
-            step(f"Nhận dạng chữ {result.page_count} trang bằng {ocr.name} …")
+            tong_trang = result.page_count
+            step(
+                f"Đang nhận dạng chữ 0/{tong_trang} trang …",
+                trang_thai="ocr", phan_tram=25,
+            )
             source.status = "ocr"
             source.ocr_engine = ocr.name
             session.flush()
 
-            result = extract_scanned_pdf(path, ocr)
+            def bao_trang(da_xong: int, tong: int) -> None:
+                # OCR chiếm khoảng 25–70% tổng thời gian của một tài liệu scan.
+                step(
+                    f"Đang nhận dạng chữ {da_xong}/{tong} trang …",
+                    trang_thai="ocr",
+                    phan_tram=25 + int(45 * da_xong / max(tong, 1)),
+                )
+
+            result = extract_scanned_pdf(path, ocr, on_page=bao_trang)
             quality = result.quality
             source.page_count = result.page_count
             source.text_quality = quality.score
@@ -264,7 +291,8 @@ async def ingest_file(
         [{"page": p.page, "start": p.start, "end": p.end} for p in result.pages],
     )
 
-    step(f"Chia đoạn ({len(result.full_text):,} ký tự) …")
+    step(f"Đang chia đoạn ({len(result.full_text):,} ký tự) …",
+         trang_thai="chunking", phan_tram=75)
     source.status = "chunking"
     session.flush()
 
@@ -285,7 +313,8 @@ async def ingest_file(
     prefixes: list[str] | None = None
     context_seconds = 0.0
     if settings.contextual_retrieval_enabled and llm is not None:
-        step(f"Sinh bối cảnh cho {len(chunks)} đoạn …")
+        step(f"Đang sinh bối cảnh cho {len(chunks)} đoạn …",
+             trang_thai="chunking", phan_tram=80)
         contextual = await build_prefixes(
             result.full_text, chunks, llm=llm,
             on_progress=(lambda i, n: step(f"  bối cảnh {i}/{n}")) if on_progress else None,
@@ -293,7 +322,8 @@ async def ingest_file(
         prefixes = contextual.prefixes
         context_seconds = contextual.seconds
 
-    step(f"Nhúng {len(chunks)} đoạn bằng {embedder.name} …")
+    step(f"Đang lập chỉ mục {len(chunks)} đoạn …",
+         trang_thai="embedding", phan_tram=85)
     source.status = "embedding"
     session.flush()
 
@@ -304,7 +334,7 @@ async def ingest_file(
          for i, c in enumerate(chunks)]
     )
 
-    step("Ghi vào cơ sở dữ liệu …")
+    step("Đang ghi vào cơ sở dữ liệu …", trang_thai="embedding", phan_tram=95)
     repo.insert_chunks(session, source, chunks, vectors, prefixes)
 
     # Kiểm chứng INV-1 trên dữ liệu ĐÃ GHI, không phải trên đối tượng trong bộ

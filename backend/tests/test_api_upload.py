@@ -98,6 +98,49 @@ def _tai_len(client, headers, nb_id, ten: str, noi_dung: bytes):
 
 
 # ══════════════════════════════════════════════════════
+# Luồng trạng thái — US-022
+# ══════════════════════════════════════════════════════
+
+
+def test_luong_trang_thai_doi_dang_nhap(client, phien) -> None:
+    _, nb_id = phien
+    assert client.get(f"/api/notebooks/{nb_id}/sources/stream").status_code == 401
+
+
+def test_luong_trang_thai_bao_xong_roi_dong(client, phien) -> None:
+    """AC-1 — trạng thái tự tới, và luồng tự đóng khi không còn gì để báo.
+
+    Đóng luồng là phần dễ quên: một luồng SSE không bao giờ đóng sẽ giữ một
+    worker của máy chủ cho mỗi tab đang mở.
+    """
+    headers, nb_id = phien
+    assert _tai_len(client, headers, nb_id, "quy-che.txt", TAI_LIEU.encode()).status_code == 202
+
+    r = client.get(f"/api/notebooks/{nb_id}/sources/stream", headers=headers)
+    assert r.status_code == 200
+    assert "text/event-stream" in r.headers["content-type"]
+
+    events = [
+        json.loads(b[6:]) for b in r.text.split("\n\n") if b.startswith("data: ")
+    ]
+    kinds = [e["type"] for e in events]
+    assert "sources" in kinds
+    assert kinds[-1] == "done", "luồng phải tự đóng khi mọi nguồn đã xong"
+
+    dau = next(e for e in events if e["type"] == "sources")
+    assert dau["sources"][0]["status"] == "ready"
+    assert dau["sources"][0]["in_scope"] is True, "AC-4 — tự đưa vào phạm vi hỏi đáp"
+
+
+def test_luong_trang_thai_cua_nguoi_khac_tra_404(client, phien) -> None:
+    headers, _ = phien
+    import uuid as _uuid
+
+    r = client.get(f"/api/notebooks/{_uuid.uuid4()}/sources/stream", headers=headers)
+    assert r.status_code == 404
+
+
+# ══════════════════════════════════════════════════════
 # Từ chối đúng chỗ — US-006 AC-2, AC-3, AC-4
 # ══════════════════════════════════════════════════════
 

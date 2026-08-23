@@ -4,23 +4,25 @@
  * Màn hình làm việc chính — US-016.
  *
  * Trang này giữ trạng thái chung của ba cột và một việc nữa: **theo dõi tiến
- * trình xử lý tài liệu**. Tải một tệp lên xong thì nó chưa hỏi được ngay; máy
- * chủ trả `202` rồi xử lý ở nền. Nên khi còn nguồn nào chưa xong, trang hỏi lại
- * danh sách mỗi hai giây, và dừng hỏi ngay khi mọi thứ đã xong — không có lý do
- * gì để một trang tĩnh gọi API mãi mãi.
+ * trình xử lý tài liệu** (US-022). Tải một tệp lên xong thì nó chưa hỏi được
+ * ngay; máy chủ trả `202` rồi xử lý ở nền.
+ *
+ * Trạng thái tới qua một luồng SSE chứ không phải hỏi lại theo nhịp. Khác biệt
+ * không chỉ là ít request hơn: hỏi lại mỗi hai giây thì bước OCR
+ * *"45/120 trang"* đứng yên hai giây một lần và nhìn như bị treo, còn luồng thì
+ * đẩy sang ngay khi có thay đổi.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type Nguon, type Notebook, type TrichDan, api, token } from "@/lib/api";
+import { theoDoi, type SuKien } from "@/lib/stream";
 import { BaCot } from "@/components/BaCot";
 import { CotHoiDap } from "@/components/CotHoiDap";
 import { CotNguon } from "@/components/CotNguon";
 import { CotTaiLieu } from "@/components/CotTaiLieu";
 import { NhanQuyenRiengTu } from "@/components/NhanQuyenRiengTu";
-
-const NHIP_HOI_LAI_MS = 2000;
 
 export default function ManHinhNotebook() {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +33,8 @@ export default function ManHinhNotebook() {
   const [trichDan, setTrichDan] = useState<TrichDan | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
   const [dangSuaTen, setDangSuaTen] = useState(false);
-  const dongHo = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [vuaXong, setVuaXong] = useState<string | null>(null);
+  const daXong = useRef<Set<string>>(new Set());
 
   const tai = useCallback(async () => {
     try {
@@ -63,16 +66,56 @@ export default function ManHinhNotebook() {
     void tai();
   }, [router, tai]);
 
-  // Hỏi lại chừng nào còn nguồn đang xử lý, rồi dừng hẳn.
+  // Luồng trạng thái — US-022 AC-1.
+  //
+  // Máy chủ tự đóng luồng khi mọi nguồn đã xong, nên vòng lặp này không phải là
+  // hỏi lại liên tục: nó chỉ mở lại khi có tệp mới được tải lên, và ngồi im
+  // trong lúc chờ.
   useEffect(() => {
-    const dangChay = nguon.some((s) => s.status !== "ready" && s.status !== "failed");
-    if (!dangChay) return;
+    if (!token.access()) return;
+    const dung = new AbortController();
+    let huy = false;
 
-    dongHo.current = setTimeout(() => void tai(), NHIP_HOI_LAI_MS);
+    async function chay() {
+      while (!huy) {
+        await theoDoi(
+          `/api/notebooks/${id}/sources/stream`,
+          (e: SuKien) => {
+            if (e.type !== "sources") return;
+            const ds = e.sources as Nguon[];
+            setNguon((cu) =>
+              // Luồng chỉ gửi những trường thay đổi theo thời gian. Trộn lên
+              // bản đầy đủ để không xoá mất `size_bytes`, `text_quality`…
+              ds.map((moi) => ({ ...cu.find((c) => c.id === moi.id), ...moi }) as Nguon),
+            );
+
+            // AC-4: báo khi một tài liệu vừa sẵn sàng, mỗi tài liệu một lần.
+            for (const s of ds) {
+              if (s.status === "ready" && !daXong.current.has(s.id)) {
+                daXong.current.add(s.id);
+                setVuaXong(s.title);
+                setTimeout(() => setVuaXong(null), 4000);
+              }
+            }
+          },
+          dung.signal,
+        );
+        if (huy) return;
+        // Luồng đóng vì mọi thứ đã xong. Lấy lại bản đầy đủ một lần rồi nghỉ;
+        // lượt tải lên tiếp theo sẽ gọi `tai()` và mở lại vòng này.
+        await tai();
+        return;
+      }
+    }
+
+    void chay();
     return () => {
-      if (dongHo.current) clearTimeout(dongHo.current);
+      huy = true;
+      dung.abort();
     };
-  }, [nguon, tai]);
+    // `nguon.length` để mở lại luồng khi có tệp mới, không phải mỗi lần đổi %.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, nguon.length]);
 
   if (loi) {
     return (
@@ -131,6 +174,16 @@ export default function ManHinhNotebook() {
         </span>
         <NhanQuyenRiengTu />
       </header>
+
+      {/* US-022 AC-4 — báo khi tài liệu sẵn sàng, rồi tự biến mất. */}
+      {vuaXong && (
+        <div
+          role="status"
+          className="shrink-0 border-b border-vien bg-nhan/5 px-5 py-2 text-sm"
+        >
+          <b className="font-medium">{vuaXong}</b> đã xử lý xong — hỏi được rồi.
+        </div>
+      )}
 
       <div className="min-h-0 flex-1">
         <BaCot

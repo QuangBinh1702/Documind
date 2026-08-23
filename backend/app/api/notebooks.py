@@ -6,25 +6,40 @@ nhất thay vì rải điều kiện `user_id` khắp nơi và quên mất một
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import time
 import uuid
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 
 from app.adapters.storage import minio_store
 from app.api.deps import CurrentUser, DbSession, notebook_cua_toi
+from app.models.base import session_scope
 from app.models.chat import ChatSession
 from app.models.knowledge import Notebook, Source
+from app.services import progress
 from app.services.upload import UploadError, nhan_tep
 from app.settings import settings
 from app.workers.tasks import xu_ly_nguon
 
 router = APIRouter(tags=["notebooks"])
 log = logging.getLogger(__name__)
+
+# Nhịp hỏi lại. Một giây đủ nhanh để cảm giác là tức thời, và đủ chậm để không
+# thành một vòng lặp bận trên cơ sở dữ liệu.
+_SSE_NHIP_GIAY = 1.0
+
+# Trần thời gian sống của một luồng. Không có nó thì một tab bỏ quên giữ kết nối
+# mãi mãi; giao diện tự mở lại khi cần.
+_SSE_TOI_DA_GIAY = 600.0
 
 # FastAPI đọc tham số tải tệp qua giá trị mặc định. Gọi `File()` ngay trong chữ
 # ký hàm là mẫu chuẩn của FastAPI nhưng vi phạm quy tắc "không gọi hàm ở giá trị
@@ -165,6 +180,82 @@ def list_sources(
         .order_by(Source.created_at.desc())
     ).all()
     return [NguonResponse.model_validate(s) for s in rows]
+
+
+@router.get("/notebooks/{notebook_id}/sources/stream",
+            summary="Theo dõi tiến độ xử lý nguồn (SSE)")
+async def stream_sources(
+    notebook_id: uuid.UUID, user: CurrentUser, session: DbSession
+) -> StreamingResponse:
+    """US-022 AC-1 — trạng thái tự cập nhật, không phải tải lại trang.
+
+    Hỏi lại cơ sở dữ liệu theo nhịp thay vì lắng nghe một kênh phát: `LISTEN`
+    của Postgres đòi giữ một kết nối riêng cho mỗi người xem, và ở quy mô của đồ
+    án thì một câu SELECT mỗi giây rẻ hơn nhiều so với hạ tầng ấy.
+
+    Chi tiết trong từng bước — *"đang nhận dạng chữ 45/120 trang"* — không nằm
+    trong `sources` mà ở Redis, vì hàng `sources` bị transaction nạp tài liệu
+    khoá suốt quá trình. Xem `app/services/progress.py`.
+    """
+    nb = notebook_cua_toi(session, user, notebook_id)
+    nb_id = nb.id
+
+    async def stream() -> AsyncIterator[str]:
+        truoc_do: dict[str, tuple] = {}
+        het_han = time.monotonic() + _SSE_TOI_DA_GIAY
+
+        while time.monotonic() < het_han:
+            with session_scope() as s:
+                rows = s.scalars(
+                    select(Source).where(Source.notebook_id == nb_id)
+                    .order_by(Source.created_at.desc())
+                ).all()
+                nguon = [
+                    {
+                        "id": str(r.id), "title": r.title, "kind": r.kind,
+                        "status": r.status, "progress": r.progress,
+                        "page_count": r.page_count, "in_scope": r.in_scope,
+                        "error_message": r.error_message,
+                    }
+                    for r in rows
+                ]
+
+            chi_tiet = progress.doc([uuid.UUID(n["id"]) for n in nguon])
+            for n in nguon:
+                buoc = chi_tiet.get(n["id"])
+                # Chỉ tin Redis khi hàng trong DB còn đang xử lý dở. Bản ghi
+                # tiến độ sống một giờ, nên một nguồn đã `ready` mà vẫn còn dấu
+                # vết cũ sẽ hiện ngược về "đang lập chỉ mục".
+                if buoc and n["status"] not in ("ready", "failed"):
+                    n["status"] = buoc.get("status", n["status"])
+                    n["progress"] = buoc.get("progress", n["progress"])
+                    n["message"] = buoc.get("message", "")
+
+            dau_van_tay = {
+                n["id"]: (n["status"], n["progress"], n.get("message", "")) for n in nguon
+            }
+            if dau_van_tay != truoc_do:
+                truoc_do = dau_van_tay
+                goi = json.dumps(
+                    {"type": "sources", "sources": nguon}, ensure_ascii=False
+                )
+                yield f"data: {goi}\n\n"
+
+            # Mọi nguồn đã xong thì không còn gì để theo dõi. Đóng luồng thay vì
+            # giữ một kết nối chạy không.
+            if nguon and all(n["status"] in ("ready", "failed") for n in nguon):
+                yield 'data: {"type": "done"}\n\n'
+                return
+
+            await asyncio.sleep(_SSE_NHIP_GIAY)
+
+        yield 'data: {"type": "timeout"}\n\n'
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/notebooks/{notebook_id}/sources", response_model=NguonResponse,

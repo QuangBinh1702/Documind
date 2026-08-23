@@ -42,12 +42,44 @@ export async function hoi(
     return;
   }
 
-  const reader = r.body.getReader();
+  await docLuong(r, onSuKien);
+}
+
+/**
+ * Theo dõi một luồng SSE mở bằng `GET` — US-022.
+ *
+ * `EventSource` sẽ gọn hơn, nhưng nó không gắn được `Authorization`, và luồng
+ * này nằm sau đăng nhập. Đưa token vào query string thì nó lọt vào log máy chủ
+ * và lịch sử trình duyệt — nên vẫn dùng `fetch`.
+ *
+ * `signal` để giao diện đóng luồng khi rời khỏi notebook. Không có nó thì mỗi
+ * lần chuyển notebook lại bỏ lại một kết nối chạy tiếp trong nền.
+ */
+export async function theoDoi(
+  duong: string,
+  onSuKien: (e: SuKien) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const r = await goiTho(duong, { signal });
+  if (!r.ok || !r.body) return;
+  await docLuong(r, onSuKien);
+}
+
+async function docLuong(r: Response, onSuKien: (e: SuKien) => void): Promise<void> {
+  const reader = r.body!.getReader();
   const decoder = new TextDecoder();
   let dem = "";
 
   for (;;) {
-    const { done, value } = await reader.read();
+    let doc;
+    try {
+      doc = await reader.read();
+    } catch {
+      // Luồng bị huỷ (rời trang, đổi notebook) — đó là kết thúc bình thường,
+      // không phải lỗi cần báo cho người dùng.
+      return;
+    }
+    const { done, value } = doc;
     if (done) break;
 
     dem += decoder.decode(value, { stream: true });

@@ -23,6 +23,7 @@ thì văn bản lộn xộn, và chunk sinh ra từ đó vô nghĩa. Sắp theo 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from app.adapters.extract.base import BBox, ExtractionError, ExtractResult, TextBuilder
 from app.ports.ocr import OcrProvider
@@ -39,8 +40,17 @@ METHOD = "ocr"
 _CUNG_HANG = 8.0
 
 
-def extract_scanned_pdf(path, ocr: OcrProvider) -> ExtractResult:
-    """Render từng trang rồi nhận dạng chữ."""
+def extract_scanned_pdf(
+    path,
+    ocr: OcrProvider,
+    on_page: Callable[[int, int], None] | None = None,
+) -> ExtractResult:
+    """Render từng trang rồi nhận dạng chữ.
+
+    `on_page(da_xong, tong)` được gọi sau mỗi trang. OCR là bước lâu nhất của cả
+    đường ống — hàng chục giây mỗi trang trên CPU — nên không báo tiến độ ở đây
+    thì người dùng nhìn một màn hình đứng yên hàng chục phút (US-022 AC-3).
+    """
     import pymupdf
 
     doc = pymupdf.open(path)
@@ -79,6 +89,8 @@ def extract_scanned_pdf(path, ocr: OcrProvider) -> ExtractResult:
                 page_no, doc.page_count, len(ket_qua.lines),
                 ket_qua.confidence, ket_qua.seconds,
             )
+            if on_page:
+                on_page(page_no, doc.page_count)
     finally:
         doc.close()
 
