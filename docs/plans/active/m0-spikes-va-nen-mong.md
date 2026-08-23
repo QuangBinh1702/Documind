@@ -23,7 +23,6 @@ Cụ thể, khi M0 xong ta biết chắc:
 - `SPEC.md` v2.2 — hành vi, 72 user story, mốc M0–M7, DoR/DoD ở Phần A.
 - `SPEC-v1.md` v1.0 — kiến trúc, 4 bất biến §1.3, ERD + DDL §4, ngân sách VRAM §10.
 - `SPEC-REVIEW.md` — căn cứ của các quyết định và việc còn lại.
-- `docs/TOOLING.md` — hiện trạng codebase và kho công cụ.
 - `docs/WORKFLOW.md` — cổng thẩm quyền và chuẩn hoàn thành của repo.
 
 Phần cứng: phát triển trên laptop MX570 2 GB (`DEVICE=cpu`), đo hiệu năng trên
@@ -81,17 +80,24 @@ Out of scope:
 - [x] Bộ khung thư mục theo `SPEC-v1.md` §3.3
 - [x] `docs/evidence/` và mẫu tệp bằng chứng
 - [x] `spikes/s1_offset.py`, `s2_vram.py`, `s3_highlight.py`, README, requirements
-- [ ] Đặt 3 PDF mẫu vào `spikes/samples/`
-- [ ] Chạy S1 → `spikes/out/s1_offset.md`
-- [ ] Chạy S3 → mở `spikes/out/s3_highlight.html`, kiểm tra ở 3 mức zoom
-- [ ] Chạy S2 trên server → `spikes/out/s2_vram.md`
-- [ ] Decision record: bất biến offset và thứ tự chuẩn hoá
-- [ ] Decision record: runtime LLM và ngân sách VRAM
-- [ ] Decision record: bậc highlight của US-015
-- [ ] Decision record: một skill frontend làm chuẩn
+- [x] Đặt 3 PDF mẫu vào `spikes/samples/` — có text, scan; **không có bản mã cũ**
+- [x] Chạy S1 → **ĐẠT**, 316/316 chunk khớp offset
+- [x] Decision record: bất biến offset → `0002-bat-bien-offset-tren-pdf-that.md`
+- [x] Chạy S3 → dựng xong `spikes/out/s3_highlight.html`, 29 kết quả, không
+      trang nào có `/Rotate` hay `CropBox` lệch
+- [ ] **S3 — việc của người:** mở tệp HTML đó, kiểm ô vàng ở 3 mức zoom
+- [ ] Decision record: bậc highlight của US-015 *(chờ bước trên)*
+- [ ] Chạy S2 trên server 16 GB → `spikes/out/s2_vram.md`
+- [ ] Decision record: runtime LLM và ngân sách VRAM *(chờ S2)*
+- [ ] Decision record: một skill frontend làm chuẩn *(chưa cần tới M2)*
 - [ ] Chốt phiên bản ngăn xếp, thay "đề xuất" ở `SPEC-v1.md` §2
-- [ ] Chốt `DEFAULT_MODE`
-- [ ] Xoá `spikes/` sau khi ghi xong quyết định
+- [x] Chốt `DEFAULT_MODE` → `privacy` là mặc định của đồ án; máy phát triển đặt
+      `fast` vì laptop 2 GB VRAM không chạy nổi mô hình cục bộ
+- [ ] Xoá `spikes/` sau khi ghi xong quyết định *(chưa được — S2 và S3 còn dở)*
+
+Phát sinh ngoài kế hoạch, đã xong: hai decision record nữa
+(`0003` phát hiện bản scan, và phần bổ sung cho `0001` về phân bố `ts_rank_cd`),
+cùng bằng chứng `docs/evidence/M0-spikes.md`.
 
 ## Decisions
 
