@@ -10,7 +10,11 @@ dependencies = [
     # ── API ────────────────────────────────────────────
     "fastapi>=0.115,<0.120",
     "uvicorn[standard]>=0.32,<0.36",
-    "pydantic>=2.9,<3",
+    # `[email]` chứ không phải `pydantic` trần: `EmailStr` ở `schemas/auth.py`
+    # cần `email-validator`, và thiếu nó thì ứng dụng chết ngay lúc dựng schema
+    # — không phải lúc có ai gõ email sai. Máy phát triển thường đã có gói này
+    # từ một phụ thuộc khác, nên thiếu khai báo chỉ lộ ra ở ảnh Docker sạch.
+    "pydantic[email]>=2.9,<3",
     "pydantic-settings>=2.6,<3",
     "python-multipart>=0.0.12",
 
@@ -65,9 +69,19 @@ ml = [
     # chục MB thay vì vài trăm.
     "rapidocr>=3.0",
     "onnxruntime>=1.19",
-    # Giữ lại cho US-048 (so nhiều engine). Hiện KHÔNG chạy được:
-    # paddlepaddle 3.0.0 từ chối nạp chính mô hình mà paddleocr tải về
-    # (`ValueError: Type of attribute: strides is not right`).
+]
+
+# PaddleOCR nằm RIÊNG, không nằm trong `ml`.
+#
+# Hai lý do, và lý do thứ hai mới là lý do chính: nó kéo theo `paddlepaddle`
+# nặng cả gigabyte, và nó **hiện không chạy được** — paddlepaddle 3.0.0 từ chối
+# nạp chính mô hình mà paddleocr tải về (`ValueError: Type of attribute: strides
+# is not right`). Để nó trong `ml` nghĩa là mọi ảnh Docker đều mang theo một
+# gigabyte phụ thuộc hỏng.
+#
+# Giữ lại vì US-048 cần so nhiều engine OCR:
+#   pip install -e ".[ml,paddle]"
+paddle = [
     "paddleocr>=3.0",
 ]
 dev = [

@@ -1,0 +1,18 @@
+# Thiếu tệp này thì `COPY . .` chép `node_modules` của máy Windows ĐÈ LÊN bản
+# Linux mà `npm ci` vừa cài ở bước trước. Next.js khi đó không tìm thấy binary
+# SWC đúng nền tảng và chết ngay lúc khởi động — một lỗi trông chẳng liên quan
+# gì tới nguyên nhân thật.
+node_modules
+.next
+
+# Bản build và tệp sinh ra: ảnh tự dựng lấy.
+out
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+npm-debug.log*
+.env*

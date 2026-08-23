@@ -73,9 +73,24 @@ Chờ khoảng một phút cho Postgres và MinIO sẵn sàng, rồi mở:
 Đăng ký một tài khoản ngay trên trang chủ, tạo notebook, kéo một tệp PDF vào,
 đợi trạng thái chuyển sang **sẵn sàng**, rồi hỏi.
 
-> Lần chạy đầu tiên phải tải trọng số mô hình (~10 GB). Nó diễn ra trong nền ở
-> container `worker`; tài liệu đầu tiên vì thế lâu hơn hẳn những lần sau. Xem
-> tiến trình bằng `docker compose logs -f worker`.
+> **Lần dựng đầu mất khoảng 10–15 phút** và tải về vài GB (PyTorch, thư viện
+> Node). Những lần sau dùng cache nên chỉ vài giây.
+>
+> **Tài liệu đầu tiên cũng lâu**: worker phải tải trọng số `bge-m3` và
+> `bge-reranker-v2-m3`, khoảng **4,3 GB**, vào volume `model-cache`. Đo trên máy
+> phát triển: tải hết mất khoảng 3 phút, sau đó một tệp DOCX 10 nghìn ký tự xử
+> lý xong trong 47 giây. Từ tài liệu thứ hai trở đi không phải tải nữa.
+>
+> Theo dõi bằng `docker compose logs -f worker`.
+
+Ảnh dựng ra: `documind-api` và `documind-worker` mỗi cái 3,2 GB,
+`documind-frontend` 1,6 GB. Ảnh backend cài **PyTorch bản chỉ CPU** — bản CUDA
+mặc định của PyPI nặng hơn 2,5 GB và vô dụng khi `DEVICE=cpu`. Máy có GPU thì
+dựng lại bằng:
+
+```bash
+docker compose build --build-arg TORCH_INDEX=https://pypi.org/simple api worker
+```
 
 ---
 
@@ -274,7 +289,8 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # Linux / macOS
-pip install -e ".[dev]"       # thêm ".[ml]" nếu cần mô hình thật
+pip install -e ".[dev,ml]"    # bỏ ",ml" nếu chỉ chạy test với adapter giả
+# ".[ml,paddle]" nếu cần thêm PaddleOCR cho US-048 — xem Khắc phục sự cố
 
 # Bỏ comment ba dòng DATABASE_URL / REDIS_URL / MINIO_ENDPOINT trong .env
 # và đặt WORKER_MODE=inline (không có worker container).
@@ -322,8 +338,9 @@ Xem [`eval/README.md`](eval/README.md).
 ## Khắc phục sự cố
 
 **Tài liệu kẹt mãi ở "đang chờ"**
-Worker chưa chạy hoặc không tới được Redis. Kiểm tra
-`docker compose logs worker`. Chạy backend trần thì đặt `WORKER_MODE=inline`.
+`WORKER_MODE` không khớp với cách đang chạy. Đi bằng Docker thì phải là `celery`
+(có container `worker`); chạy backend trần không bật worker thì phải là
+`inline`. Kiểm tra thêm bằng `docker compose logs worker`.
 
 **Tài liệu đầu tiên rất lâu**
 Lần đầu phải tải ~10 GB trọng số. Theo dõi bằng
@@ -331,7 +348,9 @@ Lần đầu phải tải ~10 GB trọng số. Theo dõi bằng
 
 **`OCR_ENGINE=paddle` báo `ValueError: Type of attribute: strides is not right`**
 PaddlePaddle 3.0.0 không nạp được chính mô hình mà PaddleOCR tải về. Dùng
-`OCR_ENGINE=rapid` — cùng họ mô hình PP-OCRv5, chạy qua ONNX Runtime.
+`OCR_ENGINE=rapid` — cùng họ mô hình PP-OCRv5, chạy qua ONNX Runtime. Vì lý do
+này `paddleocr` nằm ở nhóm phụ thuộc **riêng** (`.[paddle]`), không nằm trong
+`.[ml]`: ảnh Docker không nên mang theo một gigabyte phụ thuộc đang hỏng.
 
 **Chữ tiếng Việt trong bản scan mất sạch dấu**
 `OCR_REC_LANG` đang để `ch`. Đổi sang `latin`. Chi tiết và số đo ở

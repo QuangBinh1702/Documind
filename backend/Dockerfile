@@ -19,9 +19,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Bản PyTorch nào.
+#
+# Mặc định là bản CHỈ CPU: nó khoảng 200 MB, còn bản CUDA mặc định của PyPI hơn
+# 2,5 GB vì mang theo toàn bộ thư viện CUDA. Trên máy phát triển đặt DEVICE=cpu
+# thì ngần ấy dung lượng là tải về rồi không dùng.
+#
+# Máy đích có GPU thì dựng lại bằng:
+#   docker compose build --build-arg TORCH_INDEX=https://pypi.org/simple api worker
+ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
+
 # Cài phụ thuộc trước, chép mã sau — đổi mã không phải cài lại thư viện.
+#
+# Cài `torch` riêng và cài TRƯỚC: đặt sau thì pip đã lấy bản CUDA từ PyPI theo
+# yêu cầu của `sentence-transformers` rồi, và `--index-url` ở đây không rút lại
+# được nữa.
 COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install -e ".[dev]"
+RUN pip install --upgrade pip \
+ && pip install --index-url "${TORCH_INDEX}" torch \
+ && pip install -e ".[dev,ml]"
 
 COPY . .
 

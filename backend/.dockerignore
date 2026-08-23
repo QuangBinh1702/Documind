@@ -1,0 +1,20 @@
+# Môi trường ảo của máy Windows — hơn 2 GB, và vô dụng trong container Linux vì
+# container dùng Python của hệ thống. Không loại ra thì mỗi lần dựng ảnh phải
+# chuyển ngần ấy dữ liệu qua cho Docker daemon.
+.venv
+venv
+
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+
+# Không bao giờ nướng bí mật vào ảnh. Cấu hình đi vào lúc chạy, qua `env_file`
+# của compose.
+.env*
