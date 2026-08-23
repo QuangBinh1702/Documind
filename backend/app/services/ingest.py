@@ -11,6 +11,7 @@ có dữ liệu thật làm việc trước khi có hàng đợi và API.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.adapters.extract import ExtractionError, extract
+from app.models.knowledge import Source
 from app.ports.embedding import EmbeddingProvider
 from app.ports.llm import LLMProvider
 from app.repositories import knowledge as repo
@@ -73,12 +75,19 @@ async def ingest_file(
     embedder: EmbeddingProvider,
     llm: LLMProvider | None = None,
     owner_email: str = "cli@documind.local",
+    existing_source_id: uuid.UUID | None = None,
     on_progress: Callable[[str], None] | None = None,
 ) -> IngestResult:
     """Nạp một tệp. Ném `ExtractionError` nếu tệp không dùng được.
 
     `llm` chỉ cần khi bật Contextual Retrieval (US-049); các đường khác không
     dùng tới nó.
+
+    `existing_source_id` dành cho đường tải lên qua API: bản ghi `sources` đã
+    được tạo lúc nhận tệp, kèm khoá lưu trữ thật trên MinIO và tên gốc do người
+    dùng đặt. Không có tham số này thì hàm sẽ tạo thêm một bản ghi thứ hai trỏ
+    vào tệp tạm — nguồn bị nhân đôi, và bản ghi mới mất luôn khoá MinIO nên tệp
+    gốc thành mồ côi.
     """
 
     def step(message: str) -> None:
@@ -94,21 +103,28 @@ async def ingest_file(
             f"Hỗ trợ: {', '.join(sorted(SUFFIX_TO_KIND))}.",
         )
 
-    user = repo.get_or_create_user(session, owner_email)
-    notebook = repo.get_or_create_notebook(session, user, notebook_title)
-
-    source = repo.upsert_source(
-        session,
-        notebook,
-        title=path.stem,
-        original_name=path.name,
-        # Tệp gốc chưa lên MinIO — việc đó thuộc US-006. Ghi đường dẫn cục bộ
-        # kèm tiền tố để sau này phân biệt được nguồn nạp bằng CLI.
-        storage_key=f"cli://{path.resolve().as_posix()}",
-        kind=kind,
-        mime_type=MIME_BY_KIND[kind],
-        size_bytes=path.stat().st_size,
-    )
+    if existing_source_id is not None:
+        source = session.get(Source, existing_source_id)
+        if source is None:
+            raise ExtractionError(
+                "SOURCE_NOT_FOUND",
+                "Không tìm thấy bản ghi nguồn để cập nhật.",
+            )
+    else:
+        user = repo.get_or_create_user(session, owner_email)
+        notebook = repo.get_or_create_notebook(session, user, notebook_title)
+        source = repo.upsert_source(
+            session,
+            notebook,
+            title=path.stem,
+            original_name=path.name,
+            # Đường nạp bằng CLI không đi qua MinIO. Ghi đường dẫn cục bộ kèm
+            # tiền tố để phân biệt được với nguồn tải lên qua API.
+            storage_key=f"cli://{path.resolve().as_posix()}",
+            kind=kind,
+            mime_type=MIME_BY_KIND[kind],
+            size_bytes=path.stat().st_size,
+        )
 
     step(f"Trích xuất {path.name} …")
     result = extract(path, kind)

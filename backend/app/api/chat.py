@@ -64,17 +64,20 @@ def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _resolve(session, notebook_id: uuid.UUID) -> tuple[User, Notebook]:
-    """Lấy notebook kèm chủ sở hữu.
+def _resolve(
+    session, notebook_id: uuid.UUID, user: User | None = None
+) -> tuple[User, Notebook]:
+    """Lấy notebook kèm chủ sở hữu, kiểm quyền nếu đã biết người đăng nhập.
 
-    Xác thực thật thuộc US-002; cho tới lúc đó chủ sở hữu suy ra từ chính
-    notebook. Điều quan trọng là `owner_id` vẫn được truyền xuống tầng truy
-    xuất, nên INV-4 đã có hiệu lực và sẽ không phải sửa khi thêm đăng nhập.
+    Notebook của người khác trả về **404**, không phải 403 — xem chú thích ở
+    `app/api/deps.py`. Không có `user` (đường bàn thử, chưa đăng nhập) thì chủ
+    sở hữu suy ra từ chính notebook; `owner_id` vẫn được truyền xuống tầng truy
+    xuất nên INV-4 giữ nguyên hiệu lực ở cả hai đường.
     """
     nb = session.get(Notebook, notebook_id)
-    if nb is None:
+    if nb is None or (user is not None and nb.user_id != user.id):
         raise HTTPException(404, "Không tìm thấy notebook.")
-    return session.get(User, nb.user_id), nb
+    return (user or session.get(User, nb.user_id)), nb
 
 
 @router.post("/chat/ask", summary="Hỏi đáp có căn cứ, trả về luồng SSE")
@@ -176,8 +179,19 @@ async def chat_ask_external(req: ExternalRequest) -> StreamingResponse:
 # ── Dữ liệu phụ trợ cho giao diện ──────────────────────
 
 
-@router.get("/notebooks", summary="Danh sách notebook")
-def list_notebooks() -> list[dict[str, Any]]:
+@router.get("/testbed/notebooks", summary="Danh sách notebook cho bàn thử")
+def list_notebooks_testbed() -> list[dict[str, Any]]:
+    """Danh sách MỌI notebook, không cần đăng nhập — chỉ dùng cho bàn thử.
+
+    `/api/notebooks` mới là endpoint thật: nó đòi token và chỉ trả về notebook
+    của chính người đăng nhập. Đường này tồn tại để bàn thử ở `/` còn dùng được
+    khi phát triển, và vì thế nó **phải** đóng ở môi trường thật — một endpoint
+    liệt kê tài liệu của mọi người mà không hỏi gì là đúng thứ INV-4 sinh ra để
+    ngăn.
+    """
+    if settings.is_production:
+        raise HTTPException(404, "Không tìm thấy.")
+
     with session_scope() as session:
         rows = session.execute(
             select(Notebook, User.email)

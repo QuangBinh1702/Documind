@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
@@ -155,7 +155,7 @@ function logEvent(e) {
 }
 
 async function loadNotebooks() {
-  const list = await (await fetch("/api/notebooks")).json();
+  const list = await (await fetch("/api/testbed/notebooks")).json();
   const sel = $("#nb");
   sel.innerHTML = list.length
     ? list.map(n => `<option value="${n.id}">${n.title} (${n.source_count} nguồn)</option>`).join("")

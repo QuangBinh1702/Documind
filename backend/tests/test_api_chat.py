@@ -94,12 +94,25 @@ def _events(response) -> list[dict]:
 # ══════════════════════════════════════════════════════
 
 
-def test_liet_ke_notebook(client: TestClient, notebook_id: str) -> None:
-    r = client.get("/api/notebooks")
+def test_liet_ke_notebook_cho_ban_thu(client: TestClient, notebook_id: str) -> None:
+    """Đường của bàn thử, không cần đăng nhập.
+
+    `/api/notebooks` mới là endpoint thật và nó đòi token — xem
+    `test_api_auth.py`. Đường này liệt kê mọi notebook nên nó bị đóng khi
+    `APP_ENV` là production.
+    """
+    r = client.get("/api/testbed/notebooks")
     assert r.status_code == 200
     nb = next(n for n in r.json() if n["id"] == notebook_id)
     assert nb["source_count"] >= 1
     assert nb["sources"][0]["status"] == "ready"
+
+
+def test_duong_ban_thu_dong_o_moi_truong_that(client: TestClient, monkeypatch) -> None:
+    """Một endpoint liệt kê tài liệu của mọi người mà không hỏi gì là đúng thứ
+    INV-4 sinh ra để ngăn."""
+    monkeypatch.setattr(settings, "app_env", "production")
+    assert client.get("/api/testbed/notebooks").status_code == 404
 
 
 def test_trang_ban_thu_tra_ve_html(client: TestClient) -> None:

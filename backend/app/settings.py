@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     access_token_minutes: int = 60
     refresh_token_days: int = 7
     login_max_attempts: int = 5
+    login_window_minutes: int = 5
+    """Cửa sổ đếm số lần sai — US-003 AC-5: 5 lần trong 5 phút thì khoá."""
+
     login_lockout_minutes: int = 15
 
     # ── Thiết bị tính toán (SPEC-v1.md §10.0) ───────────

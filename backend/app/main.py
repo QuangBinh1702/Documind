@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.api import chat, health
+from app.api import auth, chat, health, notebooks
 from app.settings import settings
 
 STATIC = Path(__file__).parent / "static"
@@ -50,6 +50,8 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(notebooks.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 
 
