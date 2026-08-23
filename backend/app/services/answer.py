@@ -155,6 +155,15 @@ async def answer_question(
 
         if intent == "chitchat":
             # Không chạy truy xuất — đó là toàn bộ lý do bước này tồn tại.
+            # Và vì không truy xuất nên **không có đoạn tài liệu nào** được gửi
+            # đi, chỉ có câu chào. Cảnh báo phải nói đúng mức đó.
+            if not llm.is_local:
+                yield {
+                    "type": "external_call",
+                    "model": llm.name,
+                    "includes_documents": False,
+                }
+
             pieces: list[str] = []
             async for piece in llm.stream(
                 CHITCHAT_SYSTEM_PROMPT,
@@ -237,6 +246,16 @@ async def answer_question(
     system = P.build_grounded_system_prompt()
     user = P.build_user_prompt(question, blocks)
     messages: list[Message] = [*(history or []), {"role": "user", "content": user}]
+
+    # Báo dữ liệu rời khỏi máy NGAY TRƯỚC lượt gọi thật sự gửi nó đi.
+    #
+    # Không gắn vào `meta` ở đầu luồng: lúc đó chưa biết có gọi mô hình hay
+    # không, và đường từ chối thì **không gọi**. Gắn sớm là nói với người dùng
+    # rằng tài liệu của họ đã đi ra ngoài trong khi thật ra không có gì đi cả —
+    # một cảnh báo sai về quyền riêng tư còn tệ hơn không cảnh báo, vì nó dạy
+    # người ta bỏ qua những cảnh báo đúng.
+    if not llm.is_local:
+        yield {"type": "external_call", "model": llm.name, "includes_documents": True}
 
     yield {"type": "status", "stage": "generating"}
 

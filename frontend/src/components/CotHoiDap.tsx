@@ -13,12 +13,14 @@ import { useEffect, useRef, useState } from "react";
 import type { TrichDan } from "@/lib/api";
 import { hoi, type SuKien } from "@/lib/stream";
 
+type NgoaiMay = { model: string; keCaTaiLieu: boolean };
+
 type Luot = {
   cauHoi: string;
   traLoi: string;
   trichDan: Record<number, TrichDan>;
   tuChoi: boolean;
-  ngoaiMay: string | null;
+  ngoaiMay: NgoaiMay | null;
   trangThai: string | null;
   xong: boolean;
   loi: string | null;
@@ -44,6 +46,13 @@ export function CotHoiDap({
   const [luot, setLuot] = useState<Luot[]>([]);
   const [cauHoi, setCauHoi] = useState("");
   const [dangHoi, setDangHoi] = useState(false);
+
+  // Cảnh báo quyền riêng tư chỉ hiện MỘT LẦN cho cả cuộc hội thoại.
+  //
+  // Lặp lại ở mọi câu trả lời thì sau ba câu người dùng không đọc nó nữa —
+  // và một cảnh báo không ai đọc thì không còn là cảnh báo. `SPEC-REVIEW.md`
+  // §A.4 cũng chỉ yêu cầu báo một lần.
+  const [daBaoNgoaiMay, setDaBaoNgoaiMay] = useState(false);
   const cuoiRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,11 +86,21 @@ export function CotHoiDap({
 
     await hoi({ question: q, notebook_id: nbId }, (e: SuKien) => {
       switch (e.type) {
-        case "meta":
-          // Câu trả lời rời khỏi máy thì phải nói ra, ngay tại chính câu đó.
-          if (e.is_local === false) {
-            capNhat((l) => ({ ...l, ngoaiMay: String(e.model) }));
-          }
+        case "external_call":
+          // Máy chủ chỉ phát sự kiện này NGAY TRƯỚC lượt gọi thật sự gửi dữ
+          // liệu đi, nên nó không bao giờ hiện nhầm ở đường từ chối — đường đó
+          // không gọi mô hình.
+          setDaBaoNgoaiMay((cu) => {
+            if (cu) return cu; // đã báo rồi thì thôi, mỗi cuộc một lần
+            capNhat((l) => ({
+              ...l,
+              ngoaiMay: {
+                model: String(e.model),
+                keCaTaiLieu: e.includes_documents !== false,
+              },
+            }));
+            return true;
+          });
           break;
         case "status":
           capNhat((l) => ({ ...l, trangThai: NHAN_BUOC[String(e.stage)] ?? null }));
@@ -139,8 +158,11 @@ export function CotHoiDap({
               </p>
 
               {l.ngoaiMay && (
-                <p className="mt-2 text-xs font-medium text-canh-bao">
-                  Câu hỏi và các đoạn tài liệu được chọn đã gửi tới {l.ngoaiMay}.
+                <p className="mt-2 text-xs text-canh-bao">
+                  {l.ngoaiMay.keCaTaiLieu
+                    ? `Chế độ này gửi câu hỏi và các đoạn tài liệu được chọn tới ${l.ngoaiMay.model}.`
+                    : `Chế độ này gửi câu hỏi tới ${l.ngoaiMay.model}. Lần này không có đoạn tài liệu nào được gửi đi.`}{" "}
+                  Chuyển sang Privacy Mode để không có gì rời khỏi máy.
                 </p>
               )}
 
