@@ -83,3 +83,8 @@ desktop.ini
 
 # Log tạm của trình duyệt tự động, sinh lại được
 .playwright-mcp/
+
+# Nhật ký thô của một lượt chạy đánh giá. Kết quả (.json) và đồ thị (.svg) thì
+# theo dõi, còn log thì không: nó chỉ có nghĩa trong lúc lượt chạy đang diễn ra.
+eval/results/*.log
+eval/results/*.err
