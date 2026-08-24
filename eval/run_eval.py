@@ -127,8 +127,26 @@ Thang điểm:
 Trả về ĐÚNG một dòng:
 ĐIỂM: <một trong 1.0, 0.7, 0.4, 0.0>"""
 
+CHAM_TRICH_DAN = """Bạn kiểm tra các TRÍCH DẪN trong một câu trả lời có trỏ \
+đúng chỗ không.
+
+Câu trả lời gắn số đoạn dạng [1], [2] vào từng khẳng định. Với MỖI lần gắn số,
+xét xem khẳng định đi kèm có thật sự nằm trong ĐÚNG đoạn mang số đó hay không.
+
+Đúng   — nội dung của khẳng định có trong đoạn được gắn số.
+Sai    — khẳng định không có trong đoạn ấy, dù có thể nằm ở đoạn khác.
+
+Chỉ xét trích dẫn có trỏ đúng đoạn hay không. KHÔNG xét câu trả lời hay hay dở,
+cũng KHÔNG trừ điểm vì trích dẫn nhiều nguồn: một câu trả lời nêu quy định của
+ba tài liệu khác nhau và gắn đúng số cho từng cái là HOÀN TOÀN ĐÚNG.
+
+Trả về ĐÚNG hai dòng:
+TỔNG: <số lần gắn số>
+ĐÚNG: <số lần gắn đúng đoạn>"""
+
 _TONG = re.compile(r"TỔNG:\s*(\d+)")
 _CHUNG_THUC = re.compile(r"ĐƯỢC CHỨNG THỰC:\s*(\d+)")
+_DUNG = re.compile(r"ĐÚNG:\s*(\d+)")
 _DIEM = re.compile(r"ĐIỂM:\s*([\d.]+)")
 
 
@@ -168,6 +186,32 @@ async def cham_faithfulness(
         return None
     n = int(tong.group(1))
     return round(int(chung.group(1)) / n, 4) if n else None
+
+
+async def cham_trich_dan(
+    llm: LLMProvider, answer: str, contexts: list[str], nhip: Nhip
+) -> float | None:
+    """Tỉ lệ lần gắn số trỏ đúng đoạn — US-045.
+
+    Đây là chỉ số đo đúng thứ đồ án hứa: *"mỗi khẳng định gắn số đoạn, bấm vào
+    số đó là ra đúng chỗ nội dung được lấy"*. Nó khác hẳn `citation_precision_gold`
+    bên dưới — xem chú thích ở đó.
+    """
+    if not answer.strip() or not contexts:
+        return None
+    if "[" not in answer:
+        return None
+
+    ngu_canh = "\n\n".join(f"[{i}] {c[:1500]}" for i, c in enumerate(contexts, 1))
+    raw = await _goi(
+        llm, CHAM_TRICH_DAN,
+        f"CÁC ĐOẠN:\n{ngu_canh}\n\nCÂU TRẢ LỜI:\n{answer}", nhip,
+    )
+    tong, dung = _TONG.search(raw), _DUNG.search(raw)
+    if not (tong and dung):
+        return None
+    n = int(tong.group(1))
+    return round(int(dung.group(1)) / n, 4) if n else None
 
 
 async def cham_relevancy(
@@ -223,8 +267,33 @@ class KetQua:
     5 và hạng 8."""
 
     citation_accuracy: float | None = None
-    """Tỉ lệ trích dẫn trỏ vào đoạn chứa đáp án. `None` khi câu trả lời không
-    có trích dẫn nào — khác hẳn với "có trích dẫn nhưng trỏ sai"."""
+    """Tỉ lệ lần gắn số trỏ ĐÚNG đoạn, do mô hình chấm.
+
+    Đây là chỉ số **cổng**: nó đo đúng lời hứa của hệ thống — bấm vào một số
+    trích dẫn là ra đúng chỗ nội dung được lấy. `None` khi câu trả lời không có
+    trích dẫn nào, khác hẳn với "có trích dẫn nhưng trỏ sai".
+    """
+
+    citation_recall_gold: float | None = None
+    """Câu trả lời có trích dẫn đoạn chứa nhãn không — 1.0 hoặc 0.0.
+
+    Đo được bằng so khớp khoảng ký tự, không cần mô hình, nên tái lập tuyệt đối.
+    """
+
+    citation_precision_gold: float | None = None
+    """Tỉ lệ trích dẫn trùng đoạn chứa nhãn. **KHÔNG dùng làm cổng** — ghi lại
+    để phân tích, và vì bản trước từng dùng nó làm cổng.
+
+    Vì sao nó không đo được chất lượng trích dẫn: bộ ngữ liệu gồm quy chế của
+    NHIỀU trường cùng bàn một chủ đề, nhưng mỗi câu hỏi chỉ gắn MỘT đoạn vàng.
+    Một câu trả lời tốt nêu được sự khác nhau giữa bốn quy chế và gắn đúng số
+    cho từng cái sẽ nhận điểm 1/4 — bị phạt vì đã làm đúng.
+
+    Đo thật ở lượt chạy 10 câu: bốn câu "trượt" nhận đúng 0.20, 0.25, 0.25 và
+    0.33 — tức là 1/5, 1/4, 1/4, 1/3, khớp chính xác số marker mà câu trả lời
+    đã dùng. Đó là dấu vân tay của một công thức bị chặn trên bởi `1/N`, không
+    phải của một hệ thống trích dẫn sai.
+    """
 
     faithfulness: float | None = None
     answer_relevancy: float | None = None
@@ -260,6 +329,12 @@ def phan_loai_loi(kq: KetQua) -> str:
         return ""
     if kq.context_recall < NGUONG["context_recall"]:
         return "retrieval_failure"
+    # `context_precision` cũng là lỗi truy xuất: đoạn chứa đáp án có được lấy về
+    # nhưng bị xếp hạng thấp. Thiếu nhánh này thì những mẫu ấy rơi vào "khac" —
+    # và "khac" là chỗ nguyên nhân đi ẩn mình. Đo thật trên 10 câu: hai mẫu vào
+    # "khac", cả hai đều là `prec=0.50`, tức là hạng 2 chứ không phải hạng 1.
+    if kq.context_precision < NGUONG["context_precision"]:
+        return "retrieval_ranking"
     if kq.faithfulness is not None and kq.faithfulness < NGUONG["faithfulness"]:
         return "generation_grounding"
     if kq.answer_relevancy is not None and kq.answer_relevancy < NGUONG["answer_relevancy"]:
@@ -311,16 +386,18 @@ async def chay_mot_cau(
     kq.context_precision = round(1.0 / hang, 4) if hang else 0.0
 
     if r.citations:
-        dung = sum(
+        trung_nhan = sum(
             1 for c in r.citations
             if _trung(c.char_start, c.char_end, cau["char_start"], cau["char_end"])
         )
-        kq.citation_accuracy = round(dung / len(r.citations), 4)
+        kq.citation_recall_gold = 1.0 if trung_nhan else 0.0
+        kq.citation_precision_gold = round(trung_nhan / len(r.citations), 4)
 
     # ── Chỉ số cần mô hình chấm ────────────────────────
     if not chi_truy_xuat and r.kind == "grounded":
         kq.faithfulness = await cham_faithfulness(judge, r.answer, kq.contexts, nhip_judge)
         kq.answer_relevancy = await cham_relevancy(judge, cau["question"], r.answer, nhip_judge)
+        kq.citation_accuracy = await cham_trich_dan(judge, r.answer, kq.contexts, nhip_judge)
 
     kq.nhom_loi = phan_loai_loi(kq)
     return kq
@@ -528,6 +605,14 @@ def _tom_tat(ket_qua: list[KetQua]) -> None:
             continue
         dat = "✓" if tb >= nguong else "✗"
         print(f"{ten:<22}{tb:>12.4f}{nguong:>12.2f}{dat:>6}{n:>10}/{len(ket_qua)}")
+
+    # Hai chỉ số ghi lại để phân tích, KHÔNG dùng làm cổng — xem chú thích ở
+    # `KetQua.citation_precision_gold`.
+    print("─" * 66)
+    for ten in ("citation_recall_gold", "citation_precision_gold"):
+        tb, n = _trung_binh(ket_qua, ten)
+        if tb is not None:
+            print(f"{ten:<22}{tb:>12.4f}{'(tham khảo)':>18}{n:>10}/{len(ket_qua)}")
 
     dat = sum(1 for k in ket_qua if k.dat)
     print("─" * 66)
