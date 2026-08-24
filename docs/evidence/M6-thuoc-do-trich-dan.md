@@ -83,17 +83,71 @@ ngữ liệu có nhiều tài liệu chồng chủ đề, nên nó bị gỡ kh�
 
 ---
 
-## 4. Điều này nói gì về phương pháp đánh giá
+## 4. Lỗi thứ hai: cách HỎI bộ chấm
+
+Sau khi sửa định nghĩa, câu q001 vẫn bị chấm **4/24 = 0,167**. Lần này thủ phạm
+không phải công thức mà là **cách đặt câu hỏi cho bộ chấm**.
+
+Bản đầu đưa cả 8 đoạn (12 000 ký tự) cùng toàn bộ câu trả lời, rồi bảo mô hình
+*"đếm xem bao nhiêu lần gắn số là đúng"* và trả về hai dòng. Đó là 24 phép đối
+chiếu bắc chéo qua tám đoạn, gói vào một lượt trả lời hai con số.
+
+### Đối chiếu bằng tay cho thấy bộ chấm sai, không phải hệ thống sai
+
+Mở nội dung đoạn ra và kiểm từng dòng:
+
+| Dòng trong câu trả lời | Đoạn được gắn | Có trong đoạn? |
+|---|---|---|
+| Xuất sắc: 3,6 – 4,0 | [1] | ✅ cả `3,6` lẫn `4,0` |
+| Giỏi: 3,2 – 3,59 | [1] | ✅ cả `3,2` lẫn `3,59` |
+| Khá: 2,5 – 3,19 | [1] | ✅ |
+| Căn cứ GPA và CPA | [1] | ✅ cả `(GPA)` lẫn `(CPA)` |
+| Xuất sắc: từ 3,6 đến 4,0 | [2] | ✅ |
+| Giỏi: từ 3,2 đến cận 3,6 | [2] | ✅ |
+| … (14/14 dòng kiểm được đều khớp) | | |
+
+Câu trả lời **đúng**. Bộ chấm chấm sai.
+
+### Sửa: hỏi từng đoạn một
+
+Mỗi lượt gọi giờ chỉ mang **một đoạn** và danh sách khẳng định trích dẫn đoạn
+ấy, và yêu cầu trả lời từng dòng `1: Đ` / `2: S`. Việc nhỏ, kiểm được, và số
+lượt gọi bằng số **đoạn được trích** chứ không bằng số khẳng định.
+
+Đo lại trên cùng câu trả lời, cùng mô hình chấm:
+
+| Câu | Bộ chấm cũ | Bộ chấm mới | Đối chiếu tay |
+|---|---|---|---|
+| q001 | 0,167 | **0,857** | ≈ 1,0 |
+| q003 | 1,000 | **1,000** | 1,0 |
+
+q003 giữ nguyên 1,0 — cách hỏi mới không thổi phồng những ca vốn đã đúng.
+
+---
+
+## 5. Điều này nói gì về phương pháp đánh giá
 
 Đáng viết vào Chương 5 như một mục về **độ tin cậy của thước đo**, không giấu đi:
 
-* Một chỉ số tự động có thể sai theo hướng **phạt oan cái đúng**, và nó không tự
-  báo. Cả hai lần trong đồ án này, dấu hiệu nhận ra đều là một **quy luật số học
-  quá đều** — `1/top_k` lần trước, `1/N` lần này.
-* Cách phát hiện là **đọc mẫu trượt**, không phải nhìn con số trung bình. Bốn câu
-  trả lời bị chấm thấp nhất hoá ra là bốn câu trả lời tốt.
-* Đây chính là lý do US-059 tồn tại: phải đối chiếu bộ chấm tự động với người
-  chấm trước khi xây cả một chương lên nó.
+Một chỉ số tự động hỏng được theo **hai tầng độc lập**, và đồ án này gặp cả hai
+trên cùng một con số:
+
+1. **Định nghĩa sai** — công thức đo nhầm thứ. Dấu hiệu: một quy luật số học quá
+   đều. `1/top_k` với `context_precision`, `1/N` với `citation_accuracy`.
+2. **Cách hỏi sai** — định nghĩa đúng nhưng giao cho mô hình một việc quá tải.
+   Dấu hiệu: điểm thấp bất thường ở đúng những mẫu **dài và phức tạp nhất**,
+   trong khi mẫu ngắn vẫn 1,0.
+
+Tầng thứ hai nguy hiểm hơn vì nó **có vẻ hợp lý**: bộ chấm là một mô hình ngôn
+ngữ, mô hình ngôn ngữ thì sai được, nên một điểm thấp trông như một kết quả chứ
+không như một lỗi.
+
+Cách phát hiện cả hai đều giống nhau: **mở mẫu trượt ra đọc**, không nhìn con số
+trung bình. Bốn câu bị chấm thấp nhất hoá ra là bốn câu trả lời tốt.
+
+Đây chính là lý do US-059 tồn tại. Phần đối chiếu tay ở mục 4 là **một mẫu** của
+việc đó, và nó đã đủ để lật ngược một kết luận. US-059 yêu cầu ≥ 30 mẫu; con số
+ấy không phải thủ tục.
 
 Ghi nhận thẳng: con số **0,703** đã từng được ghi vào `docs/evidence/` như một
 kết quả trượt. Nó sai, và tài liệu này là bản đính chính.

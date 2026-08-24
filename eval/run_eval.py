@@ -127,22 +127,24 @@ Thang điểm:
 Trả về ĐÚNG một dòng:
 ĐIỂM: <một trong 1.0, 0.7, 0.4, 0.0>"""
 
-CHAM_TRICH_DAN = """Bạn kiểm tra các TRÍCH DẪN trong một câu trả lời có trỏ \
-đúng chỗ không.
+CHAM_TRICH_DAN = """Bạn kiểm tra các khẳng định có nằm trong MỘT đoạn tài liệu \
+cho trước hay không.
 
-Câu trả lời gắn số đoạn dạng [1], [2] vào từng khẳng định. Với MỖI lần gắn số,
-xét xem khẳng định đi kèm có thật sự nằm trong ĐÚNG đoạn mang số đó hay không.
+Dưới đây là một đoạn tài liệu, rồi một danh sách khẳng định được đánh số 1, 2,
+3… Câu trả lời gốc đã trích dẫn ĐOẠN NÀY cho từng khẳng định ấy.
 
-Đúng   — nội dung của khẳng định có trong đoạn được gắn số.
-Sai    — khẳng định không có trong đoạn ấy, dù có thể nằm ở đoạn khác.
+Với mỗi khẳng định, xét: nội dung của nó có nằm trong đoạn này không?
 
-Chỉ xét trích dẫn có trỏ đúng đoạn hay không. KHÔNG xét câu trả lời hay hay dở,
-cũng KHÔNG trừ điểm vì trích dẫn nhiều nguồn: một câu trả lời nêu quy định của
-ba tài liệu khác nhau và gắn đúng số cho từng cái là HOÀN TOÀN ĐÚNG.
+Đ — có. Con số, mốc thời gian hoặc nội dung xuất hiện trong đoạn.
+S — không. Nó có thể đúng ở một đoạn khác, nhưng không có trong đoạn này.
 
-Trả về ĐÚNG hai dòng:
-TỔNG: <số lần gắn số>
-ĐÚNG: <số lần gắn đúng đoạn>"""
+Cách diễn đạt khác không sao — chỉ xét NỘI DUNG. "Từ 3,2 đến cận 3,6" và
+"3,2 - 3,59" là cùng một điều nếu đoạn ghi khoảng ấy.
+
+Trả về ĐÚNG một dòng cho mỗi khẳng định, theo đúng thứ tự:
+1: Đ
+2: S
+…"""
 
 _TONG = re.compile(r"TỔNG:\s*(\d+)")
 _CHUNG_THUC = re.compile(r"ĐƯỢC CHỨNG THỰC:\s*(\d+)")
@@ -188,6 +190,33 @@ async def cham_faithfulness(
     return round(int(chung.group(1)) / n, 4) if n else None
 
 
+_KHANG_DINH = re.compile(r"\[(\d{1,2})\]")
+_PHAN_HOI_DS = re.compile(r"^\s*(\d{1,2})\s*[:.\)]\s*([ĐDSs])", re.MULTILINE)
+
+
+def _tach_khang_dinh(answer: str) -> dict[int, list[str]]:
+    """Nhóm các khẳng định theo đoạn mà chúng trích dẫn.
+
+    Một "khẳng định" ở đây là một dòng có gắn số. Cắt theo dòng chứ không theo
+    câu vì câu trả lời gần như luôn ở dạng danh sách gạch đầu dòng, và mỗi gạch
+    đầu dòng là một ý riêng.
+    """
+    theo_doan: dict[int, list[str]] = {}
+    for dong in answer.splitlines():
+        sach = dong.strip().lstrip("*-• ").strip()
+        so = _KHANG_DINH.findall(sach)
+        if not sach or not so:
+            continue
+        # Bỏ chính các marker khỏi nội dung khẳng định — bộ chấm không cần thấy
+        # chúng, và thấy chúng lại dễ bị dẫn dắt.
+        noi_dung = _KHANG_DINH.sub("", sach).strip(" *:—-–").strip()
+        if len(noi_dung) < 8:
+            continue
+        for s in {int(x) for x in so}:
+            theo_doan.setdefault(s, []).append(noi_dung)
+    return theo_doan
+
+
 async def cham_trich_dan(
     llm: LLMProvider, answer: str, contexts: list[str], nhip: Nhip
 ) -> float | None:
@@ -196,22 +225,56 @@ async def cham_trich_dan(
     Đây là chỉ số đo đúng thứ đồ án hứa: *"mỗi khẳng định gắn số đoạn, bấm vào
     số đó là ra đúng chỗ nội dung được lấy"*. Nó khác hẳn `citation_precision_gold`
     bên dưới — xem chú thích ở đó.
+
+    Hỏi theo TỪNG ĐOẠN, không hỏi tất cả một lượt
+    ----------------------------------------------
+    Bản đầu đưa cả 8 đoạn (12 000 ký tự) cùng toàn bộ câu trả lời rồi bảo mô
+    hình "đếm xem bao nhiêu lần gắn số là đúng". Nó chấm sai nặng: một câu trả
+    lời mà **mọi** con số đều kiểm được bằng tay là có trong đúng đoạn đã gắn
+    (3,6 · 4,0 · 3,2 · 3,59 · GPA · CPA) bị chấm 4/24.
+
+    Đó là bài toán quá tải, không phải mô hình dốt: 24 phép đối chiếu bắc chéo
+    qua tám đoạn trong một lượt trả lời hai dòng. Nay mỗi lượt gọi chỉ mang MỘT
+    đoạn và danh sách khẳng định trích dẫn đoạn ấy, và trả lời từng dòng một —
+    việc nhỏ, kiểm được, và số lượt gọi bằng số đoạn được trích chứ không bằng
+    số khẳng định.
     """
-    if not answer.strip() or not contexts:
-        return None
-    if "[" not in answer:
+    if not answer.strip() or not contexts or "[" not in answer:
         return None
 
-    ngu_canh = "\n\n".join(f"[{i}] {c[:1500]}" for i, c in enumerate(contexts, 1))
-    raw = await _goi(
-        llm, CHAM_TRICH_DAN,
-        f"CÁC ĐOẠN:\n{ngu_canh}\n\nCÂU TRẢ LỜI:\n{answer}", nhip,
-    )
-    tong, dung = _TONG.search(raw), _DUNG.search(raw)
-    if not (tong and dung):
+    theo_doan = _tach_khang_dinh(answer)
+    if not theo_doan:
         return None
-    n = int(tong.group(1))
-    return round(int(dung.group(1)) / n, 4) if n else None
+
+    tong = 0
+    dung = 0
+    for so, khang_dinh in sorted(theo_doan.items()):
+        if not 1 <= so <= len(contexts):
+            # Marker bịa ra — `strip_invalid_markers` đáng lẽ đã loại, nhưng nếu
+            # còn sót thì nó là một trích dẫn SAI, không phải một mẫu bỏ qua.
+            tong += len(khang_dinh)
+            continue
+
+        danh_sach = "\n".join(f"{i}. {k}" for i, k in enumerate(khang_dinh, 1))
+        raw = await _goi(
+            llm, CHAM_TRICH_DAN,
+            f"ĐOẠN TÀI LIỆU:\n{contexts[so - 1][:2500]}\n\n"
+            f"CÁC KHẲNG ĐỊNH:\n{danh_sach}",
+            nhip,
+        )
+        tra_loi = {int(m.group(1)): m.group(2).upper() for m in _PHAN_HOI_DS.finditer(raw)}
+        if not tra_loi:
+            # Không đọc được phản hồi cho đoạn này thì bỏ QUA cả nhóm, chứ không
+            # tính là sai — một lượt gọi hỏng không phải một trích dẫn sai.
+            continue
+        for i in range(1, len(khang_dinh) + 1):
+            if i not in tra_loi:
+                continue
+            tong += 1
+            if tra_loi[i] in ("Đ", "D"):
+                dung += 1
+
+    return round(dung / tong, 4) if tong else None
 
 
 async def cham_relevancy(
