@@ -86,6 +86,15 @@ NGUONG = {
 # Nhịp gọi — bản miễn phí cho 20 request mỗi phút cho mỗi mô hình.
 GOI_MOI_PHUT = 18
 
+# Bao nhiêu đoạn đưa cho bộ chấm faithfulness trong MỘT lượt gọi.
+#
+# Con số này là ranh giới giữa một phép đo dùng được và một phép đo vô nghĩa.
+# Đo trên cùng câu trả lời, cùng mô hình chấm: 8 đoạn (12 000 ký tự) cho 0.17,
+# còn 1 đoạn (2 500 ký tự) cho 0.89 — và đối chiếu tay xác nhận 0.89 mới đúng.
+# Ba đoạn giữ mỗi lượt gọi quanh 5 000 ký tự, đủ nhỏ để mô hình còn đối chiếu
+# được, đủ lớn để không nổ số lượt gọi.
+_DOAN_MOI_CUM = 3
+
 
 class Nhip:
     def __init__(self, moi_phut: int) -> None:
@@ -103,15 +112,24 @@ class Nhip:
 # Bộ chấm bằng mô hình
 # ══════════════════════════════════════════════════════
 
-CHAM_FAITHFULNESS = """Bạn kiểm tra một câu trả lời có bám vào tài liệu không.
+CHAM_FAITHFULNESS = """Bạn kiểm tra từng khẳng định có được các đoạn tài liệu \
+chứng thực hay không.
 
-Tách câu trả lời thành từng khẳng định. Với mỗi khẳng định, xét xem nó có được
-các đoạn tài liệu chứng thực hay không. "Được chứng thực" nghĩa là nội dung nằm
-rõ ràng trong đoạn — không phải nghe hợp lý là được.
+Dưới đây là các đoạn tài liệu, rồi một danh sách khẳng định được đánh số.
 
-Trả về ĐÚNG hai dòng:
-TỔNG: <số khẳng định>
-ĐƯỢC CHỨNG THỰC: <số khẳng định được chứng thực>"""
+Với MỖI khẳng định, xét: nội dung của nó có nằm trong BẤT KỲ đoạn nào ở trên
+không? Khác đoạn nào cũng được — ở đây không xét trích dẫn có trỏ đúng chỗ hay
+không, chỉ xét nội dung có mặt trong tài liệu.
+
+Đ — có. Nội dung nằm rõ ràng trong ít nhất một đoạn.
+S — không. Nghe hợp lý nhưng không có trong đoạn nào.
+
+Cách diễn đạt khác không sao — chỉ xét NỘI DUNG.
+
+Trả về ĐÚNG một dòng cho mỗi khẳng định, theo đúng thứ tự:
+1: Đ
+2: S
+…"""
 
 CHAM_RELEVANCY = """Bạn chấm mức độ câu trả lời TRẢ LỜI ĐÚNG câu hỏi được hỏi.
 
@@ -172,26 +190,83 @@ async def cham_faithfulness(
 ) -> float | None:
     """Tỉ lệ khẳng định được ngữ cảnh chứng thực.
 
+    Hỏi TỪNG khẳng định, không hỏi một con số tổng
+    -----------------------------------------------
+    Bản đầu bảo mô hình *"tách câu trả lời thành khẳng định, đếm xem bao nhiêu
+    cái được chứng thực"* rồi trả về hai dòng. Nó bắt mô hình vừa tách, vừa đối
+    chiếu, vừa cộng — trong một lượt sinh hai con số, không có chỗ nào để lộ ra
+    nó đã tách thành gì.
+
+    Đo được: cùng một câu trả lời, cùng một mô hình, hỏi gộp cho **17%** còn hỏi
+    theo từng mục cho **89%** (xem `docs/evidence/M6-thuoc-do-trich-dan.md`).
+    Nay việc tách do mã làm — tách theo dòng, tất định — còn mô hình chỉ phải
+    trả lời Đ/S cho từng dòng.
+
     Trả về ``None`` khi không chấm được — **không** trả về 0. Một lượt gọi hỏng
     không phải là một câu trả lời bịa; gộp hai thứ đó lại là bóp méo số liệu
     theo hướng xấu đi mà không có gì trong kết quả nói ra điều đó.
     """
     if not answer.strip() or not contexts:
         return None
-    ngu_canh = "\n\n".join(f"[{i}] {c[:1500]}" for i, c in enumerate(contexts, 1))
-    raw = await _goi(
-        llm, CHAM_FAITHFULNESS,
-        f"CÁC ĐOẠN:\n{ngu_canh}\n\nCÂU TRẢ LỜI:\n{answer}", nhip,
-    )
-    tong, chung = _TONG.search(raw), _CHUNG_THUC.search(raw)
-    if not (tong and chung):
+
+    khang_dinh = _tach_dong(answer)
+    if not khang_dinh:
         return None
-    n = int(tong.group(1))
-    return round(int(chung.group(1)) / n, 4) if n else None
+
+    danh_sach = "\n".join(f"{i}. {k}" for i, k in enumerate(khang_dinh, 1))
+
+    # Một khẳng định được chứng thực nếu nó nằm trong BẤT KỲ đoạn nào, nên phải
+    # hỏi hết các đoạn. Nhưng hỏi cả tám đoạn trong một lượt là quá tải —
+    # đo được: cùng câu trả lời, cùng mô hình, đưa 12 000 ký tự cho ra 0.17
+    # trong khi đưa 2 500 ký tự cho ra 0.89.
+    #
+    # Nên chia đoạn thành từng cụm nhỏ và hỏi từng cụm. Một khẳng định chỉ cần
+    # MỘT cụm xác nhận là đủ — đúng nghĩa "nằm trong bất kỳ đoạn nào".
+    duoc_chung_thuc: set[int] = set()
+    da_tra_loi: set[int] = set()
+
+    for dau in range(0, len(contexts), _DOAN_MOI_CUM):
+        cum = contexts[dau : dau + _DOAN_MOI_CUM]
+        ngu_canh = "\n\n".join(
+            f"[{dau + i}] {c[:1800]}" for i, c in enumerate(cum, 1)
+        )
+        raw = await _goi(
+            llm, CHAM_FAITHFULNESS,
+            f"CÁC ĐOẠN:\n{ngu_canh}\n\nCÁC KHẲNG ĐỊNH:\n{danh_sach}", nhip,
+        )
+        for m in _PHAN_HOI_DS.finditer(raw):
+            i = int(m.group(1))
+            if not 1 <= i <= len(khang_dinh):
+                continue
+            da_tra_loi.add(i)
+            if m.group(2).upper() in ("Đ", "D"):
+                duoc_chung_thuc.add(i)
+
+    if not da_tra_loi:
+        return None
+    return round(len(duoc_chung_thuc) / len(da_tra_loi), 4)
 
 
 _KHANG_DINH = re.compile(r"\[(\d{1,2})\]")
 _PHAN_HOI_DS = re.compile(r"^\s*(\d{1,2})\s*[:.\)]\s*([ĐDSs])", re.MULTILINE)
+
+
+def _tach_dong(answer: str) -> list[str]:
+    """Tách câu trả lời thành từng khẳng định — bằng MÃ, không bằng mô hình.
+
+    Câu trả lời gần như luôn ở dạng danh sách gạch đầu dòng, nên mỗi dòng là một
+    ý. Để mô hình tự tách thì việc tách không kiểm được, không tái lập được, và
+    nó gộp luôn vào cùng một lượt sinh với việc đối chiếu.
+    """
+    ra: list[str] = []
+    for dong in answer.splitlines():
+        sach = _KHANG_DINH.sub("", dong.strip().lstrip("*-• ")).strip(" *:—-–").strip()
+        # Bỏ dòng tiêu đề kiểu "**Thang điểm:**" — không phải khẳng định về nội
+        # dung, và tính chúng vào mẫu số làm điểm tụt mà không có nghĩa gì.
+        if len(sach) < 12:
+            continue
+        ra.append(sach)
+    return ra
 
 
 def _tach_khang_dinh(answer: str) -> dict[int, list[str]]:

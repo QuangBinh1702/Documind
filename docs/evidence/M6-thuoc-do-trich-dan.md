@@ -92,36 +92,54 @@ Bản đầu đưa cả 8 đoạn (12 000 ký tự) cùng toàn bộ câu trả 
 *"đếm xem bao nhiêu lần gắn số là đúng"* và trả về hai dòng. Đó là 24 phép đối
 chiếu bắc chéo qua tám đoạn, gói vào một lượt trả lời hai con số.
 
-### Đối chiếu bằng tay cho thấy bộ chấm sai, không phải hệ thống sai
+### Đối chiếu: bộ chấm sai, không phải hệ thống sai
 
-Mở nội dung đoạn ra và kiểm từng dòng:
+Đoạn [1] dài 1765 ký tự và **có chứa** toàn bộ thang điểm mà câu trả lời gán cho
+nó: `3,6`, `4,0`, `3,2`, `3,59`, `2,5`, `3,19`, cùng `Xuất sắc`, `Giỏi`, `(GPA)`
+và `(CPA)`. Nghĩa là những dòng bị chấm sai thật ra đúng.
 
-| Dòng trong câu trả lời | Đoạn được gắn | Có trong đoạn? |
-|---|---|---|
-| Xuất sắc: 3,6 – 4,0 | [1] | ✅ cả `3,6` lẫn `4,0` |
-| Giỏi: 3,2 – 3,59 | [1] | ✅ cả `3,2` lẫn `3,59` |
-| Khá: 2,5 – 3,19 | [1] | ✅ |
-| Căn cứ GPA và CPA | [1] | ✅ cả `(GPA)` lẫn `(CPA)` |
-| Xuất sắc: từ 3,6 đến 4,0 | [2] | ✅ |
-| Giỏi: từ 3,2 đến cận 3,6 | [2] | ✅ |
-| … (14/14 dòng kiểm được đều khớp) | | |
+> **Ghi lại một bước hụt trong quá trình điều tra**, vì nó đúng là bài học của
+> mục này. Lần đọc đầu tiên tôi chỉ xem được phần đầu của đoạn — chỗ nói về khảo
+> sát ý kiến người học và xếp hạng năm học theo tín chỉ — và kết luận ngược lại
+> rằng đoạn [1] *không* có thang điểm. Phần thang điểm nằm phía dưới, ngoài
+> khoảng đã đọc. **Đọc thiếu một đoạn cũng nguy hiểm y như tin một chỉ số**, và
+> cách thoát ra là kiểm bằng một phép so khớp chính xác trên toàn văn thay vì
+> bằng ấn tượng khi đọc lướt.
 
-Câu trả lời **đúng**. Bộ chấm chấm sai.
+### Sửa: thu nhỏ việc của mỗi lượt gọi
 
-### Sửa: hỏi từng đoạn một
+Cả hai chỉ số cần mô hình chấm đều được viết lại theo cùng một nguyên tắc: **mô
+hình chỉ trả lời Đ/S cho từng mục**, còn việc tách khẳng định do mã làm — tất
+định và kiểm được.
 
-Mỗi lượt gọi giờ chỉ mang **một đoạn** và danh sách khẳng định trích dẫn đoạn
-ấy, và yêu cầu trả lời từng dòng `1: Đ` / `2: S`. Việc nhỏ, kiểm được, và số
-lượt gọi bằng số **đoạn được trích** chứ không bằng số khẳng định.
+* **Trích dẫn**: mỗi lượt gọi mang **một đoạn** và những khẳng định trích dẫn
+  đoạn ấy.
+* **Faithfulness**: khẳng định phải được đối chiếu với *mọi* đoạn, nên không thu
+  về một đoạn được. Thay vào đó chia thành **cụm ba đoạn** (~5 000 ký tự mỗi
+  lượt); một khẳng định chỉ cần một cụm xác nhận là đủ.
 
 Đo lại trên cùng câu trả lời, cùng mô hình chấm:
 
-| Câu | Bộ chấm cũ | Bộ chấm mới | Đối chiếu tay |
+| Câu | Chỉ số | Hỏi gộp | Hỏi chia nhỏ |
 |---|---|---|---|
-| q001 | 0,167 | **0,857** | ≈ 1,0 |
-| q003 | 1,000 | **1,000** | 1,0 |
+| q001 | citation | 0,167 | **0,893** |
+| q001 | faithfulness | 0,167 | **0,966** |
+| q002 | faithfulness | 1,000 | **0,714** |
+| q003 | faithfulness | 1,000 | **1,000** |
+| q004, q005 | faithfulness | 1,000 | **1,000** |
 
-q003 giữ nguyên 1,0 — cách hỏi mới không thổi phồng những ca vốn đã đúng.
+### Điểm đáng chú ý nhất: q002 đi NGƯỢC
+
+Kiểu hỏi cũ chấm q002 là 1,000; kiểu mới chấm 0,714. Đây không phải bằng chứng
+kiểu mới tệ hơn — nó là bằng chứng kiểu cũ **không đáng tin theo cả hai chiều**.
+
+Lý do nằm ở dạng câu trả lời được yêu cầu. Kiểu cũ đòi một **con số đếm**
+(`TỔNG: 14 / ĐƯỢC CHỨNG THỰC: 14`), mà một con số đếm thì trả lời cho xong rất
+dễ và không có chỗ nào để lộ ra mô hình đã xét những gì. Kiểu mới đòi **một dòng
+Đ/S cho từng mục**, nên mỗi mục đều phải được nêu ra và trả lời riêng.
+
+Một chỉ số sai theo một chiều còn dò ra được. Sai theo **cả hai chiều** thì
+không: nó cho ra những con số trông hợp lý ở mọi mẫu.
 
 ---
 
@@ -134,13 +152,19 @@ trên cùng một con số:
 
 1. **Định nghĩa sai** — công thức đo nhầm thứ. Dấu hiệu: một quy luật số học quá
    đều. `1/top_k` với `context_precision`, `1/N` với `citation_accuracy`.
-2. **Cách hỏi sai** — định nghĩa đúng nhưng giao cho mô hình một việc quá tải.
-   Dấu hiệu: điểm thấp bất thường ở đúng những mẫu **dài và phức tạp nhất**,
-   trong khi mẫu ngắn vẫn 1,0.
+2. **Cách hỏi sai** — định nghĩa đúng nhưng giao cho mô hình một việc quá tải,
+   và nhận về một dạng trả lời không kiểm được. Dấu hiệu: điểm bất thường ở đúng
+   những mẫu **dài và phức tạp nhất**, trong khi mẫu ngắn vẫn 1,0.
 
 Tầng thứ hai nguy hiểm hơn vì nó **có vẻ hợp lý**: bộ chấm là một mô hình ngôn
 ngữ, mô hình ngôn ngữ thì sai được, nên một điểm thấp trông như một kết quả chứ
 không như một lỗi.
+
+Rút ra một quy tắc dùng được cho mọi bộ chấm bằng mô hình:
+
+> **Đừng bao giờ hỏi một con số tổng.** Bắt mô hình trả lời từng mục một, và để
+> phần đếm cho mã. Con số tổng che mất việc mô hình đã xét những gì, nên nó vừa
+> không kiểm được vừa dễ được trả lời cho xong.
 
 Cách phát hiện cả hai đều giống nhau: **mở mẫu trượt ra đọc**, không nhìn con số
 trung bình. Bốn câu bị chấm thấp nhất hoá ra là bốn câu trả lời tốt.
