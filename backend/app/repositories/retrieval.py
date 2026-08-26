@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from sqlalchemy import ColumnElement, Select, and_, func, select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Notebook, SourceChunk
+from app.models.knowledge import Notebook, Source, SourceChunk
 from app.settings import settings
 from app.text.segment import build_tsquery_parts
 
@@ -56,6 +56,18 @@ def _base(
     # US-038 AC-2: lọc phạm vi ngay ở tầng SQL, không lọc sau khi đã lấy ra.
     if source_ids:
         conditions.append(SourceChunk.source_id.in_(source_ids))
+    else:
+        # Không chỉ định phạm vi thì tôn trọng công tắc `in_scope` của từng
+        # nguồn — đó là thứ người dùng bật/tắt ở cột nguồn (US-038 AC-1). Trước
+        # đây công tắc ấy chỉ đổi một cột trong DB mà không ảnh hưởng tới câu
+        # trả lời.
+        conditions.append(
+            SourceChunk.source_id.in_(
+                select(Source.id).where(
+                    Source.notebook_id == notebook_id, Source.in_scope.is_(True)
+                )
+            )
+        )
 
     return conditions
 
