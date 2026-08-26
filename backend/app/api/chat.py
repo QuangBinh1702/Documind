@@ -33,6 +33,7 @@ from app.api.deps import CurrentUser, DbSession
 from app.models.base import session_scope
 from app.models.chat import ChatMessage, ChatSession
 from app.models.knowledge import Notebook, Source, SourceChunk
+from app.repositories import chat as chat_repo
 from app.services.chat import ask
 from app.services.export import KhongCoFont, xuat
 from app.services.external import QuotaExceeded, answer_externally
@@ -56,6 +57,7 @@ class AskRequest(BaseModel):
 class ExternalRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     notebook_id: uuid.UUID
+    session_id: uuid.UUID | None = None
     confirmed: bool = False
     """US-032 AC-4 — ở Privacy Mode phải xác nhận thêm một lần, vì thao tác này
     gửi câu hỏi ra dịch vụ bên ngoài."""
@@ -167,7 +169,7 @@ async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> Streamin
     async def stream() -> AsyncIterator[str]:
         with session_scope() as session:
             try:
-                _notebook_cua(session, req.notebook_id, user_id)
+                nb = _notebook_cua(session, req.notebook_id, user_id)
             except HTTPException as e:
                 yield _sse({"type": "error", "code": "NOT_FOUND", "message": e.detail})
                 return
@@ -179,6 +181,18 @@ async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> Streamin
                 )
                 return
 
+            # Ghi vào cùng phiên với câu hỏi đã bị từ chối, để lịch sử đọc được
+            # "hỏi → không có trong tài liệu → hỏi ngoài → trả lời" liền mạch.
+            chat_session = None
+            if req.session_id:
+                chat_session = session.get(ChatSession, req.session_id)
+                if chat_session is None or chat_session.notebook_id != nb.id:
+                    chat_session = None
+            if chat_session is None:
+                chat_session = chat_repo.create_session(session, nb.id, req.question)
+                yield _sse({"type": "session", "session_id": str(chat_session.id),
+                            "title": chat_session.title})
+
             try:
                 async for event in answer_externally(
                     session,
@@ -186,6 +200,7 @@ async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> Streamin
                     user_id=user_id,
                     embedder=get_embedding_provider(),
                     llm=get_llm_provider("fast"),
+                    chat_session=chat_session,
                 ):
                     yield _sse(event)
             except QuotaExceeded as exc:

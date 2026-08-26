@@ -256,7 +256,7 @@ export function CotHoiDap({
     let canXacNhan = false;
     const capNhat = themLuot(q);
     await hoi(
-      { question: q, notebook_id: nbId, confirmed },
+      { question: q, notebook_id: nbId, session_id: phienId, confirmed },
       (ev) => {
         if (ev.type === "confirm_required") {
           canXacNhan = true;

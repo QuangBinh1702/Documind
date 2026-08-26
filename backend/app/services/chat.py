@@ -100,6 +100,9 @@ async def ask(
         source_ids=source_ids or chat_session.scope_source_ids,
         # Câu đã gộp chỉ để TÌM; câu gốc mới là thứ đưa cho mô hình.
         search_query=search_query if condensed else None,
+        # Mô hình thấy các lượt trước để giữ mạch ("nói rõ hơn ý 2"); marker
+        # cũ được lọc và ngân sách ngữ cảnh cắt bớt nếu quá dài (`answer.py`).
+        history=history,
     ):
         if event["type"] == "done":
             result = event["result"]

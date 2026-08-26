@@ -30,8 +30,10 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.models.chat import ChatMessage, ChatSession
 from app.ports.embedding import EmbeddingProvider
 from app.ports.llm import LLMProvider
 from app.repositories import chat as repo
@@ -94,16 +96,24 @@ async def answer_externally(
     embedder: EmbeddingProvider,
     llm: LLMProvider,
     use_cache: bool = True,
+    chat_session: ChatSession | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Hỏi mô hình ngoài, có tra cache trước.
 
     Chỉ được gọi khi người dùng đã bấm nút — tầng gọi chịu trách nhiệm bảo
     đảm điều đó (US-032 AC-1).
+
+    Có `chat_session` thì câu hỏi và câu trả lời được ghi vào lịch sử phiên với
+    `answer_kind` là `external`/`cached_external` — để tải lại trang vẫn thấy,
+    và để thống kê US-041 đếm được. Không trích dẫn nào được ghi, vì không có.
     """
     started = time.perf_counter()
 
     yield {"type": "meta", "model": llm.name, "is_local": llm.is_local, "external": True}
     yield {"type": "warning", "text": EXTERNAL_WARNING}
+
+    if chat_session is not None:
+        repo.save_question(session, chat_session, question)
 
     # Nhúng là việc chặn (CPU hoặc HTTP đồng bộ) — đẩy ra luồng khác để không
     # treo event loop của mọi request khác trong lúc chờ.
@@ -126,16 +136,18 @@ async def answer_externally(
                 "hit_count": entry.hit_count,
             }
             yield {"type": "token", "text": entry.answer}
+            ket = ExternalResult(
+                answer=entry.answer,
+                from_cache=True,
+                model_used=entry.model_used,
+                latency_ms=elapsed,
+                cached_question=entry.question,
+                similarity=similarity,
+            )
+            _luu(session, chat_session, ket, "cached_external")
             yield {
                 "type": "done",
-                "result": ExternalResult(
-                    answer=entry.answer,
-                    from_cache=True,
-                    model_used=entry.model_used,
-                    latency_ms=elapsed,
-                    cached_question=entry.question,
-                    similarity=similarity,
-                ),
+                "result": ket,
                 "answer_kind": "cached_external",
                 "latency_ms": elapsed,
             }
@@ -167,11 +179,35 @@ async def answer_externally(
     session.flush()
 
     elapsed = int((time.perf_counter() - started) * 1000)
+    ket = ExternalResult(
+        answer=answer, from_cache=False, model_used=llm.name, latency_ms=elapsed
+    )
+    _luu(session, chat_session, ket, "external")
     yield {
         "type": "done",
-        "result": ExternalResult(
-            answer=answer, from_cache=False, model_used=llm.name, latency_ms=elapsed
-        ),
+        "result": ket,
         "answer_kind": "external",
         "latency_ms": elapsed,
     }
+
+
+def _luu(
+    session: Session,
+    chat_session: ChatSession | None,
+    ket: ExternalResult,
+    kind: str,
+) -> None:
+    if chat_session is None or not ket.answer:
+        return
+    session.add(
+        ChatMessage(
+            session_id=chat_session.id,
+            role="assistant",
+            content=ket.answer,
+            answer_kind=kind,
+            model_used=ket.model_used,
+            latency_ms=ket.latency_ms,
+        )
+    )
+    chat_session.updated_at = func.now()
+    session.flush()
