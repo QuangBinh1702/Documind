@@ -125,20 +125,40 @@ print('Xong — trọng số đã nằm trong volume model-cache')
 
 Mô hình OCR (PP-OCRv5, vài chục MB) tự tải ở lần OCR đầu tiên.
 
-**Mô hình ngôn ngữ cục bộ** (Privacy Mode) chạy bằng Ollama ở ngoài Docker:
+**Mô hình ngôn ngữ cục bộ** (Privacy Mode) chạy bằng Ollama, theo một trong
+hai cách:
+
+*Ollama cài trên máy chủ* — compose đã trỏ sẵn tới nó qua `host.docker.internal`:
 
 ```bash
 ollama pull qwen3:8b
 ollama serve
 ```
 
-rồi đặt trong `.env`:
-
 ```ini
 DEFAULT_MODE=privacy
 LOCAL_LLM_MODEL=qwen3:8b
 LOCAL_LLM_BASE_URL=http://host.docker.internal:11434/v1
 ```
+
+*Ollama trong compose* — bật profile `local-llm`, tải mô hình vào volume
+`ollama-models`, và trỏ API sang service:
+
+```bash
+docker compose --profile local-llm up -d
+docker compose exec ollama ollama pull qwen3:8b
+```
+
+```ini
+DEFAULT_MODE=privacy
+LOCAL_LLM_BASE_URL=http://ollama:11434/v1
+```
+
+Cửa sổ ngữ cảnh của Ollama được đặt bằng `LLM_CONTEXT_TOKENS` (mặc định 8192);
+prompt tự cắt bớt đoạn xếp hạng thấp cho vừa con số đó.
+
+Triển khai thật (TLS, sao lưu, giới hạn tài nguyên) xem
+[`docs/runbooks/documind-production.md`](docs/runbooks/documind-production.md).
 
 Không có GPU đủ mạnh thì dùng Fast Mode: điền `GEMINI_API_KEY` hoặc
 `OLLAMA_CLOUD_API_KEY`, đặt `DEFAULT_MODE=fast`. Giao diện sẽ hiện nhãn cho biết
