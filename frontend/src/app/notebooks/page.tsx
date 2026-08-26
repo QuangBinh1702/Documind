@@ -15,6 +15,7 @@ import { ApiError, type Notebook, api, token } from "@/lib/api";
 import { NutChuDe } from "@/components/NutChuDe";
 import { NutDoiMatKhau } from "@/components/NutDoiMatKhau";
 import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import type { Khoa } from "@/lib/i18n";
 
 export default function TrangNotebook() {
   const router = useRouter();
@@ -87,18 +88,14 @@ export default function TrangNotebook() {
         </div>
       </header>
 
-      <form onSubmit={tao} className="mt-7 flex gap-2">
+      <form onSubmit={tao} className="o-nhap mt-7 flex items-center gap-2 pr-1.5">
         <input
           value={tieuDe}
           onChange={(e) => setTieuDe(e.target.value)}
           placeholder={t("nb.tenMoi")}
-          className="flex-1 rounded-md border border-vien bg-the px-3 py-2 outline-none focus:border-nhan"
+          className="flex-1 bg-transparent px-4 py-2.5 text-[15px] outline-none placeholder:text-mo/70"
         />
-        <button
-          type="submit"
-          disabled={!tieuDe.trim()}
-          className="rounded-md bg-nhan px-4 py-2 font-medium text-white disabled:opacity-45"
-        >
+        <button type="submit" disabled={!tieuDe.trim()} className="nut-chinh py-1.5">
           {t("nb.tao")}
         </button>
       </form>
@@ -142,15 +139,17 @@ export default function TrangNotebook() {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-vien rounded-lg border border-vien bg-the">
+          <ul className="grid gap-3 sm:grid-cols-2">
             {ds.map((nb) => (
               <li key={nb.id}>
                 <Link
                   href={`/notebooks/${nb.id}`}
-                  className="flex items-baseline justify-between gap-4 px-5 py-4 hover:bg-nen"
+                  className="group flex h-full flex-col rounded-xl border border-vien bg-the px-5 py-4 transition-[border-color,box-shadow] hover:border-nhan hover:shadow-[0_2px_12px_rgba(0,0,0,0.05)]"
                 >
-                  <span className="font-medium">{nb.title}</span>
-                  <span className="shrink-0 text-sm text-mo">
+                  <span className="text-[15px] font-semibold tracking-tight group-hover:text-nhan">
+                    {nb.title}
+                  </span>
+                  <span className="mt-2 text-sm text-mo">
                     {nb.source_count === 0
                       ? t("nb.chuaCoTaiLieu")
                       : nb.ready_count === nb.source_count
@@ -160,6 +159,9 @@ export default function TrangNotebook() {
                             tong: nb.source_count,
                           })}
                   </span>
+                  <span className="mt-auto pt-3 text-[11px] text-mo/70">
+                    {t("nb.capNhat", { luc: thoiGianTuongDoi(nb.updated_at, t) })}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -168,6 +170,19 @@ export default function TrangNotebook() {
       </div>
     </div>
   );
+}
+
+/** "5 phút trước", "hôm qua"… — đủ thô để không phải cập nhật từng giây. */
+function thoiGianTuongDoi(
+  iso: string,
+  t: (khoa: Khoa, tham?: Record<string, string | number>) => string,
+): string {
+  const giay = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (giay < 60) return t("tg.vuaXong");
+  if (giay < 3600) return t("tg.phutTruoc", { so: Math.floor(giay / 60) });
+  if (giay < 86400) return t("tg.gioTruoc", { so: Math.floor(giay / 3600) });
+  if (giay < 86400 * 30) return t("tg.ngayTruoc", { so: Math.floor(giay / 86400) });
+  return new Date(iso).toLocaleDateString();
 }
 
 /** Minh hoạ cho trạng thái rỗng. SVG viết tay — một hình đơn giản không đáng

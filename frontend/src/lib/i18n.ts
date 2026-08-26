@@ -47,6 +47,12 @@ export const VI = {
   "auth.khongKetNoi": "Không kết nối được máy chủ.",
   "auth.daCoTaiKhoan": "Đã có tài khoản? Đăng nhập",
   "auth.chuaCoTaiKhoan": "Chưa có tài khoản? Đăng ký",
+  "auth.slogan": "Hỏi tài liệu của bạn. Mỗi câu trả lời chỉ ra đúng chỗ nó lấy từ đâu.",
+  "auth.sloganMoTa":
+    "Tải quy chế, giáo trình, bản scan hay ảnh chụp lên. Hệ thống tìm trong đó và trả lời kèm số trích dẫn — bấm vào là mở đúng trang, đúng đoạn. Không đủ căn cứ thì nói thẳng là không biết.",
+  "auth.viDuTraLoi": "Học bổng loại giỏi bằng 120% mức học phí ",
+  "auth.viDuTraLoi2": ", xét trong 30 ngày sau khi kết thúc học kỳ ",
+  "auth.chanTrang": "Đồ án tốt nghiệp · chạy hoàn toàn trên máy của bạn nếu muốn",
 
   // ── Notebook ───────────────────────────────────────
   "nb.cuaBan": "Notebook của bạn",
@@ -64,6 +70,11 @@ export const VI = {
   "nb.daXuLy": "{xong}/{tong} tài liệu đã xử lý",
   "nb.doiTen": "Bấm để đổi tên",
   "nb.soLieu": "Số liệu",
+  "nb.capNhat": "Cập nhật {luc}",
+  "tg.vuaXong": "vừa xong",
+  "tg.phutTruoc": "{so} phút trước",
+  "tg.gioTruoc": "{so} giờ trước",
+  "tg.ngayTruoc": "{so} ngày trước",
 
   // ── Nguồn ──────────────────────────────────────────
   "nguon.tieuDe": "Nguồn",
@@ -106,6 +117,12 @@ export const VI = {
     "Câu hỏi này sẽ được gửi tới một dịch vụ bên ngoài. Tài liệu của bạn KHÔNG được gửi kèm.",
   "chat.dongYGui": "Đồng ý gửi",
   "chat.tuCache": "Lấy lại từ câu đã hỏi trước: “{cau}”",
+  "chat.chep": "Chép câu trả lời",
+  "chat.daChep": "Đã chép",
+  "chat.chonPhien": "Chọn hội thoại",
+  "chat.phienMoi": "Hội thoại mới…",
+  "chat.phienKhongTen": "(không tên)",
+  "chat.goiYPhim": "Enter để gửi · Shift+Enter xuống dòng",
 
   "buoc.reading": "đang đọc tài liệu",
   "buoc.retrieving": "đang tìm trong tài liệu",
@@ -254,6 +271,12 @@ export const EN: Partial<Record<Khoa, string>> = {
   "auth.khongKetNoi": "Could not reach the server.",
   "auth.daCoTaiKhoan": "Already have an account? Sign in",
   "auth.chuaCoTaiKhoan": "No account yet? Create one",
+  "auth.slogan": "Ask your documents. Every answer points to exactly where it came from.",
+  "auth.sloganMoTa":
+    "Upload regulations, textbooks, scans or photos. The system searches them and answers with numbered citations — click one to open the right page and passage. When the evidence is not there, it says so.",
+  "auth.viDuTraLoi": "The good-standing scholarship equals 120% of tuition ",
+  "auth.viDuTraLoi2": ", reviewed within 30 days of the end of term ",
+  "auth.chanTrang": "Graduation project · can run entirely on your own machine",
 
   "nb.cuaBan": "Your notebooks",
   "nb.veDanhSach": "Back to notebooks",
@@ -270,6 +293,11 @@ export const EN: Partial<Record<Khoa, string>> = {
   "nb.daXuLy": "{xong}/{tong} documents processed",
   "nb.doiTen": "Click to rename",
   "nb.soLieu": "Statistics",
+  "nb.capNhat": "Updated {luc}",
+  "tg.vuaXong": "just now",
+  "tg.phutTruoc": "{so} min ago",
+  "tg.gioTruoc": "{so} h ago",
+  "tg.ngayTruoc": "{so} days ago",
 
   "nguon.tieuDe": "Sources",
   "nguon.keoTha": "Drop files here",
@@ -310,6 +338,12 @@ export const EN: Partial<Record<Khoa, string>> = {
     "This question will be sent to an external service. Your documents are NOT included.",
   "chat.dongYGui": "Send it",
   "chat.tuCache": "Reused from an earlier question: “{cau}”",
+  "chat.chep": "Copy answer",
+  "chat.daChep": "Copied",
+  "chat.chonPhien": "Choose a conversation",
+  "chat.phienMoi": "New conversation…",
+  "chat.phienKhongTen": "(untitled)",
+  "chat.goiYPhim": "Enter to send · Shift+Enter for a new line",
 
   "buoc.reading": "reading the documents",
   "buoc.retrieving": "searching your documents",

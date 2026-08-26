@@ -15,12 +15,14 @@ import { GOC_API, type NotebookChiaSe, api } from "@/lib/api";
 import { type SuKien } from "@/lib/stream";
 import { NutChuDe } from "@/components/NutChuDe";
 import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import { VanBanTraLoi } from "@/components/VanBanTraLoi";
 import type { Khoa } from "@/lib/i18n";
+import type { TrichDan } from "@/lib/api";
 
 type Luot = {
   cauHoi: string;
   traLoi: string;
-  trichDan: Record<number, { marker: number; chunk_id: number; snippet: string }>;
+  trichDan: Record<number, TrichDan>;
   trangThai: string | null;
   xong: boolean;
   loi: string | null;
@@ -125,10 +127,7 @@ export default function TrangXemChiaSe() {
             case "citation":
               capNhat((l) => ({
                 ...l,
-                trichDan: {
-                  ...l.trichDan,
-                  [Number(e.marker)]: e as unknown as Luot["trichDan"][number],
-                },
+                trichDan: { ...l.trichDan, [Number(e.marker)]: e as unknown as TrichDan },
               }));
               break;
             case "error":
@@ -209,14 +208,18 @@ export default function TrangXemChiaSe() {
                     <b className="font-semibold text-chu">{t("chat.ban")}</b> {l.cauHoi}
                   </p>
                   <div
-                    className={`mt-2 whitespace-pre-wrap rounded-xl border px-4 py-3.5 ${
+                    className={`mt-2 rounded-2xl border px-5 py-4 ${
                       l.loi ? "border-canh-bao bg-canh-bao-nen" : "border-vien bg-the"
                     }`}
                   >
                     {l.loi ? (
                       l.loi
                     ) : l.traLoi ? (
-                      <VanBanCoChip text={l.traLoi} trichDan={l.trichDan} onChon={moDoan} />
+                      <VanBanTraLoi
+                        text={l.traLoi}
+                        trichDan={l.trichDan}
+                        onChon={(c) => void moDoan(c.chunk_id)}
+                      />
                     ) : (
                       <span className="text-sm italic text-mo">
                         {l.trangThai ?? t("chung.dangXuLy")}…
@@ -271,30 +274,3 @@ export default function TrangXemChiaSe() {
   );
 }
 
-function VanBanCoChip({
-  text,
-  trichDan,
-  onChon,
-}: {
-  text: string;
-  trichDan: Luot["trichDan"];
-  onChon: (chunkId: number) => void;
-}) {
-  const phan = text.split(/(\[\d{1,2}\])/g);
-  return (
-    <>
-      {phan.map((p, i) => {
-        const m = /^\[(\d{1,2})\]$/.exec(p);
-        if (!m) return <span key={i}>{p}</span>;
-        const so = Number(m[1]);
-        const t = trichDan[so];
-        if (!t) return <span key={i} className="chip chip-chet">{so}</span>;
-        return (
-          <button key={i} className="chip" title={t.snippet} onClick={() => onChon(t.chunk_id)}>
-            {so}
-          </button>
-        );
-      })}
-    </>
-  );
-}

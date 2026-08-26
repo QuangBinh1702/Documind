@@ -76,7 +76,29 @@ export default function TrangDangNhap() {
   }
 
   return (
-    <main className="grid h-full place-items-center px-6">
+    <main className="grid h-full lg:grid-cols-[1.1fr_1fr]">
+      {/* Mảng giới thiệu — chỉ trên màn hình rộng. Nói đúng một điều: câu trả
+          lời luôn kèm trích dẫn kiểm chứng được. */}
+      <section className="hidden bg-the lg:flex lg:flex-col lg:justify-between lg:border-r lg:border-vien lg:px-14 lg:py-12">
+        <p className="text-sm font-semibold tracking-tight text-nhan">DocuMind</p>
+        <div>
+          <h2 className="max-w-md text-[34px] font-semibold leading-[1.15] tracking-tight">
+            {t("auth.slogan")}
+          </h2>
+          <p className="mt-5 max-w-md text-[15px] leading-relaxed text-mo">
+            {t("auth.sloganMoTa")}
+          </p>
+          <div className="mt-10 max-w-md rounded-2xl border border-vien bg-nen px-5 py-4 text-[14px] leading-relaxed">
+            {t("auth.viDuTraLoi")}
+            <span className="chip" aria-hidden="true">1</span>
+            {t("auth.viDuTraLoi2")}
+            <span className="chip" aria-hidden="true">2</span>.
+          </div>
+        </div>
+        <p className="text-xs text-mo/70">{t("auth.chanTrang")}</p>
+      </section>
+
+      <div className="grid place-items-center px-6 py-10">
       <div className="w-full max-w-sm">
         <div className="flex items-baseline justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">DocuMind</h1>
@@ -124,11 +146,7 @@ export default function TrangDangNhap() {
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={!guiDuoc}
-            className="w-full rounded-md bg-nhan px-4 py-2 font-medium text-white disabled:opacity-45"
-          >
+          <button type="submit" disabled={!guiDuoc} className="nut-chinh w-full py-2.5">
             {dangGui
               ? t("auth.dangXuLy")
               : dangKy
@@ -146,6 +164,7 @@ export default function TrangDangNhap() {
         >
           {dangKy ? t("auth.daCoTaiKhoan") : t("auth.chuaCoTaiKhoan")}
         </button>
+      </div>
       </div>
     </main>
   );

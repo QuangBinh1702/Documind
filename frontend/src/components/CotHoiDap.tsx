@@ -3,22 +3,32 @@
 /**
  * Cột hội thoại — US-012, US-013, US-014, US-018, US-032, US-033.
  *
- * Câu trả lời hiện dần theo từng mẩu, và marker `[n]` biến thành chip bấm được.
- * Marker mà không có trích dẫn tương ứng thì hiện mờ và không bấm được: mô hình
- * đôi khi bịa ra số đoạn không tồn tại, và một chip bấm vào không đi đâu cả làm
- * người dùng mất niềm tin vào toàn bộ tính năng trích dẫn.
+ * Câu trả lời hiện dần theo từng mẩu, dựng từ Markdown, và marker `[n]` biến
+ * thành chip bấm được (`VanBanTraLoi`). Marker không có trích dẫn tương ứng
+ * thì hiện mờ và không bấm được: mô hình đôi khi bịa ra số đoạn không tồn tại,
+ * và một chip bấm vào không đi đâu cả làm người dùng mất niềm tin vào toàn bộ
+ * tính năng trích dẫn.
  *
- * Lịch sử (US-018): mở notebook là thấy lại phiên gần nhất, chip vẫn bấm được;
- * chip của nguồn đã xoá hiện mờ. Nút "Hội thoại mới" bắt đầu một phiên khác —
- * máy chủ tạo phiên ở câu hỏi đầu tiên và báo lại qua sự kiện `session`.
+ * Lịch sử (US-018): mở notebook là thấy lại phiên gần nhất, đổi được sang phiên
+ * cũ hơn, chip vẫn bấm được; chip của nguồn đã xoá hiện mờ. "Hội thoại mới"
+ * bắt đầu một phiên khác — máy chủ tạo phiên ở câu hỏi đầu tiên và báo lại
+ * qua sự kiện `session`.
  *
  * Hỏi ra ngoài (US-032): chỉ hiện nút sau khi cổng ngưỡng từ chối, và câu trả
  * lời ngoài được đóng khung khác hẳn câu trả lời có căn cứ (US-033).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, type TinNhan, type TrichDan, api, taiVe } from "@/lib/api";
+import {
+  ApiError,
+  type PhienHoiThoai,
+  type TinNhan,
+  type TrichDan,
+  api,
+  taiVe,
+} from "@/lib/api";
 import { useNgonNgu } from "@/components/NgonNguProvider";
+import { VanBanTraLoi } from "@/components/VanBanTraLoi";
 import type { Khoa } from "@/lib/i18n";
 import { hoi, type SuKien } from "@/lib/stream";
 
@@ -60,26 +70,33 @@ type Luot = {
   trangThai: string | null;
   xong: boolean;
   loi: string | null;
+  moHinh: string | null;
+  doTreMs: number | null;
 };
 
-const LUOT_TRONG: Omit<Luot, "cauHoi"> = {
+const LUOT_TRONG: Omit<Luot, "cauHoi" | "markerChet"> = {
   traLoi: "",
   trichDan: {},
-  markerChet: new Set(),
   tuChoi: false,
   ngoai: false,
   tuCache: null,
   trangThai: null,
   xong: false,
   loi: null,
+  moHinh: null,
+  doTreMs: null,
 };
+
+function luotMoi(cauHoi: string): Luot {
+  return { ...LUOT_TRONG, cauHoi, markerChet: new Set() };
+}
 
 /** Dựng lại các lượt từ tin nhắn đã lưu — mỗi cặp user/assistant là một lượt. */
 function tuTinNhan(ds: TinNhan[]): Luot[] {
   const out: Luot[] = [];
   for (const m of ds) {
     if (m.role === "user") {
-      out.push({ ...LUOT_TRONG, cauHoi: m.content, markerChet: new Set() });
+      out.push(luotMoi(m.content));
       continue;
     }
     const l = out[out.length - 1];
@@ -110,9 +127,17 @@ function tuTinNhan(ds: TinNhan[]): Luot[] {
       tuChoi: m.answer_kind === "no_answer",
       ngoai: m.answer_kind === "external" || m.answer_kind === "cached_external",
       xong: true,
+      moHinh: m.model_used,
+      doTreMs: m.latency_ms,
     };
   }
   return out;
+}
+
+/** "local:qwen3:8b" → "qwen3:8b"; "ollama-cloud:gemma4:31b" → "gemma4:31b". */
+function tenMoHinh(raw: string | null): string | null {
+  if (!raw) return null;
+  return raw.replace(/^(local|ollama-cloud|gemini):/, "");
 }
 
 export function CotHoiDap({
@@ -131,6 +156,7 @@ export function CotHoiDap({
   const [cauHoi, setCauHoi] = useState("");
   const [dangHoi, setDangHoi] = useState(false);
   const [dangTaiLichSu, setDangTaiLichSu] = useState(true);
+  const [phienDs, setPhienDs] = useState<PhienHoiThoai[]>([]);
   // Máy chủ tạo phiên ở lượt hỏi đầu tiên và báo lại qua sự kiện `session`.
   // Không có id này thì không xuất được — nên giữ nó ngay khi nhận.
   const [phienId, setPhienId] = useState<string | null>(null);
@@ -138,7 +164,14 @@ export function CotHoiDap({
   const [thongBao, setThongBao] = useState<string | null>(null);
   const [hoiXacNhanNgoai, setHoiXacNhanNgoai] = useState<string | null>(null);
   const cuoiRef = useRef<HTMLDivElement>(null);
+  const oNhapRef = useRef<HTMLTextAreaElement>(null);
   const { t } = useNgonNgu();
+
+  const taiPhien = useCallback(async (id: string) => {
+    const tin = await api.tinNhanCuaPhien(id);
+    setPhienId(id);
+    setLuot(tuTinNhan(tin));
+  }, []);
 
   // ── Khôi phục phiên gần nhất — US-018 AC-3 ──────────
   useEffect(() => {
@@ -149,12 +182,9 @@ export function CotHoiDap({
     (async () => {
       try {
         const phien = await api.danhSachPhien(nbId);
-        if (huy || !phien.length) return;
-        const moiNhat = phien[0];
-        const tin = await api.tinNhanCuaPhien(moiNhat.id);
         if (huy) return;
-        setPhienId(moiNhat.id);
-        setLuot(tuTinNhan(tin));
+        setPhienDs(phien);
+        if (phien.length) await taiPhien(phien[0].id);
       } catch {
         /* không có lịch sử thì bắt đầu trống — không phải lỗi đáng chặn */
       } finally {
@@ -164,17 +194,25 @@ export function CotHoiDap({
     return () => {
       huy = true;
     };
-  }, [nbId]);
+  }, [nbId, taiPhien]);
 
   useEffect(() => {
     cuoiRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [luot]);
 
+  // Ô nhập tự cao theo nội dung, tối đa ~6 dòng.
+  useEffect(() => {
+    const o = oNhapRef.current;
+    if (!o) return;
+    o.style.height = "0px";
+    o.style.height = `${Math.min(o.scrollHeight, 160)}px`;
+  }, [cauHoi]);
+
   const themLuot = useCallback((q: string): ((sua: (l: Luot) => Luot) => void) => {
     let chiSo = -1;
     setLuot((cu) => {
       chiSo = cu.length;
-      return [...cu, { ...LUOT_TRONG, cauHoi: q, markerChet: new Set() }];
+      return [...cu, luotMoi(q)];
     });
     return (sua) => setLuot((cu) => cu.map((l, i) => (i === chiSo ? sua(l) : l)));
   }, []);
@@ -184,14 +222,25 @@ export function CotHoiDap({
     switch (e.type) {
       case "session":
         setPhienId(String(e.session_id));
+        setPhienDs((cu) =>
+          cu.some((p) => p.id === e.session_id)
+            ? cu
+            : [
+                { id: String(e.session_id), title: String(e.title ?? ""), updated_at: "" },
+                ...cu,
+              ],
+        );
+        break;
+      case "meta":
+        capNhat((l) => ({ ...l, moHinh: String(e.model ?? "") || null }));
         break;
       // `external_call` cố ý KHÔNG hiện gì trong khung chat. Việc dữ liệu đi
       // đâu là thuộc tính của cả không gian làm việc, không phải của từng câu
       // trả lời, nên nó nằm ở nhãn trên thanh tiêu đề.
       case "external_call":
-      case "meta":
       case "condensed":
       case "context_trimmed":
+      case "saved":
         break;
       case "status":
         capNhat((l) => ({ ...l, trangThai: nhanBuoc(t, String(e.stage)) }));
@@ -223,13 +272,17 @@ export function CotHoiDap({
         capNhat((l) => ({ ...l, loi: String(e.message), xong: true }));
         break;
       case "done":
-        capNhat((l) => ({ ...l, xong: true, trangThai: null }));
+        capNhat((l) => ({
+          ...l,
+          xong: true,
+          trangThai: null,
+          doTreMs: typeof e.latency_ms === "number" ? e.latency_ms : l.doTreMs,
+        }));
         break;
     }
   }
 
-  async function gui(e: React.FormEvent) {
-    e.preventDefault();
+  async function gui() {
     const q = cauHoi.trim();
     if (!q || dangHoi) return;
 
@@ -240,6 +293,7 @@ export function CotHoiDap({
       xuLy(capNhat, ev),
     );
     setDangHoi(false);
+    oNhapRef.current?.focus();
   }
 
   /**
@@ -279,6 +333,16 @@ export function CotHoiDap({
     setLuot([]);
     setPhienId(null);
     setThongBao(null);
+    oNhapRef.current?.focus();
+  }
+
+  async function doiPhien(id: string) {
+    if (dangHoi || id === phienId) return;
+    try {
+      await taiPhien(id);
+    } catch {
+      setThongBao(t("nb.khongTaiDuoc"));
+    }
   }
 
   async function xuat(dinhDang: "md" | "pdf") {
@@ -303,37 +367,46 @@ export function CotHoiDap({
 
   return (
     <div className="flex h-full flex-col">
-      {(coGiDeXuat || luot.length > 0) && (
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-vien px-6 py-2">
-          <button
-            onClick={hoiThoaiMoi}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-vien px-5 py-2">
+        <button
+          onClick={hoiThoaiMoi}
+          disabled={dangHoi}
+          className="nut-phu"
+          title={t("chat.hoiThoaiMoi")}
+        >
+          <span aria-hidden="true">＋</span> {t("chat.hoiThoaiMoi")}
+        </button>
+
+        {phienDs.length > 0 && (
+          <select
+            value={phienId ?? ""}
+            onChange={(e) => e.target.value && void doiPhien(e.target.value)}
             disabled={dangHoi}
-            className="mr-auto rounded-md border border-vien px-2.5 py-1 text-xs text-mo hover:border-nhan hover:text-nhan disabled:opacity-45"
+            aria-label={t("chat.chonPhien")}
+            className="max-w-[16rem] truncate rounded-md border border-vien bg-the px-2 py-1 text-xs text-mo outline-none focus:border-nhan"
           >
-            + {t("chat.hoiThoaiMoi")}
-          </button>
-          {/* Thanh xuất chỉ hiện khi đã có gì để xuất — US-040. */}
-          {coGiDeXuat && (
-            <>
-              <span className="text-xs text-mo">{t("chat.luuLai")}</span>
-              <button
-                onClick={() => void xuat("md")}
-                disabled={dangXuat}
-                className="rounded-md border border-vien px-2.5 py-1 text-xs text-mo hover:border-nhan hover:text-nhan disabled:opacity-45"
-              >
-                Markdown
-              </button>
-              <button
-                onClick={() => void xuat("pdf")}
-                disabled={dangXuat}
-                className="rounded-md border border-vien px-2.5 py-1 text-xs text-mo hover:border-nhan hover:text-nhan disabled:opacity-45"
-              >
-                PDF
-              </button>
-            </>
-          )}
-        </div>
-      )}
+            {phienId === null && <option value="">{t("chat.phienMoi")}</option>}
+            {phienDs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title || t("chat.phienKhongTen")}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* Thanh xuất chỉ hiện khi đã có gì để xuất — US-040. */}
+        {coGiDeXuat && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="mr-1 text-xs text-mo">{t("chat.luuLai")}</span>
+            <button onClick={() => void xuat("md")} disabled={dangXuat} className="nut-phu">
+              Markdown
+            </button>
+            <button onClick={() => void xuat("pdf")} disabled={dangXuat} className="nut-phu">
+              PDF
+            </button>
+          </div>
+        )}
+      </div>
 
       {thongBao && (
         <div
@@ -347,90 +420,35 @@ export function CotHoiDap({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8">
         {luot.length === 0 && !dangTaiLichSu && (
-          <div className="mx-auto max-w-[68ch] rounded-lg border border-dashed border-vien px-5 py-10 text-center">
-            <p className="font-medium">
+          <div className="mx-auto max-w-[68ch] rounded-2xl border border-dashed border-vien px-6 py-12 text-center">
+            <BieuTuongHoi />
+            <p className="mt-4 text-[15px] font-semibold tracking-tight">
               {sanSang ? t("chat.batDau") : t("chat.chuaCoTaiLieu")}
             </p>
-            <p className="mt-1 text-sm text-mo">
+            <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-mo">
               {sanSang ? t("chat.batDauMoTa") : t("chat.canXuLyXong")}
             </p>
             {/* US-042 AC-1 — lời gọi hành động, không chỉ mô tả tình trạng. */}
             {!sanSang && (
-              <button
-                onClick={onTaiTaiLieu}
-                className="mt-4 rounded-md bg-nhan px-4 py-2 text-sm font-medium text-nen"
-              >
+              <button onClick={onTaiTaiLieu} className="nut-chinh mt-5">
                 {t("chat.taiLenDauTien")}
               </button>
             )}
           </div>
         )}
 
-        <div className="mx-auto max-w-[68ch] space-y-7">
+        <div className="mx-auto max-w-[68ch] space-y-8">
           {luot.map((l, i) => (
-            <div key={i}>
-              <p className="text-sm text-mo">
-                <b className="font-semibold text-chu">{t("chat.ban")}</b> {l.cauHoi}
-              </p>
-
-              {/* Câu trả lời ngoài tài liệu được đánh dấu rõ — US-033 AC-1. */}
-              {l.ngoai && (
-                <p className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-canh-bao px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-canh-bao">
-                  {t("chat.nhanNgoai")}
-                </p>
-              )}
-
-              <div
-                className={`mt-2 whitespace-pre-wrap rounded-xl border px-4 py-3.5 ${
-                  l.loi
-                    ? "border-canh-bao bg-canh-bao-nen"
-                    : l.ngoai
-                      ? "border-dashed border-canh-bao bg-canh-bao-nen/40"
-                      : l.tuChoi
-                        ? "border-dashed border-vien text-mo"
-                        : "border-vien bg-the"
-                }`}
-              >
-                {l.loi ? (
-                  l.loi
-                ) : l.traLoi ? (
-                  <VanBanCoChip
-                    text={l.traLoi}
-                    trichDan={l.trichDan}
-                    markerChet={l.markerChet}
-                    onChon={onChonTrichDan}
-                  />
-                ) : (
-                  <span className="text-sm italic text-mo">
-                    {l.trangThai ?? t("chung.dangXuLy")}…
-                  </span>
-                )}
-              </div>
-
-              {l.tuCache && (
-                <p className="mt-2 text-xs text-mo">
-                  {t("chat.tuCache", { cau: l.tuCache })}
-                </p>
-              )}
-
-              {l.xong && !l.loi && Object.keys(l.trichDan).length > 0 && (
-                <p className="mt-2 text-xs text-mo">
-                  {t("chat.soTrichDan", { so: Object.keys(l.trichDan).length })}
-                </p>
-              )}
-
-              {/* Mời hỏi ra ngoài — chỉ sau khi cổng ngưỡng đã từ chối (US-032 AC-1). */}
-              {l.xong && l.tuChoi && !l.ngoai && i === luot.length - 1 && !dangHoi && (
-                <button
-                  onClick={() => void hoiNgoai(l.cauHoi)}
-                  className="mt-2 rounded-md border border-canh-bao px-3 py-1.5 text-xs font-medium text-canh-bao hover:bg-canh-bao-nen"
-                >
-                  {t("chat.hoiNgoai")}
-                </button>
-              )}
-            </div>
+            <LuotHoiDap
+              key={i}
+              l={l}
+              cuoi={i === luot.length - 1}
+              dangHoi={dangHoi}
+              onChonTrichDan={onChonTrichDan}
+              onHoiNgoai={() => void hoiNgoai(l.cauHoi)}
+            />
           ))}
           <div ref={cuoiRef} />
         </div>
@@ -457,64 +475,169 @@ export function CotHoiDap({
         </div>
       )}
 
-      <form onSubmit={gui} className="shrink-0 border-t border-vien px-6 py-4">
-        <div className="mx-auto flex max-w-[68ch] gap-2">
-          <input
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void gui();
+        }}
+        className="shrink-0 border-t border-vien px-5 py-4 sm:px-8"
+      >
+        <div className="o-nhap mx-auto flex max-w-[68ch] items-end gap-2">
+          <textarea
+            ref={oNhapRef}
+            rows={1}
             value={cauHoi}
             onChange={(e) => setCauHoi(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter gửi; Shift+Enter xuống dòng — quy ước quen thuộc của mọi
+              // khung chat, và câu hỏi hiếm khi cần nhiều dòng.
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void gui();
+              }
+            }}
             disabled={dangHoi}
             placeholder={sanSang ? t("chat.oNhap") : t("chat.chuaSanSang")}
-            className="flex-1 rounded-md border border-vien bg-the px-3 py-2 outline-none focus:border-nhan disabled:opacity-60"
+            className="max-h-40 min-h-[42px] flex-1 resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-mo/70 disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={!cauHoi.trim() || dangHoi}
-            className="rounded-md bg-nhan px-5 py-2 font-medium text-nen disabled:opacity-45"
+            className="nut-chinh mb-1 mr-1"
+            aria-label={t("chat.hoi")}
           >
-            {dangHoi ? "…" : t("chat.hoi")}
+            {dangHoi ? <span className="dang-cho" aria-hidden="true" /> : t("chat.hoi")}
           </button>
         </div>
+        <p className="mx-auto mt-1.5 max-w-[68ch] text-[11px] text-mo/70">
+          {t("chat.goiYPhim")}
+        </p>
       </form>
     </div>
   );
 }
 
-/** Biến `[n]` thành chip bấm được — US-014 AC-2. */
-function VanBanCoChip({
-  text,
-  trichDan,
-  markerChet,
-  onChon,
+function LuotHoiDap({
+  l,
+  cuoi,
+  dangHoi,
+  onChonTrichDan,
+  onHoiNgoai,
 }: {
-  text: string;
-  trichDan: Record<number, TrichDan>;
-  markerChet: Set<number>;
-  onChon: (t: TrichDan) => void;
+  l: Luot;
+  cuoi: boolean;
+  dangHoi: boolean;
+  onChonTrichDan: (t: TrichDan) => void;
+  onHoiNgoai: () => void;
 }) {
   const { t } = useNgonNgu();
-  const phan = text.split(/(\[\d{1,3}\])/g);
-  return (
-    <>
-      {phan.map((p, i) => {
-        const khop = /^\[(\d{1,3})\]$/.exec(p);
-        if (!khop) return <span key={i}>{p}</span>;
+  const [daChep, setDaChep] = useState(false);
+  const soTrichDan = Object.keys(l.trichDan).length;
 
-        const so = Number(khop[1]);
-        const cite = trichDan[so];
-        const daXoa = markerChet.has(so);
-        return (
-          <button
-            key={i}
-            type="button"
-            disabled={!cite}
-            onClick={() => cite && onChon(cite)}
-            className={`chip${cite ? "" : " chip-chet"}`}
-            title={cite ? t("chip.xemDoanGoc") : daXoa ? t("chip.nguonDaXoa") : t("chip.khongTonTai")}
-          >
-            {so}
-          </button>
-        );
-      })}
-    </>
+  async function chep() {
+    try {
+      await navigator.clipboard.writeText(l.traLoi.replace(/\[\d{1,3}\]/g, "").trim());
+      setDaChep(true);
+      setTimeout(() => setDaChep(false), 1500);
+    } catch {
+      /* trình duyệt chặn clipboard */
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex justify-end">
+        <p className="bong-bong-hoi">{l.cauHoi}</p>
+      </div>
+
+      {/* Câu trả lời ngoài tài liệu được đánh dấu rõ — US-033 AC-1. */}
+      {l.ngoai && (
+        <p className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-canh-bao px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-canh-bao">
+          {t("chat.nhanNgoai")}
+        </p>
+      )}
+
+      <div
+        className={`mt-3 rounded-2xl border px-5 py-4 ${
+          l.loi
+            ? "border-canh-bao bg-canh-bao-nen"
+            : l.ngoai
+              ? "border-dashed border-canh-bao bg-canh-bao-nen/40"
+              : l.tuChoi
+                ? "border-dashed border-vien text-mo"
+                : "border-vien bg-the shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+        }`}
+      >
+        {l.loi ? (
+          <p className="text-sm">{l.loi}</p>
+        ) : l.traLoi ? (
+          <>
+            <VanBanTraLoi
+              text={l.traLoi}
+              trichDan={l.trichDan}
+              markerChet={l.markerChet}
+              onChon={onChonTrichDan}
+            />
+            {!l.xong && <span className="con-tro-go" aria-hidden="true" />}
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-2 text-sm italic text-mo">
+            <span className="dang-cho" aria-hidden="true" />
+            {l.trangThai ?? t("chung.dangXuLy")}…
+          </span>
+        )}
+      </div>
+
+      {l.tuCache && (
+        <p className="mt-2 text-xs text-mo">{t("chat.tuCache", { cau: l.tuCache })}</p>
+      )}
+
+      {l.xong && !l.loi && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mo">
+          {soTrichDan > 0 && <span>{t("chat.soTrichDan", { so: soTrichDan })}</span>}
+          {tenMoHinh(l.moHinh) && <span className="tabular-nums">{tenMoHinh(l.moHinh)}</span>}
+          {l.doTreMs !== null && (
+            <span className="tabular-nums">{(l.doTreMs / 1000).toFixed(1)} s</span>
+          )}
+          {l.traLoi && !l.tuChoi && (
+            <button onClick={() => void chep()} className="ml-auto hover:text-chu">
+              {daChep ? t("chat.daChep") : t("chat.chep")}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Mời hỏi ra ngoài — chỉ sau khi cổng ngưỡng đã từ chối (US-032 AC-1). */}
+      {l.xong && l.tuChoi && !l.ngoai && cuoi && !dangHoi && (
+        <button
+          onClick={onHoiNgoai}
+          className="mt-2 rounded-md border border-canh-bao px-3 py-1.5 text-xs font-medium text-canh-bao hover:bg-canh-bao-nen"
+        >
+          {t("chat.hoiNgoai")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BieuTuongHoi() {
+  return (
+    <svg
+      viewBox="0 0 64 48"
+      className="mx-auto h-12 w-auto text-nhan"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinejoin="round"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M6 8a4 4 0 0 1 4-4h30a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H20l-8 7v-7h-2a4 4 0 0 1-4-4z" />
+      <path d="M14 13h22M14 20h14" opacity={0.6} />
+      <circle cx="50" cy="34" r="9" fill="currentColor" stroke="none" opacity={0.15} />
+      <text x="50" y="38" textAnchor="middle" fontSize="11" fontWeight="700" fill="currentColor">
+        1
+      </text>
+    </svg>
   );
 }
