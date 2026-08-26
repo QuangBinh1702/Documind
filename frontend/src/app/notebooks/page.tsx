@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type Notebook, api, token } from "@/lib/api";
 import { NutChuDe } from "@/components/NutChuDe";
+import { NutDoiMatKhau } from "@/components/NutDoiMatKhau";
 import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
 
 export default function TrangNotebook() {
@@ -73,6 +74,7 @@ export default function TrangNotebook() {
           <Link href="/thong-ke" className="underline underline-offset-4">
             {t("nb.soLieu")}
           </Link>
+          <NutDoiMatKhau />
           <button
             onClick={() => {
               token.xoa();
