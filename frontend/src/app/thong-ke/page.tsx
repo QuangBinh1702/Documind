@@ -35,12 +35,15 @@ function nhanKind(t: Dich, kind: string): string {
   return kind in KHOA_KIND ? t(KHOA_KIND[kind]) : kind;
 }
 
+// Cùng họ với bảng màu giao diện: xanh rêu của nhãn cho "có căn cứ", hổ phách
+// của cảnh báo cho mọi thứ đi ra ngoài, xám cho từ chối. Đọc được ở cả hai
+// chế độ vì đều là màu đặc, không phụ thuộc nền.
 const MAU_KIND: Record<string, string> = {
-  grounded: "#2563eb",
-  no_answer: "#94a3b8",
-  external: "#f59e0b",
-  cached_external: "#10b981",
-  chitchat: "#a78bfa",
+  grounded: "#2f7d5f",
+  no_answer: "#9a9a91",
+  external: "#d99a2b",
+  cached_external: "#7fbfa8",
+  chitchat: "#8b7fc9",
 };
 
 export default function TrangThongKe() {
@@ -281,7 +284,7 @@ function BieuDoCot({
               width={rong * 0.7}
               height={cao}
               rx={2}
-              fill="#2563eb"
+              fill="var(--nhan)"
             >
               <title>{t("tk.luotNgay", { ngay: d.ngay, so: d.so_luot })}</title>
             </rect>
