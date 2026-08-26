@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 
 from celery import Celery
-from celery.signals import worker_ready
+from celery.signals import task_failure, worker_ready
 
 from app.settings import settings
 
@@ -57,6 +57,12 @@ celery_app.conf.update(
     enable_utc=True,
     # Kết quả chỉ dùng để gỡ lỗi; trạng thái thật nằm ở `sources.status`.
     result_expires=3600,
+    # Redis chết thì `.delay()` phải hỏng NHANH để API rơi về đường dự phòng
+    # (`app/api/notebooks.py::xep_hang`), chứ không treo request tải lên trong
+    # vòng thử lại mặc định của Kombu.
+    broker_connection_timeout=3,
+    broker_connection_retry_on_startup=True,
+    task_publish_retry=False,
 )
 
 
@@ -71,6 +77,33 @@ def xu_ly_nguon_task(self, source_id: str) -> None:
 
     log.info("Nhận việc xử lý nguồn %s (task %s)", source_id, self.request.id)
     xu_ly_nguon(source_id)
+
+
+@task_failure.connect(sender=xu_ly_nguon_task)
+def ket_luan_khi_task_chet(sender=None, args=None, exception=None, **_: object) -> None:
+    """Chạm trần thời gian cứng thì tiến trình con bị SIGKILL — không có
+    `except` nào trong `xu_ly_nguon` chạy được, và hàng `sources` kẹt ở
+    `embedding`/`ocr` cho tới lần worker khởi động lại. Tín hiệu này chạy ở
+    tiến trình cha nên vẫn kết luận được."""
+    from app.models.base import session_scope
+    from app.models.knowledge import Source
+
+    if not args:
+        return
+    try:
+        with session_scope() as s:
+            src = s.get(Source, args[0])
+            if src is not None and src.status not in ("ready", "failed"):
+                src.status = "failed"
+                src.progress = 100
+                src.error_code = type(exception).__name__ if exception else "TASK_FAILED"
+                src.error_message = (
+                    "Xử lý tài liệu bị dừng vì vượt thời gian cho phép hoặc "
+                    "worker gặp sự cố. Hãy thử tải lên lại; tài liệu rất dài "
+                    "có thể cần tăng TASK_TIME_LIMIT_SECONDS."
+                )
+    except Exception as exc:  # pragma: no cover - chỉ chạy khi có DB thật
+        log.error("Không ghi được trạng thái failed cho %s: %s", args[0], exc)
 
 
 @worker_ready.connect

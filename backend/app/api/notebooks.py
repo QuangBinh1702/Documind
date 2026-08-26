@@ -12,8 +12,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
 
 from fastapi import (
     APIRouter,
@@ -145,9 +144,16 @@ def rename_notebook(
 ) -> NotebookResponse:
     nb = notebook_cua_toi(session, user, notebook_id)
     nb.title = req.title.strip()
-    nb.updated_at = datetime.now(nb.updated_at.tzinfo) if nb.updated_at else None
+    _cham_updated_at(nb)
     session.flush()
     return _tom_tat(session, nb)
+
+
+def _cham_updated_at(nb: Notebook) -> None:
+    """Danh sách notebook sắp theo `updated_at`, nên mọi thay đổi nội dung —
+    đổi tên, thêm hay xoá nguồn — đều phải chạm vào nó; nếu không thì notebook
+    vừa được thêm tài liệu vẫn nằm cuối danh sách."""
+    nb.updated_at = datetime.now(UTC)
 
 
 @router.delete("/notebooks/{notebook_id}", status_code=204,
@@ -213,27 +219,35 @@ async def stream_sources(
     # hệ thống đứng. Vòng lặp bên dưới tự mở phiên ngắn cho từng lượt hỏi.
     nb_id = notebook_cua_toi(session, user, notebook_id).id
 
+    def _doc_mot_luot() -> tuple[list[dict], dict]:
+        """Một lượt hỏi DB + Redis — chạy ở luồng khác vì cả hai đều đồng bộ.
+
+        Để nguyên trong coroutine thì mỗi tab đang mở chặn event loop một lần
+        mỗi giây, và mọi request khác của mọi người dùng đứng theo.
+        """
+        with session_scope() as s:
+            rows = s.scalars(
+                select(Source).where(Source.notebook_id == nb_id)
+                .order_by(Source.created_at.desc())
+            ).all()
+            nguon = [
+                {
+                    "id": str(r.id), "title": r.title, "kind": r.kind,
+                    "status": r.status, "progress": r.progress,
+                    "page_count": r.page_count, "in_scope": r.in_scope,
+                    "error_message": r.error_message,
+                }
+                for r in rows
+            ]
+        chi_tiet = progress.doc([uuid.UUID(n["id"]) for n in nguon])
+        return nguon, chi_tiet
+
     async def stream() -> AsyncIterator[str]:
         truoc_do: dict[str, tuple] = {}
         het_han = time.monotonic() + _SSE_TOI_DA_GIAY
 
         while time.monotonic() < het_han:
-            with session_scope() as s:
-                rows = s.scalars(
-                    select(Source).where(Source.notebook_id == nb_id)
-                    .order_by(Source.created_at.desc())
-                ).all()
-                nguon = [
-                    {
-                        "id": str(r.id), "title": r.title, "kind": r.kind,
-                        "status": r.status, "progress": r.progress,
-                        "page_count": r.page_count, "in_scope": r.in_scope,
-                        "error_message": r.error_message,
-                    }
-                    for r in rows
-                ]
-
-            chi_tiet = progress.doc([uuid.UUID(n["id"]) for n in nguon])
+            nguon, chi_tiet = await asyncio.to_thread(_doc_mot_luot)
             for n in nguon:
                 buoc = chi_tiet.get(n["id"])
                 # Chỉ tin Redis khi hàng trong DB còn đang xử lý dở. Bản ghi
@@ -329,6 +343,7 @@ async def upload_source(
 
     source = session.get(Source, ket_qua.source_id)
     phan_hoi = NguonResponse.model_validate(source)
+    _cham_updated_at(nb)
 
     # Commit NGAY, không đợi phiên của request tự đóng.
     #
@@ -354,7 +369,10 @@ def xep_hang(background: BackgroundTasks, source_id: uuid.UUID) -> None:
         try:
             from app.workers.celery_app import xu_ly_nguon_task
 
-            xu_ly_nguon_task.delay(str(source_id))
+            # `retry=False`: broker chết thì hỏng ngay sau `broker_connection_timeout`
+            # và rơi xuống đường dự phòng, thay vì giữ request tải lên trong
+            # vòng thử lại mặc định của Kombu.
+            xu_ly_nguon_task.apply_async(args=[str(source_id)], retry=False)
             return
         except Exception as exc:
             log.warning(
@@ -459,6 +477,7 @@ def delete_source(
 
     minio_store.xoa_tep(src.storage_key)
     session.delete(src)
+    _cham_updated_at(nb)
     session.flush()
 
 
@@ -474,7 +493,3 @@ def toggle_source(
     src.in_scope = in_scope
     session.flush()
     return NguonResponse.model_validate(src)
-
-
-def _unused() -> Any:  # pragma: no cover
-    return None

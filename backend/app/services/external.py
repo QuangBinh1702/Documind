@@ -22,6 +22,7 @@ Ba ràng buộc khác, mỗi cái vì một lý do riêng:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -104,7 +105,9 @@ async def answer_externally(
     yield {"type": "meta", "model": llm.name, "is_local": llm.is_local, "external": True}
     yield {"type": "warning", "text": EXTERNAL_WARNING}
 
-    vector = embedder.embed_query(question)
+    # Nhúng là việc chặn (CPU hoặc HTTP đồng bộ) — đẩy ra luồng khác để không
+    # treo event loop của mọi request khác trong lúc chờ.
+    vector = await asyncio.to_thread(embedder.embed_query, question)
 
     # ── Tra cache trước khi tiêu một lượt quota ─────────
     if use_cache:
