@@ -90,6 +90,36 @@ def test_khong_canh_bao_khi_dung_adapter_that(
     assert not any("PROVIDER=fake" in w for w in warnings), warnings
 
 
+@pytest.mark.parametrize("field", ["embedding_provider", "rerank_provider"])
+def test_tei_phai_bao_ra_ngoai_rang_du_lieu_roi_khoi_may(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    """Bật `tei` là bỏ đúng thứ Privacy Mode hứa hẹn — phải nhìn thấy được.
+
+    Nhúng và xếp hạng lại chạy ở mọi lượt hỏi và mọi lượt nạp tài liệu, không
+    phân biệt chế độ. Người đang xem giao diện với nhãn "chạy hoàn toàn trên
+    máy bạn" không có cách nào tự biết điều đó đã không còn đúng, nên cảnh báo
+    không được nằm im trong tệp cấu hình (SPEC-REVIEW.md §A.4).
+    """
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, field, "tei")
+    monkeypatch.setattr(settings, "tei_api_key", "k")
+    warnings = client.get("/api/health").json()["warnings"]
+    assert any("Privacy Mode" in w and settings.tei_base_url in w for w in warnings), warnings
+
+
+def test_tei_thieu_khoa_bao_som_thay_vi_de_401(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "embedding_provider", "tei")
+    monkeypatch.setattr(settings, "tei_api_key", None)
+    warnings = client.get("/api/health").json()["warnings"]
+    assert any("TEI_API_KEY" in w for w in warnings), warnings
+
+
 def test_mot_thanh_phan_chet_lam_degraded_chu_khong_lam_sap(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

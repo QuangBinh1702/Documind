@@ -216,9 +216,11 @@ chứa khoá API thật**, và `.env` nằm trong `.gitignore`.
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `EMBEDDING_PROVIDER` | `bge-m3` | `bge-m3` hoặc `fake`. `fake` là adapter tất định để chạy test — **không dùng cho số liệu báo cáo** |
+| `EMBEDDING_PROVIDER` | `bge-m3` | `bge-m3`, `tei` hoặc `fake`. `fake` là adapter tất định để chạy test — **không dùng cho số liệu báo cáo** |
 | `EMBEDDING_MODEL` / `_REVISION` / `_DIM` / `_BATCH_SIZE` | `BAAI/bge-m3` / *(trống)* / `1024` / `16` | Ghim revision để kết quả tái lập được |
-| `RERANK_PROVIDER` / `_MODEL` / `_REVISION` | `bge` / `BAAI/bge-reranker-v2-m3` / *(trống)* | Cross-encoder xếp hạng lại |
+| `RERANK_PROVIDER` / `_MODEL` / `_REVISION` | `bge` / `BAAI/bge-reranker-v2-m3` / *(trống)* | `bge`, `tei` hoặc `fake`. Cross-encoder xếp hạng lại |
+| `TEI_BASE_URL` / `TEI_API_KEY` | `https://textembedding.dutai.io.vn` / *(trống)* | Chỉ dùng khi chọn `tei`. Gốc tên miền, **không** kèm `/v1` |
+| `TEI_TIMEOUT_SECONDS` / `TEI_MAX_BATCH` | `30` / `32` | `32` là trần của dịch vụ, vượt thì nhận 413. Adapter tự chia lô |
 | `LLM_PROVIDER` | `real` | `real` hoặc `fake` |
 | `DEFAULT_MODE` | `privacy` | `privacy` = không gì rời khỏi máy. `fast` = gọi dịch vụ ngoài |
 | `FAST_BACKEND` | `gemini` | `gemini` hoặc `ollama-cloud` |
@@ -227,6 +229,31 @@ chứa khoá API thật**, và `.env` nằm trong `.gitignore`.
 | `OLLAMA_CLOUD_API_KEY` / `_MODEL` / `_BASE_URL` | *(trống)* / `gemma4:31b` / `https://ollama.com/v1` | Trọng số mở nhưng chạy trên máy của Ollama — dữ liệu **vẫn** rời khỏi máy |
 | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | `0.0` / `1024` | `0.0` để câu trả lời bám tài liệu và để chạy lại đánh giá ra cùng kết quả |
 | `PDF_FONT` | *(trống)* | Font Unicode khi xuất PDF. Bỏ trống = tự dò |
+
+#### Chạy nhúng và rerank qua dịch vụ TEI
+
+Máy chủ Text Embeddings Inference của khoa phục vụ **đúng hai mô hình mà đồ án
+đang chạy cục bộ** — `BAAI/bge-m3` và `BAAI/bge-reranker-v2-m3`. Chọn `tei` là
+đổi *chỗ chạy*, không phải đổi mô hình: vẫn 1024 chiều, không phải lập chỉ mục
+lại, `TAU` và ngưỡng cache vẫn giữ nguyên hiệu lực.
+
+```ini
+EMBEDDING_PROVIDER=tei
+RERANK_PROVIDER=tei
+TEI_API_KEY=<khoá của bạn>
+```
+
+Nó đáng dùng nhất trên laptop CPU: cross-encoder chạy tuyến tính theo số ứng
+viên, nên `RERANK_CANDIDATES=50` ở đây biến mỗi câu hỏi thành hàng phút, còn
+qua TEI thì đó là một lượt gọi trên GPU.
+
+> **Đánh đổi, và nó lớn.** Nhúng và xếp hạng lại chạy ở **mọi** lượt hỏi và
+> **mọi** lượt nạp tài liệu, không phân biệt chế độ. Bật `tei` nghĩa là nội
+> dung tài liệu và câu hỏi rời khỏi máy **kể cả ở Privacy Mode**, nên dòng
+> "không có gì rời khỏi máy" ở bảng trên không còn đúng. `/api/health` phát
+> cảnh báo tương ứng. Dùng cho phát triển; số liệu trong báo cáo nên chạy bằng
+> mô hình cục bộ có ghim revision (US-045 AC-5) — dịch vụ ngoài không ghim
+> được phiên bản trọng số.
 
 ### Truy xuất — mỗi biến ở đây là một trục của bảng ablation
 

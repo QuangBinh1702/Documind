@@ -160,14 +160,28 @@ class Settings(BaseSettings):
     # `fake` dùng adapter băm tất định: chạy được trên laptop không GPU, nhưng
     # chỉ nắm trùng lặp từ vựng chứ không nắm ngữ nghĩa. Mặc định là mô hình
     # thật để không ai vô tình đưa số đo của bản giả vào báo cáo.
-    embedding_provider: Literal["bge-m3", "fake"] = "bge-m3"
+    # `tei` gọi ra máy chủ Text Embeddings Inference chạy CÙNG hai mô hình này
+    # trên GPU của khoa — đổi chỗ chạy chứ không đổi mô hình, nên số chiều vẫn
+    # 1024 và không phải lập chỉ mục lại. Đánh đổi là dữ liệu rời khỏi máy ở cả
+    # Privacy Mode; xem `warnings()` bên dưới và `app/adapters/tei.py`.
+    embedding_provider: Literal["bge-m3", "tei", "fake"] = "bge-m3"
     embedding_model: str = "BAAI/bge-m3"
     embedding_revision: str | None = None
     embedding_dim: int = 1024
     embedding_batch_size: int = 16
-    rerank_provider: Literal["bge", "fake"] = "bge"
+    rerank_provider: Literal["bge", "tei", "fake"] = "bge"
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_revision: str | None = None
+
+    # ── Dịch vụ TEI ─────────────────────────────────────
+    tei_base_url: str = "https://textembedding.dutai.io.vn"
+    tei_api_key: str | None = None
+    tei_timeout_seconds: float = 30.0
+
+    # Trần do dịch vụ đặt, không phải lựa chọn về bộ nhớ: vượt thì nhận 413.
+    # Adapter tự chia lô theo con số này, nên `RERANK_CANDIDATES=50` vẫn chạy
+    # được mà không phải nhớ hai tham số này ràng buộc nhau.
+    tei_max_batch: int = Field(default=32, ge=1, le=32)
     # `fake` ghép câu trả lời từ ngữ cảnh thay vì sinh ngôn ngữ — dùng để test
     # đường xử lý mà không cần khoá API, quota hay mạng.
     llm_provider: Literal["real", "fake"] = "real"
@@ -281,7 +295,7 @@ class Settings(BaseSettings):
     @field_validator(
         "embedding_device", "rerank_device", "ocr_device",
         "embedding_revision", "rerank_revision",
-        "gemini_api_key", "ollama_cloud_api_key",
+        "gemini_api_key", "ollama_cloud_api_key", "tei_api_key",
         "pdf_font",
         mode="before",
     )
@@ -363,6 +377,32 @@ class Settings(BaseSettings):
             out.append(
                 "DEVICE=cpu nhưng PERF_ASSERTIONS_ENABLED=true — "
                 "các mốc hiệu năng sẽ đỏ mà không mang ý nghĩa (US-057 AC-8)."
+            )
+        dung_tei = [
+            ten
+            for ten, bat in (
+                ("EMBEDDING_PROVIDER", self.embedding_provider == "tei"),
+                ("RERANK_PROVIDER", self.rerank_provider == "tei"),
+            )
+            if bat
+        ]
+        if dung_tei and not self.tei_api_key:
+            out.append(
+                f"{' và '.join(dung_tei)}=tei nhưng chưa có TEI_API_KEY — "
+                f"mọi lượt nạp tài liệu và mọi câu hỏi sẽ hỏng với lỗi 401."
+            )
+        if dung_tei:
+            # Đây là cảnh báo quan trọng nhất trong hàm này. Nhúng và xếp hạng
+            # lại chạy ở MỌI lượt hỏi và MỌI lượt nạp tài liệu, không phân biệt
+            # chế độ — nên bật `tei` là bỏ đúng thứ mà Privacy Mode hứa hẹn, và
+            # là bỏ luận điểm "dữ liệu không ra ngoài" của đề tài. Nó phải nhìn
+            # thấy được ngay lúc khởi động chứ không nằm im trong một tệp cấu
+            # hình (SPEC-REVIEW.md §A.4).
+            out.append(
+                f"{' và '.join(dung_tei)}=tei — nội dung tài liệu và câu hỏi được "
+                f"gửi tới {self.tei_base_url} ở CẢ Privacy Mode. Nhãn 'chạy hoàn "
+                f"toàn trên máy bạn' không còn đúng. Dùng cho phát triển; số liệu "
+                f"trong báo cáo nên chạy bằng mô hình cục bộ có ghim revision."
             )
         if self.embedding_provider == "fake":
             out.append(

@@ -11,12 +11,14 @@ from functools import lru_cache
 
 from app.adapters.embedding.bge_m3 import BgeM3EmbeddingProvider
 from app.adapters.embedding.fake import FakeEmbeddingProvider
+from app.adapters.embedding.tei import TeiEmbeddingProvider
 from app.ports.embedding import EmbeddingProvider
 from app.settings import settings
 
 __all__ = [
     "BgeM3EmbeddingProvider",
     "FakeEmbeddingProvider",
+    "TeiEmbeddingProvider",
     "get_embedding_provider",
 ]
 
@@ -39,5 +41,16 @@ def get_embedding_provider() -> EmbeddingProvider:
             "Mọi số liệu chất lượng đo bằng nó đều không dùng được cho báo cáo."
         )
         return FakeEmbeddingProvider(dim=settings.embedding_dim)
+
+    if settings.embedding_provider == "tei":
+        # Cảnh báo quyền riêng tư đầy đủ nằm ở `Settings.warnings()` và hiện lúc
+        # khởi động. Ở đây chỉ ghi lại một dòng để log của worker nói rõ vector
+        # trong lượt nạp này được sinh ở đâu.
+        log.warning(
+            "Nhúng qua dịch vụ TEI (%s) — nội dung tài liệu rời khỏi máy, "
+            "kể cả ở Privacy Mode.",
+            settings.tei_base_url,
+        )
+        return TeiEmbeddingProvider()
 
     return BgeM3EmbeddingProvider()
