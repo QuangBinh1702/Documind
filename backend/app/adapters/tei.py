@@ -61,6 +61,19 @@ class TeiClient:
         self.base_url = (base_url or settings.tei_base_url).rstrip("/")
         self.api_key = api_key or settings.tei_api_key
         self.timeout = timeout or settings.tei_timeout_seconds
+        self._client = None
+
+    def _http(self):
+        """Một `httpx.Client` dùng lại cho mọi lượt gọi.
+
+        Mỗi lô nhúng là một lượt POST; mở kết nối TLS mới cho từng lượt tốn
+        thêm một bắt tay trên mỗi lô trong khi dịch vụ đã chậm sẵn.
+        """
+        import httpx
+
+        if self._client is None:
+            self._client = httpx.Client(timeout=httpx.Timeout(self.timeout, connect=10.0))
+        return self._client
 
     @property
     def host(self) -> str:
@@ -90,10 +103,7 @@ class TeiClient:
 
         while True:
             try:
-                with httpx.Client(
-                    timeout=httpx.Timeout(self.timeout, connect=10.0)
-                ) as client:
-                    response = client.post(url, json=payload, headers=headers)
+                response = self._http().post(url, json=payload, headers=headers)
             except httpx.TimeoutException as exc:
                 # Hết giờ cũng là trạng thái tạm thời — thường là lô quá lớn gặp
                 # lúc máy chủ bận. Thử lại, rồi mới chịu thua.
@@ -143,8 +153,7 @@ class TeiClient:
 
         url = f"{self.base_url}{path}"
         try:
-            with httpx.Client(timeout=httpx.Timeout(self.timeout, connect=10.0)) as client:
-                response = client.get(url, headers=self._headers())
+            response = self._http().get(url, headers=self._headers())
         except httpx.HTTPError as exc:
             raise TeiError(
                 f"Không hỏi được tình trạng dịch vụ TEI ({self.host}{path}): {exc}"

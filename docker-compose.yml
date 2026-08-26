@@ -17,6 +17,15 @@ x-backend-env: &backend-env
   MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
   MINIO_BUCKET: ${MINIO_BUCKET:-documind}
   MINIO_SECURE: "false"
+  # Privacy Mode gọi một máy chủ mô hình cục bộ. `localhost` trong container là
+  # chính container, nên mặc định trỏ về Ollama chạy trên MÁY CHỦ; đổi thành
+  # http://ollama:11434/v1 khi bật profile `local-llm` bên dưới.
+  LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+
+# Cho container gọi được dịch vụ trên máy chủ (Ollama, hoặc TEI tự chạy).
+x-host-gateway: &host-gateway
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
 
 services:
   postgres:
@@ -98,6 +107,7 @@ services:
       dockerfile: Dockerfile
     container_name: documind-api
     restart: unless-stopped
+    <<: *host-gateway
     env_file:
       - .env
     environment:
@@ -130,6 +140,7 @@ services:
       dockerfile: Dockerfile
     container_name: documind-worker
     restart: unless-stopped
+    <<: *host-gateway
     env_file:
       - .env
     environment:
@@ -150,6 +161,31 @@ services:
     # GPU: chỉ bật trên máy đích. Trên laptop 2 GB để nguyên comment và đặt
     # DEVICE=cpu trong .env. SPEC.md US-001 AC-6, SPEC-v1.md §10.0.
     #
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # Máy chủ mô hình cục bộ cho Privacy Mode — tuỳ chọn, bật bằng profile:
+  #   docker compose --profile local-llm up -d
+  #   docker compose exec ollama ollama pull qwen3:8b
+  # và đặt LOCAL_LLM_BASE_URL=http://ollama:11434/v1 trong .env.
+  # Không có GPU thì vẫn chạy được trên CPU, chỉ chậm.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: documind-ollama
+    profiles: ["local-llm"]
+    restart: unless-stopped
+    environment:
+      # Khớp LLM_CONTEXT_TOKENS trong .env — xem chú thích ở đó.
+      OLLAMA_CONTEXT_LENGTH: ${LLM_CONTEXT_TOKENS:-8192}
+      OLLAMA_KEEP_ALIVE: 30m
+    volumes:
+      - ollama-models:/root/.ollama
+    # GPU: bỏ comment trên máy đích.
     # deploy:
     #   resources:
     #     reservations:
@@ -180,3 +216,4 @@ volumes:
   redis-data:
   minio-data:
   model-cache:
+  ollama-models:
