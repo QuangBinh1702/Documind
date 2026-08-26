@@ -38,6 +38,7 @@ export default function ManHinhNotebook() {
   const [loi, setLoi] = useState<string | null>(null);
   const [dangSuaTen, setDangSuaTen] = useState(false);
   const [vuaXong, setVuaXong] = useState<string | null>(null);
+  const [thongBao, setThongBao] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("hoi");
   const { t } = useNgonNgu();
   const daXong = useRef<Set<string>>(new Set());
@@ -177,11 +178,15 @@ export default function ManHinhNotebook() {
             autoFocus
             defaultValue={nb.title}
             onBlur={async (e) => {
-              const t = e.target.value.trim();
+              const ten = e.target.value.trim();
               setDangSuaTen(false);
-              if (t && t !== nb.title) {
-                const moi = await api.doiTenNotebook(id, t);
-                setNb(moi);
+              if (ten && ten !== nb.title) {
+                try {
+                  setNb(await api.doiTenNotebook(id, ten));
+                } catch {
+                  setVuaXong(null);
+                  setThongBao(t("loi.khongLuuDuoc"));
+                }
               }
             }}
             onKeyDown={(e) => {
@@ -212,7 +217,35 @@ export default function ManHinhNotebook() {
         <NhanQuyenRiengTu />
         <NutNgonNgu />
         <NutChuDe />
+        {/* US-005 AC-4 — xoá notebook và mọi thứ bên trong. */}
+        <button
+          onClick={async () => {
+            if (!nb || !confirm(t("nb.xoaHoi", { ten: nb.title }))) return;
+            try {
+              await api.xoaNotebook(id);
+              router.replace("/notebooks");
+            } catch {
+              setThongBao(t("loi.khongLuuDuoc"));
+            }
+          }}
+          title={t("nb.xoa")}
+          className="rounded-md border border-vien px-2 py-0.5 text-xs text-mo hover:border-canh-bao hover:text-canh-bao"
+        >
+          ✕
+        </button>
       </header>
+
+      {thongBao && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center gap-3 border-b border-canh-bao bg-canh-bao-nen px-5 py-2 text-sm text-canh-bao"
+        >
+          <span className="flex-1">{thongBao}</span>
+          <button onClick={() => setThongBao(null)} className="text-xs underline">
+            {t("chung.dong")}
+          </button>
+        </div>
+      )}
 
       {/* US-022 AC-4 — báo khi tài liệu sẵn sàng, rồi tự biến mất. */}
       {vuaXong && (

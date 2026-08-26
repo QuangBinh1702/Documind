@@ -21,6 +21,7 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
   const [lienKet, setLienKet] = useState<LienKetChiaSe | null>(null);
   const [dangLam, setDangLam] = useState(false);
   const [daChep, setDaChep] = useState(false);
+  const [loi, setLoi] = useState<string | null>(null);
   const { t } = useNgonNgu();
 
   useEffect(() => {
@@ -35,8 +36,11 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
 
   async function tao() {
     setDangLam(true);
+    setLoi(null);
     try {
       setLienKet(await api.taoLienKetChiaSe(nbId));
+    } catch {
+      setLoi(t("loi.khongLuuDuoc"));
     } finally {
       setDangLam(false);
     }
@@ -44,9 +48,12 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
 
   async function thuHoi() {
     setDangLam(true);
+    setLoi(null);
     try {
       await api.thuHoiLienKetChiaSe(nbId);
       setLienKet(null);
+    } catch {
+      setLoi(t("loi.khongLuuDuoc"));
     } finally {
       setDangLam(false);
     }
@@ -78,6 +85,7 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
           <div className="fixed inset-0 z-10" onClick={() => setMo(false)} />
           <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-vien bg-the p-4 shadow-lg">
             <p className="text-sm font-medium">{t("chiaSe.tieuDe")}</p>
+            {loi && <p className="mt-2 text-xs text-canh-bao">{loi}</p>}
 
             {lienKet ? (
               <>

@@ -192,8 +192,12 @@ export function CotNguon({
                   checked={s.in_scope}
                   disabled={s.status !== "ready"}
                   onChange={async () => {
-                    await api.doiPhamVi(nbId, s.id, !s.in_scope);
-                    onDoiThay();
+                    try {
+                      await api.doiPhamVi(nbId, s.id, !s.in_scope);
+                      onDoiThay();
+                    } catch {
+                      setLoi(t("loi.khongLuuDuoc"));
+                    }
                   }}
                   title={t("nguon.hoiTrong")}
                   className="mt-1 accent-nhan"
@@ -218,8 +222,12 @@ export function CotNguon({
                 <button
                   onClick={async () => {
                     if (!confirm(t("nguon.xoaHoi", { ten: s.title }))) return;
-                    await api.xoaNguon(nbId, s.id);
-                    onDoiThay();
+                    try {
+                      await api.xoaNguon(nbId, s.id);
+                      onDoiThay();
+                    } catch {
+                      setLoi(t("loi.khongLuuDuoc"));
+                    }
                   }}
                   className="text-xs text-mo hover:text-canh-bao"
                   title={t("chung.xoa")}

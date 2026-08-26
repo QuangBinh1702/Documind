@@ -23,8 +23,16 @@
 /**
  * Gốc của API. Trình duyệt gọi thẳng FastAPI, không qua proxy của Next —
  * `next.config.ts` giải thích vì sao (tóm tắt: proxy đệm mất streaming).
+ *
+ * `NEXT_PUBLIC_API_URL` được **nướng vào bundle lúc build**. Khi phát triển,
+ * `.env.development` đặt nó là `http://localhost:8000`. Khi triển khai thật thì
+ * KHÔNG đặt: gốc API rơi về chính origin đang mở trang, và reverse proxy
+ * (Caddy) chuyển `/api/*` sang FastAPI — nhờ vậy một ảnh build chạy được ở mọi
+ * tên miền, và CORS không còn là vấn đề.
  */
-export const GOC_API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const GOC_API =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:8000");
 
 const KHOA_ACCESS = "documind.access";
 const KHOA_REFRESH = "documind.refresh";
@@ -199,6 +207,29 @@ export type LienKetChiaSe = {
   con_hieu_luc: boolean;
 };
 
+export type PhienHoiThoai = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
+export type TinNhan = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  answer_kind: string | null;
+  model_used: string | null;
+  latency_ms: number | null;
+  citations: {
+    marker: number;
+    chunk_id: number | null;
+    snippet: string;
+    page: number | null;
+    /** Nguồn đã bị xoá — chip hiện mờ, không bấm được (US-020 AC-4). */
+    deleted: boolean;
+  }[];
+};
+
 export type NotebookChiaSe = {
   title: string;
   nguon: {
@@ -226,6 +257,18 @@ export const api = {
     }),
 
   toiLaAi: () => goi<NguoiDung>("/api/auth/me"),
+
+  doiMatKhau: (old_password: string, new_password: string) =>
+    goi<CapToken>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ old_password, new_password }),
+    }),
+
+  danhSachPhien: (nbId: string) =>
+    goi<PhienHoiThoai[]>(`/api/sessions?notebook_id=${nbId}`),
+
+  tinNhanCuaPhien: (phienId: string) =>
+    goi<TinNhan[]>(`/api/sessions/${phienId}/messages`),
 
   doiNgonNgu: (locale: "vi" | "en") =>
     goi<NguoiDung>("/api/auth/me", {
@@ -309,7 +352,15 @@ export const api = {
 export async function taiVe(duong: string, tenDuPhong: string): Promise<void> {
   const r = await goiTho(duong);
   if (!r.ok) {
-    throw new ApiError(r.status, "Không xuất được tệp.");
+    // Máy chủ nói được lý do — "thiếu font tiếng Việt" là thứ người vận hành
+    // sửa được, còn "không xuất được" thì không.
+    let chiTiet: string | null = null;
+    try {
+      chiTiet = (await r.json())?.detail ?? null;
+    } catch {
+      /* thân không phải JSON */
+    }
+    throw new ApiError(r.status, typeof chiTiet === "string" ? chiTiet : "Không xuất được tệp.");
   }
 
   const cd = r.headers.get("Content-Disposition") ?? "";
@@ -333,7 +384,26 @@ export async function taiVe(duong: string, tenDuPhong: string): Promise<void> {
  * dõi tiến trình phần **gửi lên**. Với tệp 50 MB thì đó là khác biệt giữa một
  * thanh tiến trình và một vòng xoay không biết bao giờ xong.
  */
-export function taiLen(
+export async function taiLen(
+  nbId: string,
+  file: File,
+  onTienTrinh: (phanTram: number) => void,
+): Promise<Nguon> {
+  // Cùng quy tắc với `goiTho()`: gặp 401 thì làm mới token rồi gửi lại đúng
+  // một lần. Trước đây đường tải lên đi XHR trần, nên sau 60 phút mọi lượt kéo
+  // thả đều hỏng với "Chưa đăng nhập" trong khi phần còn lại của giao diện vẫn
+  // âm thầm làm mới và chạy tiếp.
+  try {
+    return await _taiLenMotLan(nbId, file, onTienTrinh);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401 && token.refresh() && (await lamMoiMotLan())) {
+      return _taiLenMotLan(nbId, file, onTienTrinh);
+    }
+    throw err;
+  }
+}
+
+function _taiLenMotLan(
   nbId: string,
   file: File,
   onTienTrinh: (phanTram: number) => void,
