@@ -8,15 +8,17 @@ giải Password Hashing Competition và khó tấn công bằng GPU hơn vì nó
 nhớ chứ không chỉ tốn thời gian — đúng thứ cần khi kẻ tấn công có card đồ hoạ mà
 máy chủ thì không.
 
-**Refresh token bị vô hiệu bằng chính mật khẩu, không bằng bảng thu hồi.**
-US-004 AC-2 yêu cầu đổi mật khẩu thì **mọi** refresh token cũ chết theo. Cách
-thường thấy là lưu danh sách token đã cấp rồi xoá — thêm một bảng, thêm một chỗ
-để rò rỉ, và phải dọn rác định kỳ.
+**Refresh token bị vô hiệu bằng hai cơ chế bổ sung nhau.** US-004 AC-2 yêu
+cầu đổi mật khẩu thì **mọi** refresh token cũ chết theo: token mang theo một
+dấu vân tay lấy từ `password_hash`, đổi mật khẩu thì vân tay không khớp nữa và
+mọi token cũ hỏng cùng lúc mà không cần tra bảng. Argon2 luôn sinh muối mới
+nên đổi sang **đúng mật khẩu cũ** cũng đổi hash.
 
-Ở đây token mang theo một dấu vân tay lấy từ `password_hash`. Đổi mật khẩu thì
-hash đổi, vân tay không khớp nữa, và mọi token cũ hỏng cùng lúc mà không cần lưu
-gì cả. Argon2 luôn sinh muối mới nên đổi sang **đúng mật khẩu cũ** cũng đổi hash
-— tức là "đổi mật khẩu" luôn thu hồi phiên, đúng như người dùng mong đợi.
+Nhưng vân tay không giúp gì khi người dùng bấm *đăng xuất*, hay khi một refresh
+token bị đánh cắp và dùng lại. Cho hai ca đó, mỗi refresh token đã cấp được ghi
+vào bảng `refresh_tokens` (chỉ `sha256(jti)`, không phải chính token) và
+`/auth/refresh` **xoay vòng**: thu hồi token vừa dùng, cấp token mới. Một token
+chỉ đổi được đúng một lần; dùng lại lần hai là dấu hiệu bị lộ và bị từ chối.
 
 **Sai email và sai mật khẩu trả về cùng một câu.** US-003 AC-2. Phân biệt hai ca
 đó biến trang đăng nhập thành công cụ dò xem email nào đã đăng ký. Vì lý do đó,
@@ -42,10 +44,10 @@ from argon2 import PasswordHasher
 # lẫn hash hỏng không giải mã được. Bắt riêng lớp con thì một hash hỏng trong DB
 # sẽ nổi thành lỗi 500 thay vì một câu "sai mật khẩu".
 from argon2.exceptions import VerificationError
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import User
+from app.models.knowledge import RefreshToken, User
 from app.settings import settings
 
 __all__ = [
@@ -54,6 +56,7 @@ __all__ = [
     "bam_mat_khau",
     "dang_ky",
     "dang_nhap",
+    "dang_xuat",
     "doi_mat_khau",
     "giai_ma",
     "lam_moi",
@@ -117,30 +120,48 @@ def _van_tay(password_hash: str) -> str:
     return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
 
 
-def _tao_token(user: User, loai: Loai) -> tuple[str, int]:
+def _tao_token(user: User, loai: Loai) -> tuple[str, int, str, datetime]:
     song = (
         timedelta(minutes=settings.access_token_minutes)
         if loai == "access"
         else timedelta(days=settings.refresh_token_days)
     )
     het_han = datetime.now(UTC) + song
+    jti = uuid.uuid4().hex
     payload = {
         "sub": str(user.id),
         "typ": loai,
         "pwd": _van_tay(user.password_hash),
         "iat": int(datetime.now(UTC).timestamp()),
         "exp": int(het_han.timestamp()),
-        "jti": uuid.uuid4().hex,
+        "jti": jti,
     }
-    return jwt.encode(payload, settings.secret_key, algorithm="HS256"), int(
-        song.total_seconds()
+    return (
+        jwt.encode(payload, settings.secret_key, algorithm="HS256"),
+        int(song.total_seconds()),
+        jti,
+        het_han,
     )
 
 
-def _cap_doi(user: User) -> TokenPair:
-    access, song = _tao_token(user, "access")
-    refresh, _ = _tao_token(user, "refresh")
+def _bam_jti(jti: str) -> str:
+    return hashlib.sha256(jti.encode()).hexdigest()
+
+
+def _cap_doi(session: Session, user: User) -> TokenPair:
+    access, song, _, _ = _tao_token(user, "access")
+    refresh, _, jti, het_han = _tao_token(user, "refresh")
+    session.add(RefreshToken(user_id=user.id, token_hash=_bam_jti(jti), expires_at=het_han))
+    session.flush()
     return TokenPair(access_token=access, refresh_token=refresh, expires_in=song)
+
+
+def _thu_hoi_tat_ca(session: Session, user_id: uuid.UUID) -> None:
+    session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
 
 
 def giai_ma(token: str, loai: Loai) -> dict:
@@ -204,7 +225,7 @@ def dang_ky(session: Session, email: str, mat_khau: str) -> tuple[User, TokenPai
     session.add(user)
     session.flush()
     log.info("Tài khoản mới: %s", email)
-    return user, _cap_doi(user)
+    return user, _cap_doi(session, user)
 
 
 def dang_nhap(session: Session, email: str, mat_khau: str) -> tuple[User, TokenPair]:
@@ -228,13 +249,47 @@ def dang_nhap(session: Session, email: str, mat_khau: str) -> tuple[User, TokenP
         user.password_hash = bam_mat_khau(mat_khau)
         session.flush()
 
-    return user, _cap_doi(user)
+    return user, _cap_doi(session, user)
+
+
+def _ban_ghi_refresh(session: Session, refresh_token: str) -> tuple[User, RefreshToken]:
+    """Người dùng và bản ghi của một refresh token còn hiệu lực, hoặc `AuthError`."""
+    user = nguoi_dung_tu_token(session, refresh_token, loai="refresh")
+    jti = giai_ma(refresh_token, "refresh").get("jti", "")
+    ban_ghi = session.scalar(
+        select(RefreshToken).where(RefreshToken.token_hash == _bam_jti(jti))
+    )
+    if ban_ghi is None or ban_ghi.revoked_at is not None:
+        # Token hợp lệ về chữ ký nhưng đã dùng rồi hoặc đã đăng xuất. Dùng lại
+        # một token đã xoay là dấu hiệu bị lộ: thu hồi cả chuỗi của người này
+        # để kẻ giữ bản sao không đi tiếp được.
+        if ban_ghi is not None:
+            log.warning("Refresh token đã thu hồi bị dùng lại — thu hồi mọi phiên của %s",
+                        user.email)
+            _thu_hoi_tat_ca(session, user.id)
+            # Ngay dưới đây là một ngoại lệ, và phiên của request sẽ ROLLBACK
+            # khi ngoại lệ đó đi ra — mang theo cả lượt thu hồi. Chốt trước.
+            session.commit()
+        raise AuthError("Phiên đăng nhập không còn hiệu lực, hãy đăng nhập lại.",
+                        "TOKEN_REVOKED")
+    return user, ban_ghi
 
 
 def lam_moi(session: Session, refresh_token: str) -> TokenPair:
-    """US-003 AC-3. Cấp cặp token mới từ một refresh token còn hạn."""
-    user = nguoi_dung_tu_token(session, refresh_token, loai="refresh")
-    return _cap_doi(user)
+    """US-003 AC-3. Cấp cặp token mới và thu hồi token vừa dùng (xoay vòng)."""
+    user, ban_ghi = _ban_ghi_refresh(session, refresh_token)
+    ban_ghi.revoked_at = datetime.now(UTC)
+    return _cap_doi(session, user)
+
+
+def dang_xuat(session: Session, refresh_token: str) -> None:
+    """Thu hồi refresh token của phiên này. Token đã hỏng thì coi như xong."""
+    try:
+        _, ban_ghi = _ban_ghi_refresh(session, refresh_token)
+    except AuthError:
+        return
+    ban_ghi.revoked_at = datetime.now(UTC)
+    session.flush()
 
 
 def doi_mat_khau(session: Session, user: User, cu: str, moi: str) -> TokenPair:
@@ -246,8 +301,9 @@ def doi_mat_khau(session: Session, user: User, cu: str, moi: str) -> TokenPair:
         raise AuthError("Mật khẩu cũ không đúng.", "BAD_CREDENTIALS") from exc
 
     user.password_hash = bam_mat_khau(moi)
+    _thu_hoi_tat_ca(session, user.id)
     session.flush()
     log.info("Đổi mật khẩu: %s", user.email)
 
     # Cấp cặp mới để người vừa đổi không bị đá ra khỏi phiên đang dùng.
-    return _cap_doi(user)
+    return _cap_doi(session, user)

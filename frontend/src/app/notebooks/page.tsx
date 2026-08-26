@@ -76,8 +76,8 @@ export default function TrangNotebook() {
           </Link>
           <NutDoiMatKhau />
           <button
-            onClick={() => {
-              token.xoa();
+            onClick={async () => {
+              await api.dangXuat();
               router.replace("/");
             }}
             className="underline underline-offset-4"

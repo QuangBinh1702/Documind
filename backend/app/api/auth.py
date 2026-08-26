@@ -92,6 +92,13 @@ def refresh(req: LamMoiRequest, session: DbSession) -> TokenResponse:
     return _phan_hoi(tokens)
 
 
+@router.post("/logout", status_code=204, summary="Đăng xuất — thu hồi refresh token")
+def logout(req: LamMoiRequest, session: DbSession) -> None:
+    """Không đòi access token: người có access token hết hạn vẫn phải đăng
+    xuất được. Thứ cần thu hồi là refresh token, và nó nằm ngay trong thân."""
+    svc.dang_xuat(session, req.refresh_token)
+
+
 @router.get("/me", response_model=UserResponse, summary="Thông tin tài khoản")
 def me(user: CurrentUser) -> UserResponse:
     return UserResponse.model_validate(user)

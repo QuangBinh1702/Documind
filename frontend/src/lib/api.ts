@@ -258,6 +258,22 @@ export const api = {
 
   toiLaAi: () => goi<NguoiDung>("/api/auth/me"),
 
+  /** Thu hồi refresh token ở máy chủ rồi xoá cả hai token ở máy này. */
+  dangXuat: async () => {
+    const rt = token.refresh();
+    token.xoa();
+    if (!rt) return;
+    try {
+      await fetch(`${GOC_API}/api/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+    } catch {
+      /* mất mạng thì token vẫn tự hết hạn; phía máy này đã xoá rồi */
+    }
+  },
+
   doiMatKhau: (old_password: string, new_password: string) =>
     goi<CapToken>("/api/auth/change-password", {
       method: "POST",
