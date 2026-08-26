@@ -110,7 +110,7 @@ không sao lưu — tải lại được.
 ## Validation
 
 - Bộ test backend (cần hạ tầng dev): `cd backend && pytest -m "not perf and not ml"`
-  — 575 test xanh ở thời điểm viết.
+  — 581 test xanh ở thời điểm viết.
 - Giao diện: `cd frontend && npm run typecheck && npm run lint && npm run build`.
 - Hành trình thật: đăng ký → tạo notebook → tải một PDF → đợi *sẵn sàng* →
   hỏi → bấm số trích dẫn thấy đúng đoạn được tô sáng → xuất PDF → tạo liên
@@ -125,7 +125,7 @@ không sao lưu — tải lại được.
   embedding/reranker trên CPU (`EMBEDDING_DEVICE=cpu`, `RERANK_DEVICE=cpu`).
 - Không có request-id xuyên suốt API ↔ worker; đối chiếu bằng `source_id` và
   thời điểm.
-- Refresh token không thu hồi được trước khi hết hạn (7 ngày) ngoài cách đổi
-  mật khẩu. Bảng `refresh_tokens` có trong lược đồ nhưng chưa dùng.
+- Access token (60 phút) là JWT không trạng thái: đăng xuất thu hồi refresh
+  token ngay, nhưng access token đang có vẫn dùng được tới khi hết hạn.
 - Let's Encrypt cần cổng 80 mở ra Internet để xác thực; sau tường lửa nội bộ
   thì dùng chứng chỉ tự ký của Caddy hoặc cấp chứng chỉ thủ công.
