@@ -91,13 +91,15 @@ async def ask(
     result: AnswerResult | None = None
     async for event in answer_question(
         session,
-        search_query,
+        question,
         notebook_id=notebook_id,
         embedder=embedder,
         reranker=reranker,
         llm=llm,
         owner_id=owner_id,
         source_ids=source_ids or chat_session.scope_source_ids,
+        # Câu đã gộp chỉ để TÌM; câu gốc mới là thứ đưa cho mô hình.
+        search_query=search_query if condensed else None,
     ):
         if event["type"] == "done":
             result = event["result"]

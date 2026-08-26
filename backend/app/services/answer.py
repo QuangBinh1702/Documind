@@ -166,13 +166,20 @@ async def answer_question(
     owner_id: uuid.UUID | None = None,
     source_ids: list[uuid.UUID] | None = None,
     history: list[Message] | None = None,
+    search_query: str | None = None,
 ) -> AsyncIterator[AnswerEvent]:
     """Trả lời một câu hỏi, phát sự kiện theo thứ tự giao diện cần.
 
     Sự kiện cuối cùng luôn là `done`, và nó mang theo `result` để chỗ gọi lấy
     được toàn bộ kết quả mà không phải tự ghép lại từ các mẩu.
+
+    `search_query` là câu **dùng để tìm** (đã gộp ngữ cảnh ở US-019); `question`
+    vẫn là câu người dùng gõ và là thứ đưa vào prompt cùng nhận diện ngôn ngữ.
+    Trước đây câu đã gộp thay thế cả hai, nên một câu hỏi tiếng Anh nối tiếp bị
+    viết lại thành tiếng Việt và được trả lời bằng tiếng Việt.
     """
     started = time.perf_counter()
+    history = _lam_sach_lich_su(history)
 
     # US-037 — ngôn ngữ trả lời đi theo ngôn ngữ CÂU HỎI, không theo ngôn ngữ
     # tài liệu. Người hỏi bằng tiếng Anh về một quy chế tiếng Việt vẫn phải nhận
@@ -326,7 +333,7 @@ async def answer_question(
     #
     # Chỉ đổi câu dùng để TÌM. Câu gốc vẫn là thứ đưa cho mô hình sinh câu trả
     # lời, nên câu trả lời vẫn bằng tiếng của người hỏi.
-    cau_tim = question
+    cau_tim = search_query or question
     if settings.translate_query_enabled:
         cau_tim, da_dich = await dich_de_truy_xuat(question, llm=llm, ngon_ngu=ngon_ngu)
         if da_dich:
@@ -372,8 +379,15 @@ async def answer_question(
         return
 
     # ── Sinh câu trả lời ────────────────────────────────
-    blocks = P.build_context(decision.chunks, _ten_nguon(session, decision.chunks))
     system = P.build_grounded_system_prompt(ngon_ngu)
+    chunks_dung, bi_bo = _vua_ngan_sach(decision.chunks, system, question, history)
+    if bi_bo:
+        log.info(
+            "Bỏ %d đoạn xếp hạng thấp cho vừa cửa sổ %d token", bi_bo,
+            settings.llm_context_tokens,
+        )
+        yield {"type": "context_trimmed", "dropped": bi_bo, "kept": len(chunks_dung)}
+    blocks = P.build_context(chunks_dung, _ten_nguon(session, chunks_dung))
     user = P.build_user_prompt(question, blocks)
     messages: list[Message] = [*(history or []), {"role": "user", "content": user}]
 
@@ -482,6 +496,54 @@ async def answer_question(
         "verified": result.verified,
         "retries": retries,
     }
+
+
+def _uoc_token(text: str) -> int:
+    return int(len(text) / settings.llm_chars_per_token) + 1
+
+
+def _vua_ngan_sach(
+    chunks: list[ScoredChunk],
+    system: str,
+    question: str,
+    history: list[Message] | None,
+) -> tuple[list[ScoredChunk], int]:
+    """Bỏ bớt đoạn xếp hạng thấp nhất cho tới khi prompt vừa cửa sổ ngữ cảnh.
+
+    Luôn giữ ít nhất một đoạn: cổng ngưỡng đã kết luận là có căn cứ, nên thà
+    trả lời từ đoạn tốt nhất còn hơn im lặng vì ngân sách. Đoạn được sắp theo
+    điểm rerank giảm dần (hợp đồng của `decide`), nên cắt đuôi là cắt đúng
+    phần ít liên quan nhất.
+    """
+    ngan_sach = settings.llm_context_tokens - settings.llm_max_tokens
+    co_dinh = _uoc_token(system) + _uoc_token(question) + 64
+    co_dinh += sum(_uoc_token(m["content"]) for m in history or [])
+
+    giu: list[ScoredChunk] = []
+    dung = co_dinh
+    for c in chunks:
+        gia = _uoc_token(c.candidate.content) + 32
+        if giu and dung + gia > ngan_sach:
+            break
+        giu.append(c)
+        dung += gia
+    return giu, len(chunks) - len(giu)
+
+
+def _lam_sach_lich_su(history: list[Message] | None) -> list[Message] | None:
+    """Xoá marker `[n]` khỏi các câu trả lời cũ trong lịch sử.
+
+    Số marker chỉ có nghĩa trong lượt đã sinh ra nó. Để nguyên thì mô hình
+    chép lại `[2]` của lượt trước, và ở lượt này `[2]` là một đoạn khác —
+    marker "hợp lệ" mà trỏ sai, `strip_invalid_markers` không bắt được.
+    """
+    if not history:
+        return history
+    return [
+        {**m, "content": P.strip_all_markers(m["content"])}
+        if m["role"] == "assistant" else m
+        for m in history
+    ]
 
 
 def collect_text(events: list[AnswerEvent]) -> str:

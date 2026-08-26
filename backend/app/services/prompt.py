@@ -255,6 +255,16 @@ def used_markers(answer: str) -> list[int]:
     return seen
 
 
+def strip_all_markers(text: str) -> str:
+    """Bỏ mọi marker `[n]` — dùng cho câu trả lời cũ đưa vào lịch sử.
+
+    Số marker chỉ có nghĩa trong lượt đã sinh ra nó; mang sang lượt sau là
+    mang theo một tham chiếu trỏ sai.
+    """
+    cleaned = _MARKER.sub("", text)
+    return re.sub(r" +([.,;:!?])", r"\1", cleaned)
+
+
 def strip_invalid_markers(answer: str, valid: set[int]) -> tuple[str, list[int]]:
     """Loại các marker không tồn tại trong ngữ cảnh — US-014 AC-5.
 

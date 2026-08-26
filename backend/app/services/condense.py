@@ -53,7 +53,9 @@ chúng trỏ tới trong lịch sử.
 2. Giữ NGUYÊN ý định và mức chi tiết của câu hỏi gốc. Không thêm, không bớt.
 3. Nếu câu hỏi cuối đã đầy đủ nghĩa, chép lại gần như nguyên văn.
 4. Nếu người dùng đổi hẳn sang chủ đề khác, KHÔNG gán nó vào chủ đề cũ.
-5. Chỉ trả về câu hỏi đã viết lại. Không giải thích, không thêm lời dẫn."""
+5. Viết lại bằng ĐÚNG ngôn ngữ của câu hỏi cuối (hỏi tiếng Anh thì viết lại \
+bằng tiếng Anh). Không dịch.
+6. Chỉ trả về câu hỏi đã viết lại. Không giải thích, không thêm lời dẫn."""
 
 
 def needs_condensing(question: str) -> bool:
