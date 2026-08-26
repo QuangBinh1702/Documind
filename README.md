@@ -224,7 +224,10 @@ chứa khoá API thật**, và `.env` nằm trong `.gitignore`.
 | `LLM_PROVIDER` | `real` | `real` hoặc `fake` |
 | `DEFAULT_MODE` | `privacy` | `privacy` = không gì rời khỏi máy. `fast` = gọi dịch vụ ngoài |
 | `FAST_BACKEND` | `gemini` | `gemini` hoặc `ollama-cloud` |
-| `LOCAL_LLM_MODEL` / `_BASE_URL` | `qwen3-8b-q4` / `http://localhost:11434/v1` | Máy chủ tương thích OpenAI chạy cục bộ. **Đừng trỏ sang đám mây** — cờ `is_local` khi đó nói dối và giao diện không cảnh báo |
+| `LOCAL_LLM_MODEL` / `_BASE_URL` | `qwen3:8b` / `http://host.docker.internal:11434/v1` | Máy chủ tương thích OpenAI chạy cục bộ (Ollama trên máy chủ; hoặc `http://ollama:11434/v1` với profile `local-llm`). **Đừng trỏ sang đám mây** — cờ `is_local` khi đó nói dối và giao diện không cảnh báo |
+| `LLM_CONTEXT_TOKENS` / `LLM_CHARS_PER_TOKEN` | `8192` / `2.0` | Cửa sổ ngữ cảnh mà prompt phải vừa; đoạn xếp hạng thấp bị bỏ bớt cho vừa. Đặt `OLLAMA_CONTEXT_LENGTH` của máy chủ mô hình bằng con số này |
+| `CORS_ORIGINS` | `http://localhost:3000,…` | Origin của giao diện được gọi API. Qua Caddy cùng origin thì không cần |
+| `SHARE_ASKS_PER_HOUR` / `REGISTER_PER_HOUR_PER_IP` | `30` / `10` | Trần cho endpoint không đăng nhập. `0` = tắt |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | *(trống)* / `gemini-3.1-flash-lite` | Ghim phiên bản cụ thể, đừng dùng bí danh `-latest` |
 | `OLLAMA_CLOUD_API_KEY` / `_MODEL` / `_BASE_URL` | *(trống)* / `gemma4:31b` / `https://ollama.com/v1` | Trọng số mở nhưng chạy trên máy của Ollama — dữ liệu **vẫn** rời khỏi máy |
 | `LLM_TEMPERATURE` / `LLM_MAX_TOKENS` | `0.0` / `1024` | `0.0` để câu trả lời bám tài liệu và để chạy lại đánh giá ra cùng kết quả |

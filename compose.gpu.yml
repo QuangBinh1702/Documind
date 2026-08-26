@@ -1,0 +1,40 @@
+# DocuMind — lớp phủ GPU cho máy đích (SPEC-v1.md §10). Chồng lên bản prod:
+#
+#   docker compose -f docker-compose.yml -f compose.prod.yml -f compose.gpu.yml \
+#       --profile local-llm up -d --build
+#
+# Cần NVIDIA driver + nvidia-container-toolkit trên máy chủ. Ảnh backend phải
+# dựng với bản PyTorch CUDA (build-arg bên dưới) — bản mặc định chỉ có CPU.
+#
+# Ngân sách VRAM 16 GB (§10.1): qwen3:8b q4 ~6–7 GB + KV cache, bge-m3 ~2,3 GB,
+# reranker ~2,3 GB, OCR ~1 GB. Worker `--concurrency=1` và API một tiến trình
+# là hai thứ giữ cho tổng này không bị nhân đôi.
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+services:
+  api:
+    <<: *gpu
+    build:
+      args:
+        TORCH_INDEX: https://pypi.org/simple
+    environment:
+      DEVICE: cuda
+
+  worker:
+    <<: *gpu
+    build:
+      args:
+        TORCH_INDEX: https://pypi.org/simple
+    environment:
+      DEVICE: cuda
+
+  ollama:
+    <<: *gpu

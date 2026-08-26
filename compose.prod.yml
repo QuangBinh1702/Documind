@@ -1,0 +1,158 @@
+# DocuMind — lớp phủ production. Chạy CHỒNG lên docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f compose.prod.yml up -d --build
+#
+# Khác với bản dev ở những điểm sau, và mỗi điểm là một lý do bản dev không
+# đưa ra ngoài được:
+#
+#   * không gắn mã nguồn vào container, không `--reload`, không `next dev`;
+#   * Postgres, Redis, MinIO KHÔNG mở cổng ra máy chủ — chỉ có Caddy nghe 80/443;
+#   * Redis có mật khẩu; API từ chối khởi động nếu SECRET_KEY còn là giá trị mẫu;
+#   * giao diện và API cùng một origin qua Caddy, nên CORS không còn là vấn đề
+#     và token không đi qua HTTP trần;
+#   * log xoay vòng, giới hạn bộ nhớ, healthcheck cho mọi service dài hạn.
+#
+# Máy có GPU chồng thêm compose.gpu.yml. Xem docs/runbooks/documind-production.md.
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+x-prod-env: &prod-env
+  APP_ENV: production
+  REDIS_URL: redis://:${REDIS_PASSWORD:?Đặt REDIS_PASSWORD trong .env}@redis:6379/0
+  CORS_ORIGINS: https://${DOMAIN:?Đặt DOMAIN trong .env}
+  PERF_ASSERTIONS_ENABLED: ${PERF_ASSERTIONS_ENABLED:-false}
+
+services:
+  postgres:
+    <<: *logging
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  redis:
+    <<: *logging
+    ports: !reset []
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?Đặt REDIS_PASSWORD trong .env}
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+
+  minio:
+    <<: *logging
+    # Ghim phiên bản: `latest` đổi hành vi giữa hai lần `pull` mà không ai biết.
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+
+  api:
+    <<: *logging
+    image: documind-api:${IMAGE_TAG:-latest}
+    volumes: !reset
+      - model-cache:/root/.cache
+    ports: !reset []
+    environment:
+      <<: *prod-env
+    # Không `--reload`. `--proxy-headers` để log và rate limit theo IP thấy
+    # địa chỉ thật của khách qua Caddy, không phải địa chỉ của Caddy.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000
+             --proxy-headers --forwarded-allow-ips='*'
+             --timeout-keep-alive 75"
+    deploy:
+      resources:
+        limits:
+          memory: ${API_MEMORY_LIMIT:-6g}
+
+  worker:
+    <<: *logging
+    image: documind-api:${IMAGE_TAG:-latest}
+    volumes: !reset
+      - model-cache:/root/.cache
+    environment:
+      <<: *prod-env
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 | grep -q pong"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEMORY_LIMIT:-8g}
+
+  ollama:
+    <<: *logging
+    image: ollama/ollama:0.11.4
+    deploy:
+      resources:
+        limits:
+          memory: ${OLLAMA_MEMORY_LIMIT:-12g}
+
+  frontend:
+    <<: *logging
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: documind-frontend:${IMAGE_TAG:-latest}
+    volumes: !reset []
+    ports: !reset []
+    # KHÔNG đặt NEXT_PUBLIC_API_URL: bundle gọi API trên chính origin của trang.
+    environment: !reset {}
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # Cổng duy nhất ra Internet. Tự xin chứng chỉ Let's Encrypt cho DOMAIN.
+  # DOMAIN=localhost (hoặc một tên nội bộ) thì Caddy tự ký — dùng để thử.
+  caddy:
+    <<: *logging
+    image: caddy:2.9-alpine
+    container_name: documind-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Đặt DOMAIN trong .env}
+      MAX_FILE_MB: ${MAX_FILE_MB:-50}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  caddy-data:
+  caddy-config:

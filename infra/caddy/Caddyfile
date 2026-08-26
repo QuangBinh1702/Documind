@@ -1,0 +1,44 @@
+# DocuMind — reverse proxy. Một origin cho cả giao diện lẫn API.
+#
+# `flush_interval -1` là dòng quan trọng nhất ở đây: mặc định Caddy gom phản
+# hồi trước khi chuyển tiếp, và điều đó giết streaming SSE — câu trả lời chỉ
+# hiện ra khi mô hình đã viết xong. `next.config.ts` giải thích vì sao giao
+# diện không tự proxy; ở đây là cùng lý do, giải quyết ở tầng khác.
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Tệp tải lên tối đa MAX_FILE_MB; cộng thêm phần bọc multipart.
+	request_body {
+		max_size {$MAX_FILE_MB}MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000 {
+			flush_interval -1
+			transport http {
+				# Một câu hỏi ở Privacy Mode trên CPU có thể kéo dài vài phút;
+				# luồng theo dõi tiến độ sống tới mười phút.
+				read_timeout 660s
+				write_timeout 660s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
