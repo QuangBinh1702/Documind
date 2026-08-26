@@ -60,7 +60,15 @@ export async function theoDoi(
   onSuKien: (e: SuKien) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const r = await goiTho(duong, { signal });
+  let r: Response;
+  try {
+    r = await goiTho(duong, { signal });
+  } catch (err) {
+    // Bị huỷ trước khi máy chủ kịp trả về — rời trang, hoặc React StrictMode
+    // dựng rồi dỡ hiệu ứng một lần lúc phát triển. Kết thúc bình thường.
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    throw err;
+  }
   if (!r.ok || !r.body) return;
   await docLuong(r, onSuKien);
 }
