@@ -220,7 +220,7 @@ chứa khoá API thật**, và `.env` nằm trong `.gitignore`.
 | `EMBEDDING_MODEL` / `_REVISION` / `_DIM` / `_BATCH_SIZE` | `BAAI/bge-m3` / *(trống)* / `1024` / `16` | Ghim revision để kết quả tái lập được |
 | `RERANK_PROVIDER` / `_MODEL` / `_REVISION` | `bge` / `BAAI/bge-reranker-v2-m3` / *(trống)* | `bge`, `tei` hoặc `fake`. Cross-encoder xếp hạng lại |
 | `TEI_BASE_URL` / `TEI_API_KEY` | `https://textembedding.dutai.io.vn` / *(trống)* | Chỉ dùng khi chọn `tei`. Gốc tên miền, **không** kèm `/v1` |
-| `TEI_TIMEOUT_SECONDS` / `TEI_MAX_BATCH` | `30` / `32` | `32` là trần của dịch vụ, vượt thì nhận 413. Adapter tự chia lô |
+| `TEI_TIMEOUT_SECONDS` / `TEI_MAX_BATCH` | `90` / `4` | Adapter tự chia lô. **Đừng để `32`** như tài liệu dịch vụ khuyến nghị — xem đo thật bên dưới |
 | `LLM_PROVIDER` | `real` | `real` hoặc `fake` |
 | `DEFAULT_MODE` | `privacy` | `privacy` = không gì rời khỏi máy. `fast` = gọi dịch vụ ngoài |
 | `FAST_BACKEND` | `gemini` | `gemini` hoặc `ollama-cloud` |
@@ -246,6 +246,25 @@ TEI_API_KEY=<khoá của bạn>
 Nó đáng dùng nhất trên laptop CPU: cross-encoder chạy tuyến tính theo số ứng
 viên, nên `RERANK_CANDIDATES=50` ở đây biến mỗi câu hỏi thành hàng phút, còn
 qua TEI thì đó là một lượt gọi trên GPU.
+
+**Kích thước lô: đừng theo con số 32 trong tài liệu dịch vụ.** Con số đó dành
+cho câu ngắn; đoạn của đồ án dài 768 token. Đo thật ngày 26/08/2026 với đoạn
+~1300 token:
+
+| Lô | Thời gian | Mỗi đoạn |
+|---|---|---|
+| 1 | 3,8 s | 3,8 s |
+| 2 | 6,5 s | 3,3 s |
+| 4 | 13,5 s | 3,4 s |
+| 16 | 58,6 s | 3,7 s |
+
+Dịch vụ xử lý **tuần tự**: gộp lô không nhanh hơn chút nào, chỉ đổi lấy rủi ro
+hết giờ. Để `TEI_MAX_BATCH=32` thì lượt nạp tài liệu đầu tiên chết ở `/embed`
+sau hai lần thử lại. Mặc định `4` là mức vừa với `TEI_TIMEOUT_SECONDS=90`.
+
+Hệ quả cần biết: một tài liệu 23 đoạn mất khoảng 5 phút để nạp. Nhanh hơn nhiều
+so với chạy bge-m3 trên CPU, nhưng **không** phải tốc độ GPU — dịch vụ dùng
+chung nên có xếp hàng.
 
 > **Đánh đổi, và nó lớn.** Nhúng và xếp hạng lại chạy ở **mọi** lượt hỏi và
 > **mọi** lượt nạp tài liệu, không phân biệt chế độ. Bật `tei` nghĩa là nội

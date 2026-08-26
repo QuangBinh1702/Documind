@@ -141,8 +141,12 @@ def test_tran_cua_dich_vu_thang_the_batch_size(monkeypatch, client: TeiClient) -
     Không lấy nhỏ hơn thì mọi lượt nạp tài liệu chết vì 413, và thông báo lỗi
     lại nói về một tham số mà người vận hành không nghĩ là mình đã đặt.
     """
-    emb = TeiEmbeddingProvider(client=client, batch_size=128)
-    assert emb.batch_size == 32
+    from app.settings import settings as st
+
+    monkeypatch.setattr(st, "tei_max_batch", 8)
+    assert TeiEmbeddingProvider(client=client, batch_size=128).batch_size == 8
+    # Và chiều ngược lại: trần rộng thì không được nới lô do người dùng chọn.
+    assert TeiEmbeddingProvider(client=client, batch_size=2).batch_size == 2
 
 
 def test_danh_sach_rong_khong_goi_mang(monkeypatch, client: TeiClient) -> None:
@@ -318,9 +322,17 @@ def test_404_goi_y_kiem_tra_base_url(monkeypatch, client: TeiClient) -> None:
 
 
 def test_thieu_khoa_thi_khong_goi_mang(monkeypatch) -> None:
-    """Nói ngay phải đặt gì, thay vì để dịch vụ trả về 401."""
+    """Nói ngay phải đặt gì, thay vì để dịch vụ trả về 401.
+
+    Phải xoá khoá ở `settings`, không chỉ truyền `api_key=None`: hàm dựng rơi
+    về `settings.tei_api_key` đúng như mọi adapter khác, nên trên máy đã cấu
+    hình `tei` thật thì phép thử này lặng lẽ đo nhầm đường chạy có khoá.
+    """
+    from app.settings import settings as st
+
+    monkeypatch.setattr(st, "tei_api_key", None)
     seen = _mount(monkeypatch, lambda r, n: httpx.Response(200, json=[_unit()]))
-    emb = TeiEmbeddingProvider(client=TeiClient(base_url="https://tei.example", api_key=None))
+    emb = TeiEmbeddingProvider(client=TeiClient(base_url="https://tei.example"))
     with pytest.raises(TeiError, match="TEI_API_KEY"):
         emb.embed_query("thử")
     assert seen == []

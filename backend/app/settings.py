@@ -176,12 +176,22 @@ class Settings(BaseSettings):
     # ── Dịch vụ TEI ─────────────────────────────────────
     tei_base_url: str = "https://textembedding.dutai.io.vn"
     tei_api_key: str | None = None
-    tei_timeout_seconds: float = 30.0
+    tei_timeout_seconds: float = 90.0
 
-    # Trần do dịch vụ đặt, không phải lựa chọn về bộ nhớ: vượt thì nhận 413.
     # Adapter tự chia lô theo con số này, nên `RERANK_CANDIDATES=50` vẫn chạy
-    # được mà không phải nhớ hai tham số này ràng buộc nhau.
-    tei_max_batch: int = Field(default=32, ge=1, le=32)
+    # được mà không phải nhớ hai tham số ràng buộc nhau.
+    #
+    # Mặc định là 4, KHÔNG phải 32 như tài liệu dịch vụ khuyến nghị. Con số 32
+    # ấy dành cho câu ngắn; đoạn của đồ án dài 768 token. Đo thật ngày
+    # 26/08/2026 với đoạn ~1300 token cho thấy dịch vụ xử lý **tuần tự** khoảng
+    # 3,5 giây mỗi đoạn và gộp lô không nhanh hơn chút nào:
+    #
+    #   lô 1 → 3,8s   lô 2 → 6,5s   lô 4 → 13,5s   lô 16 → 58,6s
+    #
+    # Nghĩa là lô lớn chỉ đổi lấy rủi ro hết giờ chứ không đổi lấy thông lượng.
+    # Với mặc định cũ, lượt nạp tài liệu đầu tiên chết ở `/embed` sau hai lần
+    # thử lại. Trần `le=32` giữ nguyên vì đó là giới hạn của dịch vụ.
+    tei_max_batch: int = Field(default=4, ge=1, le=32)
     # `fake` ghép câu trả lời từ ngữ cảnh thay vì sinh ngôn ngữ — dùng để test
     # đường xử lý mà không cần khoá API, quota hay mạng.
     llm_provider: Literal["real", "fake"] = "real"
