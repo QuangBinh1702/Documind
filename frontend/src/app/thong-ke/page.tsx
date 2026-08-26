@@ -17,7 +17,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type ThongKe, api, token } from "@/lib/api";
-import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import { Bt } from "@/components/BieuTuong";
+import { MenuCaiDat } from "@/components/MenuCaiDat";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 import type { Khoa } from "@/lib/i18n";
 
 type Dich = (khoa: Khoa, tham?: Record<string, string | number>) => string;
@@ -76,13 +78,14 @@ export default function TrangThongKe() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">{t("tk.tieuDe")}</h1>
-        <div className="flex items-center gap-3">
-          <NutNgonNgu />
-          <Link href="/notebooks" className="text-sm text-mo underline underline-offset-4">
-            ← {t("nb.veDanhSach")}
-          </Link>
+      <header className="flex items-center gap-2">
+        <Link href="/notebooks" className="nut-icon" title={t("nb.veDanhSach")}>
+          <Bt.quayLai size={18} />
+          <span className="sr-only">{t("nb.veDanhSach")}</span>
+        </Link>
+        <h1 className="text-[22px] font-semibold tracking-tight">{t("tk.tieuDe")}</h1>
+        <div className="ml-auto">
+          <MenuCaiDat />
         </div>
       </header>
 

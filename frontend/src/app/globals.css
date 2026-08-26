@@ -110,7 +110,106 @@ body {
   scrollbar-color: var(--vien) transparent;
 }
 
+/* Tiêu đề không để một từ mồ côi ở dòng cuối. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
+/* Liên kết "tới nội dung" cho người dùng bàn phím — ẩn tới khi được focus. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--nhan);
+  color: var(--nen);
+  font-size: 13px;
+  transition: top 120ms ease;
+}
+.skip-link:focus {
+  top: 12px;
+}
+
 /* ── Nút ─────────────────────────────────────────────── */
+.nut-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--mo);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.nut-icon:hover {
+  background: color-mix(in oklab, var(--chu) 6%, transparent);
+  color: var(--chu);
+}
+.nut-icon[aria-expanded="true"] {
+  background: color-mix(in oklab, var(--chu) 8%, transparent);
+  color: var(--chu);
+}
+
+/* Menu thả xuống. */
+.menu-noi {
+  border: 1px solid var(--vien);
+  border-radius: 12px;
+  background: var(--the);
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--chu) 6%, transparent),
+    0 12px 32px -8px color-mix(in oklab, var(--chu) 18%, transparent);
+  animation: hien-menu 140ms ease-out;
+}
+@keyframes hien-menu {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+.muc-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 14px;
+  text-align: left;
+  color: var(--chu);
+  transition: background-color 100ms ease;
+}
+.muc-menu:hover {
+  background: color-mix(in oklab, var(--chu) 5%, transparent);
+}
+.muc-menu > svg {
+  color: var(--mo);
+  flex-shrink: 0;
+}
+
+.o-nhap-nho {
+  width: 100%;
+  border: 1px solid var(--vien);
+  border-radius: 8px;
+  background: var(--nen);
+  padding: 6px 10px;
+  font-size: 13px;
+  outline: none;
+}
+.o-nhap-nho:focus {
+  border-color: var(--nhan);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-noi,
+  .con-tro-go,
+  .dang-cho {
+    animation: none;
+  }
+}
 .nut-chinh {
   display: inline-flex;
   align-items: center;

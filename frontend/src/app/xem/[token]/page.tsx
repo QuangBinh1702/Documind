@@ -13,8 +13,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { GOC_API, type NotebookChiaSe, api } from "@/lib/api";
 import { type SuKien } from "@/lib/stream";
-import { NutChuDe } from "@/components/NutChuDe";
-import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import { MenuCaiDat } from "@/components/MenuCaiDat";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 import { VanBanTraLoi } from "@/components/VanBanTraLoi";
 import type { Khoa } from "@/lib/i18n";
 import type { TrichDan } from "@/lib/api";
@@ -166,9 +166,8 @@ export default function TrangXemChiaSe() {
         <span className="rounded-md border border-vien px-1.5 py-0.5 text-[11px] text-mo">
           {t("chiaSe.chiDoc")}
         </span>
-        <div className="ml-auto flex items-center gap-3">
-          <NutNgonNgu />
-          <NutChuDe />
+        <div className="ml-auto">
+          <MenuCaiDat taiKhoan={false} />
         </div>
       </header>
 

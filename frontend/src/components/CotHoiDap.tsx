@@ -27,6 +27,7 @@ import {
   api,
   taiVe,
 } from "@/lib/api";
+import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 import { VanBanTraLoi } from "@/components/VanBanTraLoi";
 import type { Khoa } from "@/lib/i18n";
@@ -374,7 +375,7 @@ export function CotHoiDap({
           className="nut-phu"
           title={t("chat.hoiThoaiMoi")}
         >
-          <span aria-hidden="true">＋</span> {t("chat.hoiThoaiMoi")}
+          <Bt.them size={14} /> {t("chat.hoiThoaiMoi")}
         </button>
 
         {phienDs.length > 0 && (
@@ -394,17 +395,9 @@ export function CotHoiDap({
           </select>
         )}
 
-        {/* Thanh xuất chỉ hiện khi đã có gì để xuất — US-040. */}
+        {/* Xuất — một nút, hai lựa chọn; chỉ hiện khi đã có gì để xuất (US-040). */}
         {coGiDeXuat && (
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className="mr-1 text-xs text-mo">{t("chat.luuLai")}</span>
-            <button onClick={() => void xuat("md")} disabled={dangXuat} className="nut-phu">
-              Markdown
-            </button>
-            <button onClick={() => void xuat("pdf")} disabled={dangXuat} className="nut-phu">
-              PDF
-            </button>
-          </div>
+          <MenuXuat dangXuat={dangXuat} onXuat={(d) => void xuat(d)} />
         )}
       </div>
 
@@ -506,13 +499,60 @@ export function CotHoiDap({
             className="nut-chinh mb-1 mr-1"
             aria-label={t("chat.hoi")}
           >
-            {dangHoi ? <span className="dang-cho" aria-hidden="true" /> : t("chat.hoi")}
+            {dangHoi ? <span className="dang-cho" aria-hidden="true" /> : <Bt.gui size={16} />}
           </button>
         </div>
         <p className="mx-auto mt-1.5 max-w-[68ch] text-[11px] text-mo/70">
           {t("chat.goiYPhim")}
         </p>
       </form>
+    </div>
+  );
+}
+
+function MenuXuat({
+  dangXuat,
+  onXuat,
+}: {
+  dangXuat: boolean;
+  onXuat: (d: "md" | "pdf") => void;
+}) {
+  const [mo, setMo] = useState(false);
+  const { t } = useNgonNgu();
+  return (
+    <div className="relative ml-auto">
+      <button
+        onClick={() => setMo((m) => !m)}
+        disabled={dangXuat}
+        aria-expanded={mo}
+        aria-haspopup="menu"
+        className="nut-phu h-8 gap-1.5"
+        title={t("chat.luuLai")}
+      >
+        {dangXuat ? <span className="dang-cho" /> : <Bt.xuat size={14} />}
+        {t("chat.xuat")}
+        <Bt.mui size={12} />
+      </button>
+      {mo && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setMo(false)} />
+          <div role="menu" className="menu-noi absolute right-0 z-30 mt-2 w-44 py-1.5">
+            {(["md", "pdf"] as const).map((d) => (
+              <button
+                key={d}
+                role="menuitem"
+                className="muc-menu w-full"
+                onClick={() => {
+                  setMo(false);
+                  onXuat(d);
+                }}
+              >
+                <Bt.tep /> {d === "md" ? "Markdown" : "PDF"}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -600,7 +640,8 @@ function LuotHoiDap({
             <span className="tabular-nums">{(l.doTreMs / 1000).toFixed(1)} s</span>
           )}
           {l.traLoi && !l.tuChoi && (
-            <button onClick={() => void chep()} className="ml-auto hover:text-chu">
+            <button onClick={() => void chep()} className="ml-auto inline-flex items-center gap-1 hover:text-chu">
+              {daChep ? <Bt.kiem size={12} /> : <Bt.chep size={12} />}
               {daChep ? t("chat.daChep") : t("chat.chep")}
             </button>
           )}

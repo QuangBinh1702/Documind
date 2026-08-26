@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ApiError, type Nguon, api, taiLen } from "@/lib/api";
+import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 import type { Khoa } from "@/lib/i18n";
 
@@ -139,13 +140,11 @@ export function CotNguon({
           keoVao ? "border-nhan bg-nhan/5" : "border-vien"
         }`}
       >
-        <p className="text-sm">{t("nguon.keoTha")}</p>
+        <Bt.taiLen size={22} className="mx-auto text-mo" />
+        <p className="mt-2 text-sm font-medium">{t("nguon.keoTha")}</p>
         <p className="mt-1 text-xs text-mo">{t("nguon.dinhDang")}</p>
         <p className="mt-0.5 text-xs text-mo">{t("nguon.danAnh")}</p>
-        <button
-          onClick={() => chonTep.current?.click()}
-          className="mt-3 rounded-md border border-nhan px-3 py-1.5 text-sm text-nhan"
-        >
+        <button onClick={() => chonTep.current?.click()} className="nut-phu mt-3 h-8 px-3 text-nhan">
           {t("nguon.chonTep")}
         </button>
         <input
@@ -185,8 +184,8 @@ export function CotNguon({
           </li>
         ) : (
           nguon.map((s) => (
-            <li key={s.id} className="border-b border-vien px-4 py-3">
-              <div className="flex items-start gap-2">
+            <li key={s.id} className="group border-b border-vien px-4 py-3 transition-colors hover:bg-nen/60">
+              <div className="flex items-start gap-2.5">
                 <input
                   type="checkbox"
                   checked={s.in_scope}
@@ -229,10 +228,11 @@ export function CotNguon({
                       setLoi(t("loi.khongLuuDuoc"));
                     }
                   }}
-                  className="text-xs text-mo hover:text-canh-bao"
+                  className="nut-icon -mr-2 -mt-1 h-7 w-7 opacity-0 transition-opacity hover:text-canh-bao focus-visible:opacity-100 group-hover:opacity-100"
                   title={t("chung.xoa")}
                 >
-                  ✕
+                  <Bt.xoa size={14} />
+                  <span className="sr-only">{t("chung.xoa")}</span>
                 </button>
               </div>
             </li>

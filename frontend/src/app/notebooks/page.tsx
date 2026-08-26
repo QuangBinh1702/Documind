@@ -12,9 +12,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type Notebook, api, token } from "@/lib/api";
-import { NutChuDe } from "@/components/NutChuDe";
-import { NutDoiMatKhau } from "@/components/NutDoiMatKhau";
-import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import { MenuCaiDat } from "@/components/MenuCaiDat";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 import type { Khoa } from "@/lib/i18n";
 
 export default function TrangNotebook() {
@@ -66,26 +65,12 @@ export default function TrangNotebook() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">{t("nb.cuaBan")}</h1>
-        <div className="flex items-center gap-3 text-sm text-mo">
-          <span>{email}</span>
-          <NutNgonNgu />
-          <NutChuDe />
-          <Link href="/thong-ke" className="underline underline-offset-4">
-            {t("nb.soLieu")}
-          </Link>
-          <NutDoiMatKhau />
-          <button
-            onClick={async () => {
-              await api.dangXuat();
-              router.replace("/");
-            }}
-            className="underline underline-offset-4"
-          >
-            {t("auth.dangXuat")}
-          </button>
+      <header className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold tracking-tight text-nhan">DocuMind</p>
+          <h1 className="mt-1 text-[22px] font-semibold tracking-tight">{t("nb.cuaBan")}</h1>
         </div>
+        <MenuCaiDat email={email} />
       </header>
 
       <form onSubmit={tao} className="o-nhap mt-7 flex items-center gap-2 pr-1.5">

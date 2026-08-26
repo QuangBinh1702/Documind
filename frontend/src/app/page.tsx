@@ -13,7 +13,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, api, token } from "@/lib/api";
-import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import { MenuCaiDat } from "@/components/MenuCaiDat";
+import { useNgonNgu } from "@/components/NgonNguProvider";
 
 const EMAIL_HOP_LE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAT_KHAU_TOI_THIEU = 8;
@@ -100,9 +101,9 @@ export default function TrangDangNhap() {
 
       <div className="grid place-items-center px-6 py-10">
       <div className="w-full max-w-sm">
-        <div className="flex items-baseline justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">DocuMind</h1>
-          <NutNgonNgu />
+          <MenuCaiDat taiKhoan={false} />
         </div>
         <p className="mt-1 text-sm text-mo">{t("auth.gioiThieu")}</p>
 

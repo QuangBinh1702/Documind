@@ -23,10 +23,58 @@ import { CotHoiDap } from "@/components/CotHoiDap";
 import { CotNguon } from "@/components/CotNguon";
 import { CotTaiLieu } from "@/components/CotTaiLieu";
 import { NhanQuyenRiengTu } from "@/components/NhanQuyenRiengTu";
-import { NutChuDe } from "@/components/NutChuDe";
 import { MatKetNoi } from "@/components/MatKetNoi";
+import { MenuCaiDat } from "@/components/MenuCaiDat";
 import { NutChiaSe } from "@/components/NutChiaSe";
-import { NutNgonNgu, useNgonNgu } from "@/components/NgonNguProvider";
+import { Bt } from "@/components/BieuTuong";
+import { useNgonNgu } from "@/components/NgonNguProvider";
+
+/** Menu "⋯" của notebook: đổi tên, xoá. Việc phá hoại nằm sau một lớp bấm. */
+function MenuNotebook({ onXoa, onDoiTen }: { onXoa: () => void; onDoiTen: () => void }) {
+  const [mo, setMo] = useState(false);
+  const { t } = useNgonNgu();
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setMo((m) => !m)}
+        aria-expanded={mo}
+        aria-haspopup="menu"
+        className="nut-icon"
+        title={t("nb.tuyChon")}
+      >
+        <Bt.nhieuHon size={18} />
+        <span className="sr-only">{t("nb.tuyChon")}</span>
+      </button>
+      {mo && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setMo(false)} />
+          <div role="menu" className="menu-noi absolute right-0 z-30 mt-2 w-48 py-1.5">
+            <button
+              role="menuitem"
+              className="muc-menu w-full"
+              onClick={() => {
+                setMo(false);
+                onDoiTen();
+              }}
+            >
+              {t("nb.doiTen")}
+            </button>
+            <button
+              role="menuitem"
+              className="muc-menu w-full text-canh-bao"
+              onClick={() => {
+                setMo(false);
+                onXoa();
+              }}
+            >
+              <Bt.xoa /> {t("nb.xoa")}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function ManHinhNotebook() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +87,13 @@ export default function ManHinhNotebook() {
   const [dangSuaTen, setDangSuaTen] = useState(false);
   const [vuaXong, setVuaXong] = useState<string | null>(null);
   const [thongBao, setThongBao] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("hoi");
+
+  useEffect(() => {
+    if (!token.access()) return;
+    api.toiLaAi().then((me) => setEmail(me.email)).catch(() => {});
+  }, []);
   const { t } = useNgonNgu();
   const daXong = useRef<Set<string>>(new Set());
   // Đánh thức vòng lặp theo dõi khi có tệp mới, mà không phải dựng lại hiệu ứng
@@ -168,9 +222,10 @@ export default function ManHinhNotebook() {
   return (
     <div className="flex h-full flex-col">
       <MatKetNoi />
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-vien px-5 py-3">
-        <Link href="/notebooks" className="text-sm text-mo hover:text-chu">
-          ← {t("tk.notebook")}
+      <header className="flex shrink-0 items-center gap-2 border-b border-vien px-4 py-2.5">
+        <Link href="/notebooks" className="nut-icon" title={t("nb.veDanhSach")}>
+          <Bt.quayLai size={18} />
+          <span className="sr-only">{t("nb.veDanhSach")}</span>
         </Link>
 
         {dangSuaTen && nb ? (
@@ -199,13 +254,13 @@ export default function ManHinhNotebook() {
           <button
             onClick={() => setDangSuaTen(true)}
             title={t("nb.doiTen")}
-            className="font-medium tracking-tight"
+            className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-[15px] font-semibold tracking-tight hover:bg-chu/5"
           >
             {nb?.title ?? "…"}
           </button>
         )}
 
-        <span className="ml-auto text-xs text-mo">
+        <span className="hidden text-xs text-mo sm:inline">
           {nguon.length === 0
             ? t("nb.chuaCoTaiLieu")
             : t("nb.daXuLy", {
@@ -213,26 +268,24 @@ export default function ManHinhNotebook() {
                 tong: nguon.length,
               })}
         </span>
-        <NutChiaSe nbId={id} />
-        <NhanQuyenRiengTu />
-        <NutNgonNgu />
-        <NutChuDe />
-        {/* US-005 AC-4 — xoá notebook và mọi thứ bên trong. */}
-        <button
-          onClick={async () => {
-            if (!nb || !confirm(t("nb.xoaHoi", { ten: nb.title }))) return;
-            try {
-              await api.xoaNotebook(id);
-              router.replace("/notebooks");
-            } catch {
-              setThongBao(t("loi.khongLuuDuoc"));
-            }
-          }}
-          title={t("nb.xoa")}
-          className="rounded-md border border-vien px-2 py-0.5 text-xs text-mo hover:border-canh-bao hover:text-canh-bao"
-        >
-          ✕
-        </button>
+
+        <div className="ml-auto flex items-center gap-1">
+          <NhanQuyenRiengTu />
+          <NutChiaSe nbId={id} />
+          <MenuNotebook
+            onXoa={async () => {
+              if (!nb || !confirm(t("nb.xoaHoi", { ten: nb.title }))) return;
+              try {
+                await api.xoaNotebook(id);
+                router.replace("/notebooks");
+              } catch {
+                setThongBao(t("loi.khongLuuDuoc"));
+              }
+            }}
+            onDoiTen={() => setDangSuaTen(true)}
+          />
+          <MenuCaiDat email={email} />
+        </div>
       </header>
 
       {thongBao && (

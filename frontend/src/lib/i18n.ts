@@ -230,11 +230,18 @@ export const VI = {
   "tk.bieuDoNhan": "Số lượt hỏi theo ngày",
   "tk.luotNgay": "{ngay}: {so} lượt",
 
+  // ── Cài đặt ────────────────────────────────────────
+  "caiDat.tieuDe": "Cài đặt",
+  "caiDat.taiKhoan": "Tài khoản",
+  "chung.toiNoiDung": "Tới nội dung chính",
+  "nb.tuyChon": "Tuỳ chọn notebook",
+  "chat.xuat": "Xuất",
+
   // ── Giao diện ──────────────────────────────────────
   "gd.cheDoHienThi": "Chế độ hiển thị",
   "gd.sang": "Sáng",
   "gd.toi": "Tối",
-  "gd.theoMay": "Theo máy",
+  "gd.theoMay": "Tự động",
   "gd.ngonNgu": "Ngôn ngữ",
 } as const;
 
@@ -447,10 +454,15 @@ export const EN: Partial<Record<Khoa, string>> = {
   "tk.bieuDoNhan": "Questions per day",
   "tk.luotNgay": "{ngay}: {so} questions",
 
+  "caiDat.tieuDe": "Settings",
+  "caiDat.taiKhoan": "Account",
+  "chung.toiNoiDung": "Skip to content",
+  "nb.tuyChon": "Notebook options",
+  "chat.xuat": "Export",
   "gd.cheDoHienThi": "Appearance",
   "gd.sang": "Light",
   "gd.toi": "Dark",
-  "gd.theoMay": "System",
+  "gd.theoMay": "Auto",
   "gd.ngonNgu": "Language",
 };
 

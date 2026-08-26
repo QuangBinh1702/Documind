@@ -39,7 +39,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: AP_CHU_DE }} />
       </head>
       <body className="h-full antialiased">
-        <NgonNguProvider>{children}</NgonNguProvider>
+        <NgonNguProvider>
+          <a href="#noi-dung" className="skip-link">
+            Tới nội dung chính
+          </a>
+          <div id="noi-dung" className="h-full">
+            {children}
+          </div>
+        </NgonNguProvider>
       </body>
     </html>
   );

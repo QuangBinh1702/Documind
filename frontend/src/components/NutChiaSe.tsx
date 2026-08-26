@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from "react";
 import { type LienKetChiaSe, api } from "@/lib/api";
+import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 
 export function NutChiaSe({ nbId }: { nbId: string }) {
@@ -74,8 +75,10 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
       <button
         onClick={() => setMo((m) => !m)}
         aria-expanded={mo}
-        className="rounded-md border border-vien px-2 py-0.5 text-xs text-mo hover:border-nhan hover:text-nhan"
+        className="nut-phu h-8 gap-1.5"
+        title={t("chiaSe.tieuDe")}
       >
+        <Bt.chiaSe size={14} />
         {t("chiaSe.nut")}
       </button>
 
@@ -83,7 +86,7 @@ export function NutChiaSe({ nbId }: { nbId: string }) {
         <>
           {/* Bấm ra ngoài thì đóng — không có nó thì hộp dính lại trên màn hình. */}
           <div className="fixed inset-0 z-10" onClick={() => setMo(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-vien bg-the p-4 shadow-lg">
+          <div className="menu-noi absolute right-0 z-20 mt-2 w-80 p-4">
             <p className="text-sm font-medium">{t("chiaSe.tieuDe")}</p>
             {loi && <p className="mt-2 text-xs text-canh-bao">{loi}</p>}
 
