@@ -111,10 +111,16 @@ def test_danh_sach_rong_khong_goi_redis(monkeypatch):
     assert progress.doc([]) == {}
 
 
-def test_luon_dong_ket_noi(gia: RedisGia):
-    """Rò kết nối tích lại rất nhanh: luồng SSE gọi `doc` mỗi giây."""
+def test_khong_dong_client_dung_chung(gia: RedisGia):
+    """Client Redis là pool dùng chung cho cả tiến trình (`app/adapters/redis_client.py`).
+
+    Luồng SSE gọi `doc` mỗi giây cho mỗi tab đang mở; mở rồi đóng một kết nối
+    TCP ở mỗi lượt như trước là lãng phí, còn đóng client dùng chung thì làm
+    hỏng mọi chỗ khác đang dùng nó.
+    """
     progress.dat(uuid.uuid4(), status="ocr", progress=1)
-    assert gia.da_dong
+    progress.doc([uuid.uuid4()])
+    assert not gia.da_dong
 
 
 # ══════════════════════════════════════════════════════

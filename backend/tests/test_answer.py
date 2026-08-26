@@ -20,6 +20,11 @@ from app.services.answer import answer_question, collect_text, final_result
 from app.services.ingest import ingest_file, ingest_file_sync
 from app.settings import settings
 
+# Fixture `clean` bên dưới chạm Postgres cho MỌI test trong module, nên cả
+# module thuộc nhóm `db` — chạy `pytest -m "not db"` mà không có Postgres sẽ
+# không còn chết ở đây.
+pytestmark = pytest.mark.db
+
 OWNER = "answer@documind.local"
 NOTEBOOK = "answer-test"
 

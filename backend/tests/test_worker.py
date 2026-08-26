@@ -23,10 +23,13 @@ class HangDoiGia:
         self.da_nhan: list[str] = []
         self.hong = hong
 
-    def delay(self, source_id: str) -> None:
+    def apply_async(self, args: list[str], retry: bool = True) -> None:
+        # API gọi với `retry=False` để broker chết thì hỏng nhanh, không treo
+        # request tải lên trong vòng thử lại của Kombu.
+        assert retry is False
         if self.hong:
             raise ConnectionError("redis không phản hồi")
-        self.da_nhan.append(source_id)
+        self.da_nhan.append(args[0])
 
 
 @pytest.fixture

@@ -167,6 +167,9 @@ def test_INV3_truy_van_khong_cham_bang_cache() -> None:
 # Hai nhánh — cần cơ sở dữ liệu
 # ══════════════════════════════════════════════════════
 
+# Fixture `clean` chạm Postgres cho mọi test trong module.
+pytestmark = pytest.mark.db
+
 OWNER_A = "retrieval-a@documind.local"
 OWNER_B = "retrieval-b@documind.local"
 NOTEBOOK = "retrieval-test"
@@ -305,6 +308,39 @@ def test_loc_pham_vi_nguon_o_tang_sql(seeded, emb, tmp_path) -> None:
             source_ids=only,
         )
         assert all(sc.candidate.source_id == only[0] for sc in r.chunks)
+
+
+@pytest.mark.db
+def test_nguon_tat_in_scope_khong_duoc_truy_xuat(seeded, emb, tmp_path) -> None:
+    """US-038 AC-1 — công tắc `in_scope` ở cột nguồn phải đổi câu trả lời.
+
+    Không truyền `source_ids` (đường mà giao diện đang dùng) thì phạm vi mặc
+    định là *các nguồn còn bật*, không phải *mọi nguồn*.
+    """
+    user_id, nb_id = seeded[OWNER_A]
+    extra = tmp_path / "them.txt"
+    extra.write_text(DOC_B, encoding="utf-8")
+    with session_scope() as s:
+        ingest_file_sync(s, extra, notebook_title=NOTEBOOK, embedder=emb, owner_email=OWNER_A)
+
+    with session_scope() as s:
+        sources = s.scalars(select(Source).where(Source.notebook_id == nb_id)).all()
+        tat = sources[0]
+        bat = sources[1]
+        tat.in_scope = False
+        s.flush()
+
+        r = retrieve(s, "quy định học phí", notebook_id=nb_id, embedder=emb, owner_id=user_id)
+        assert r.chunks, "vẫn phải tìm được trong nguồn còn bật"
+        assert all(sc.candidate.source_id == bat.id for sc in r.chunks)
+
+        # Chỉ định tường minh thì vẫn đọc được nguồn đã tắt — đó là quyền của
+        # chỗ gọi, không phải của công tắc.
+        r2 = retrieve(
+            s, "quy định", notebook_id=nb_id, embedder=emb, owner_id=user_id,
+            source_ids=[tat.id],
+        )
+        assert all(sc.candidate.source_id == tat.id for sc in r2.chunks)
 
 
 # ══════════════════════════════════════════════════════

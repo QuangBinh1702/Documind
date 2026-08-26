@@ -34,6 +34,9 @@ from app.services.verifier import verify_answer
 from app.settings import settings
 from app.text.chunker import chunk_text
 
+# Fixture `clean` chạm Postgres cho mọi test trong module.
+pytestmark = pytest.mark.db
+
 OWNER = "brain@documind.local"
 NOTEBOOK = "brain-test"
 
