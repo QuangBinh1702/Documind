@@ -35,7 +35,10 @@ postgres-data/
 *.sqlite3
 
 # ── Cache mô hình (KHÔNG commit — ~10 GB) ─────────────────
-models/
+# Chỉ trọng số mô hình ở gốc repo. KHÔNG dùng `models/` trần: nó đã âm thầm
+# nuốt luôn package ORM `backend/app/models/`, và repo từng thiếu toàn bộ
+# lược đồ SQLAlchemy mà không ai thấy vì máy phát triển vẫn có tệp.
+/models/
 .cache/
 *.gguf
 *.safetensors
