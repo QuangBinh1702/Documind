@@ -87,4 +87,11 @@ def nhan_dien(text: str) -> Language:
         diem_anh -= 1
         diem_viet += 1
 
-    return "en" if diem_anh - diem_viet >= _CACH_BIET else "vi"
+    if diem_anh - diem_viet >= _CACH_BIET:
+        return "en"
+    # Không một hư từ tiếng Việt nào mà lại có hư từ tiếng Anh — "Explain
+    # article 5", "Summarize this" — thì cách biệt 2 là quá khắt khe: câu hỏi
+    # tiếng Anh ngắn chỉ có một hư từ, và bị trả lời bằng tiếng Việt.
+    if diem_viet == 0 and diem_anh >= 1 and len(tu) >= 2:
+        return "en"
+    return "vi"

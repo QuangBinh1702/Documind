@@ -309,6 +309,15 @@ class Settings(BaseSettings):
     # Ngưỡng "đủ căn cứ" — trên thang ĐÃ sigmoid (US-011 AC-1, US-031 AC-1).
     tau: float = Field(default=0.35, ge=0.0, le=1.0)
 
+    tau_no_rerank: float = Field(default=0.45, ge=-1.0, le=1.0)
+    """Ngưỡng dùng khi RERANK_ENABLED=false (cấu hình C của ablation US-046).
+
+    Áp lên cosine của nhánh vector, không phải điểm cross-encoder — hai thang
+    khác nhau nên cần hai ngưỡng. Với bge-m3, cosine của cặp câu hỏi–đoạn có
+    liên quan thường ≥ 0,5 và cặp không liên quan quanh 0,3; 0,45 là điểm khởi
+    đầu, hiệu chỉnh bằng `eval/tau_sweep.py --no-rerank` nếu cần dòng C chính xác.
+    """
+
     contextual_retrieval_enabled: bool = False
     verifier_enabled: bool = False
     verifier_max_retry: int = 1

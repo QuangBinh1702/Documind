@@ -48,7 +48,8 @@ class GroundingDecision:
 
     reranked: bool
     """Đã chạy cross-encoder chưa. False khi rerank bị tắt (cấu hình C của
-    bảng ablation) — lúc đó `top_score` là điểm RRF và **không so được với τ**."""
+    bảng ablation) — lúc đó `top_score` là cosine của nhánh vector và
+    `threshold` là TAU_NO_RERANK, không phải τ."""
 
     @property
     def reason(self) -> str:
@@ -112,15 +113,21 @@ def decide(
     if settings.rerank_enabled and reranker is not None:
         chunks = rerank(question, result, reranker=reranker, top_k=top_k)
         reranked = True
+        top_score = chunks[0].rrf_score if chunks else 0.0
     else:
-        # Cấu hình C của bảng ablation: bỏ rerank. Điểm còn lại là RRF, vốn
-        # nằm quanh 1/60 và KHÔNG cùng thang với τ. Vẫn giữ nguyên phép so
-        # sánh để đường mã chỉ có một nhánh, nhưng đánh dấu `reranked=False`
-        # để chỗ đọc kết quả biết con số này không diễn giải như bình thường.
+        # Cấu hình C của bảng ablation: bỏ rerank. Điểm RRF nằm quanh 1/60 và
+        # KHÔNG cùng thang với τ — so thẳng thì mọi câu đều bị từ chối và dòng
+        # C của bảng ablation vô nghĩa. Thay vào đó dùng cosine của nhánh
+        # vector (đã chuẩn hoá, [-1, 1]) với ngưỡng riêng TAU_NO_RERANK. Không
+        # có nhánh vector thì không có thang nào hợp lý: coi như có căn cứ khi
+        # còn ứng viên, và ghi rõ trong `reranked=False`.
         chunks = result.chunks[:top_k]
         reranked = False
+        threshold = settings.tau_no_rerank if threshold == settings.tau else threshold
+        cos = [result.vector_scores.get(c.chunk_id) for c in chunks]
+        cos = [x for x in cos if x is not None]
+        top_score = max(cos) if cos else (1.0 if chunks else 0.0)
 
-    top_score = chunks[0].rrf_score if chunks else 0.0
     grounded = bool(chunks) and top_score >= threshold
 
     log.info(

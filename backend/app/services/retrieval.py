@@ -57,6 +57,9 @@ class RetrievalResult:
     vector_count: int
     fulltext_count: int
     branches: list[str]
+    vector_scores: dict[int, float] = field(default_factory=dict)
+    """Cosine của nhánh vector theo `chunk_id`. Cổng ngưỡng dùng nó khi rerank
+    bị tắt (cấu hình C của ablation) — điểm RRF không so được với τ."""
 
     def __len__(self) -> int:
         return len(self.chunks)
@@ -156,4 +159,5 @@ def retrieve(
         vector_count=len(rankings.get("vector", [])),
         fulltext_count=len(rankings.get("fulltext", [])),
         branches=sorted(rankings),
+        vector_scores={c.chunk_id: c.score for c in rankings.get("vector", [])},
     )

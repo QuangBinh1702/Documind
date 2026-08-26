@@ -252,11 +252,19 @@ def test_hai_con_so_doc_lap_nhau(monkeypatch) -> None:
 def test_tat_rerank_van_chay_duoc(rr: FakeRerankProvider, monkeypatch) -> None:
     """US-011 AC-4 — bắt buộc, để chạy cấu hình C của bảng ablation."""
     monkeypatch.setattr(settings, "rerank_enabled", False)
+    monkeypatch.setattr(settings, "tau_no_rerank", 0.45)
     result = _result(_chunk(1, "nội dung", rrf=0.5), _chunk(2, "khác", rrf=0.2))
+    # Điểm RRF (~1/60) không so được với τ; cổng dùng cosine của nhánh vector.
+    result.vector_scores = {1: 0.62, 2: 0.31}
     d = decide("thử", result, reranker=rr)
 
     assert not d.reranked, "phải đánh dấu là chưa qua cross-encoder"
-    assert d.top_score == 0.5, "điểm còn lại phải là RRF, giữ nguyên thứ tự"
+    assert [c.chunk_id for c in d.chunks] == [1, 2], "giữ nguyên thứ tự RRF"
+    assert d.top_score == 0.62 and d.threshold == 0.45
+    assert d.grounded
+
+    result.vector_scores = {1: 0.30, 2: 0.20}
+    assert not decide("thử", result, reranker=rr).grounded, "cosine thấp thì từ chối"
 
 
 def test_ghi_lai_diem_cao_nhat_de_hieu_chinh_tau(rr: FakeRerankProvider) -> None:
