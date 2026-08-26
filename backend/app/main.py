@@ -50,6 +50,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Trình duyệt chỉ đọc được header "đơn giản" của phản hồi khác origin.
+    # Không khai báo dòng này thì `taiVe()` ở giao diện không thấy tên tệp
+    # máy chủ đặt và mọi bản xuất tải về đều mang tên dự phòng.
+    expose_headers=["Content-Disposition", "Retry-After"],
 )
 
 app.include_router(health.router, prefix="/api")
