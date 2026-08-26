@@ -137,8 +137,15 @@ def xu_ly_nguon(source_id: str | uuid.UUID) -> None:
         log.exception("Lỗi không lường trước khi xử lý %s", original_name)
         _dat_trang_thai(
             sid, status="failed", progress=100,
+            # Không đưa `str(exc)` ra giao diện: lỗi kho tệp hay cơ sở dữ liệu
+            # mang theo địa chỉ máy chủ, tên bucket, câu SQL. Chi tiết nằm ở
+            # log (dòng `log.exception` bên trên); người dùng chỉ cần biết là
+            # hệ thống hỏng chứ không phải tài liệu của họ hỏng.
             error_code=type(exc).__name__,
-            error_message=f"Lỗi hệ thống khi xử lý tài liệu: {exc}"[:500],
+            error_message=(
+                "Lỗi hệ thống khi xử lý tài liệu. Hãy thử tải lên lại; nếu vẫn "
+                f"lỗi, báo cho người vận hành kèm mã {type(exc).__name__}."
+            ),
         )
 
     else:

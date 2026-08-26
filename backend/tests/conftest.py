@@ -27,6 +27,15 @@ def _xu_ly_ngay(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _khong_gioi_han_toc_do(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tắt giới hạn tốc độ theo IP: cả bộ test đến từ một địa chỉ duy nhất."""
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "register_per_hour_per_ip", 0)
+    monkeypatch.setattr(settings, "share_asks_per_hour", 0)
+
+
+@pytest.fixture(autouse=True)
 def _khong_cham_mang(monkeypatch: pytest.MonkeyPatch) -> None:
     """Chặn mọi lượt gọi mạng thật trong bộ test.
 

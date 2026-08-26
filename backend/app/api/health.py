@@ -13,6 +13,7 @@ from fastapi import APIRouter, Response, status
 
 from app.schemas.health import HealthResponse
 from app.services.health import collect_health
+from app.settings import settings
 
 router = APIRouter(tags=["health"])
 
@@ -28,4 +29,11 @@ async def health(response: Response) -> HealthResponse:
         # 503 để healthcheck của docker và load balancer hiểu đúng,
         # nhưng vẫn trả về body đầy đủ để chẩn đoán.
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    if settings.is_production:
+        # Endpoint này công khai. Ở production chỉ trả trạng thái từng thành
+        # phần — không trả nội dung ngoại lệ (có thể mang DSN, tên host) hay
+        # danh sách cảnh báo cấu hình (nói ra đang dùng nhà cung cấp nào).
+        result.warnings = []
+        for c in result.components.values():
+            c.detail = None
     return result

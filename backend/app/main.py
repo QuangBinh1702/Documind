@@ -21,6 +21,13 @@ log = logging.getLogger("documind")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("DocuMind khởi động · env=%s · device=%s", settings.app_env, settings.device)
+    loi = settings.loi_chan_khoi_dong()
+    if loi:
+        for dong in loi:
+            log.critical("Cấu hình production không hợp lệ: %s", dong)
+        raise RuntimeError(
+            "Từ chối khởi động ở production với cấu hình mẫu: " + " · ".join(loi)
+        )
     for w in settings.warnings():
         log.warning("Cấu hình: %s", w)
     yield
@@ -38,8 +45,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # Chỉ mở cho frontend cục bộ. Siết lại khi triển khai thật.
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    # Mặc định chỉ mở cho frontend cục bộ; đặt CORS_ORIGINS khi triển khai thật.
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DbSession
@@ -18,6 +18,8 @@ from app.schemas.auth import (
 )
 from app.services import auth as svc
 from app.services import login_guard
+from app.services.rate_limit import RateLimited, kiem_tra
+from app.settings import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,7 +43,17 @@ def _loi(exc: svc.AuthError) -> HTTPException:
 
 @router.post("/register", response_model=TokenResponse, status_code=201,
              summary="Tạo tài khoản rồi đăng nhập luôn")
-def register(req: DangKyRequest, session: DbSession) -> TokenResponse:
+def register(req: DangKyRequest, session: DbSession, request: Request) -> TokenResponse:
+    # Không đòi đăng nhập mà lại tạo bản ghi và băm Argon2id — cần một trần
+    # theo IP để không bị dùng làm máy tạo tài khoản rác.
+    ip = request.client.host if request.client else "?"
+    try:
+        kiem_tra("register", ip, limit=settings.register_per_hour_per_ip, window_seconds=3600)
+    except RateLimited as exc:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
     try:
         _, tokens = svc.dang_ky(session, req.email, req.password)
     except svc.AuthError as exc:

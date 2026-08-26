@@ -41,6 +41,24 @@ class Settings(BaseSettings):
 
     login_lockout_minutes: int = 15
 
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    """Các origin được gọi API từ trình duyệt, cách nhau bằng dấu phẩy.
+
+    Khi triển khai thật, đặt đúng origin công khai của giao diện (ví dụ
+    `https://documind.example.com`). Nếu proxy phục vụ giao diện và API dưới
+    cùng một origin thì giá trị này không còn quan trọng.
+    """
+
+    # ── Giới hạn tốc độ cho endpoint không đăng nhập ─────
+    share_asks_per_hour: int = 30
+    """Số câu hỏi tối đa mỗi giờ qua **một** liên kết chia sẻ (US-039 AC-4).
+
+    Mỗi lượt hỏi tính vào hạn mức của chủ sở hữu, nên không có trần thì ai
+    có liên kết cũng đốt được hạn mức API của người chia sẻ.
+    """
+
+    register_per_hour_per_ip: int = 10
+
     # ── Thiết bị tính toán (SPEC-v1.md §10.0) ───────────
     device: Device = "cpu"
     embedding_device: Device | None = None
@@ -201,9 +219,15 @@ class Settings(BaseSettings):
     # cảnh báo quyền riêng tư vẫn đúng ở cả hai lựa chọn.
     fast_backend: Literal["gemini", "ollama-cloud"] = "gemini"
 
-    local_llm_model: str = "qwen3-8b-q4"
+    # Tên theo đúng thẻ của Ollama (`ollama pull qwen3:8b`). Giá trị cũ
+    # `qwen3-8b-q4` không phải thẻ nào cả và máy chủ trả 404 ở câu hỏi đầu tiên.
+    local_llm_model: str = "qwen3:8b"
     # Máy chủ tương thích OpenAI chạy cục bộ: Ollama, vLLM hay llama.cpp.
     # Runtime cụ thể chốt ở spike S2 và không ảnh hưởng tới mã nguồn.
+    #
+    # Trong Docker Compose, `localhost` là chính container — compose ghi đè
+    # thành `host.docker.internal` (Ollama trên máy chủ) hoặc `ollama` (service
+    # trong compose, profile `local-llm`).
     local_llm_base_url: str = "http://localhost:11434/v1"
     # ── Ollama Cloud ────────────────────────────────────
     # Trọng số mở nhưng chạy trên máy của Ollama, nên **dữ liệu vẫn rời khỏi
@@ -242,6 +266,25 @@ class Settings(BaseSettings):
 
     llm_temperature: float = 0.0
     llm_max_tokens: int = 1024
+    llm_timeout_seconds: float = 180.0
+
+    llm_context_tokens: int = Field(default=8192, ge=2048)
+    """Cửa sổ ngữ cảnh mà prompt gửi đi phải nằm trong.
+
+    Ollama mặc định chỉ 4096 token và khi vượt thì **cắt từ đầu** — mất system
+    prompt và các đoạn [1..k] — mà không báo gì; mô hình sau đó vẫn trích dẫn
+    marker cho văn bản nó chưa từng thấy. Trước khi gọi mô hình, `answer.py`
+    bỏ bớt các đoạn xếp hạng thấp nhất cho vừa con số này trừ `LLM_MAX_TOKENS`.
+    Đặt bằng `OLLAMA_CONTEXT_LENGTH` (hoặc `num_ctx`) của máy chủ mô hình.
+    """
+
+    llm_chars_per_token: float = Field(default=2.0, gt=0)
+    """Tỷ lệ ước lượng token cho NGÂN SÁCH PROMPT — cố ý bi quan.
+
+    Chunker dùng 2,8 ký tự/token để cắt đoạn, nhưng đo thật với tokenizer của
+    mô hình sinh thì một đoạn "768 token" là ~1300 token tiếng Việt có dấu. Ước
+    lượng lạc quan ở đây là tràn cửa sổ ngữ cảnh mà không ai biết.
+    """
 
     # ── Retrieval — trục của ablation US-046 ────────────
     retrieval_vector_enabled: bool = True
@@ -354,10 +397,33 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env.lower() in {"prod", "production"}
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def loi_chan_khoi_dong(self) -> list[str]:
+        """Những cấu hình mà ở môi trường production **không được phép** chạy.
+
+        Khác với `warnings()`: đây là danh sách làm ứng dụng từ chối khởi động.
+        Khoá ký JWT mẫu nằm công khai trong `.env.example`, nên chạy production
+        với nó nghĩa là ai cũng tự ký được token của bất kỳ tài khoản nào.
+        """
+        if not self.is_production:
+            return []
+        out: list[str] = []
+        if self.secret_key.startswith("doi-gia-tri-nay") or len(self.secret_key) < 32:
+            out.append("SECRET_KEY vẫn là giá trị mẫu hoặc quá ngắn (< 32 ký tự).")
+        if self.minio_secret_key == "minioadmin":
+            out.append("MINIO_SECRET_KEY vẫn là 'minioadmin'.")
+        if ":documind@" in self.database_url:
+            out.append("Mật khẩu Postgres vẫn là 'documind'.")
+        return out
+
     def warnings(self) -> list[str]:
         """Cảnh báo cấu hình đáng ngờ — hiện khi khởi động, không chặn."""
         out: list[str] = []
-        if self.is_production and self.secret_key.startswith("doi-gia-tri-nay"):
+        if not self.is_production and self.secret_key.startswith("doi-gia-tri-nay"):
             out.append("SECRET_KEY vẫn là giá trị mẫu — phải đổi trước khi triển khai.")
         thieu_khoa = (
             self.fast_backend == "gemini" and not self.gemini_api_key
@@ -373,10 +439,11 @@ class Settings(BaseSettings):
             # được chọn đều rời khỏi máy. Đề tài lấy "tự triển khai, dữ liệu
             # không ra ngoài" làm luận điểm, nên đánh đổi này phải nhìn thấy
             # được ngay trên giao diện chứ không nằm im trong một tệp cấu hình.
+            noi_nhan = "Google" if self.fast_backend == "gemini" else "Ollama Cloud"
             out.append(
-                "DEFAULT_MODE=fast — câu hỏi và nội dung các đoạn tài liệu được "
-                "chọn sẽ được gửi tới Google. Đổi sang privacy để chạy hoàn toàn "
-                "trên máy bạn."
+                f"DEFAULT_MODE=fast — câu hỏi và nội dung các đoạn tài liệu được "
+                f"chọn sẽ được gửi tới {noi_nhan}. Đổi sang privacy để chạy hoàn "
+                f"toàn trên máy bạn."
             )
         if self.device == "cuda" and not self.perf_assertions_enabled:
             out.append(

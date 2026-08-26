@@ -28,7 +28,7 @@ import json
 import logging
 import uuid
 
-from app.settings import settings
+from app.adapters.redis_client import get_redis
 
 __all__ = ["TienDo", "dat", "doc", "xoa"]
 
@@ -45,13 +45,7 @@ class TienDo(dict):
 
 
 def _redis():
-    try:
-        import redis
-
-        return redis.from_url(settings.redis_url, socket_connect_timeout=2)
-    except Exception as exc:
-        log.debug("Không dùng được Redis cho tiến độ: %s", exc)
-        return None
+    return get_redis()
 
 
 def dat(source_id: uuid.UUID | str, *, status: str, progress: int, message: str = "") -> None:
@@ -71,8 +65,6 @@ def dat(source_id: uuid.UUID | str, *, status: str, progress: int, message: str 
         )
     except Exception as exc:
         log.debug("Không ghi được tiến độ của %s: %s", source_id, exc)
-    finally:
-        r.close()
 
 
 def doc(source_ids: list[uuid.UUID]) -> dict[str, TienDo]:
@@ -97,8 +89,6 @@ def doc(source_ids: list[uuid.UUID]) -> dict[str, TienDo]:
     except Exception as exc:
         log.debug("Không đọc được tiến độ: %s", exc)
         return {}
-    finally:
-        r.close()
 
 
 def xoa(source_id: uuid.UUID | str) -> None:
@@ -109,5 +99,3 @@ def xoa(source_id: uuid.UUID | str) -> None:
         r.delete(_KHOA.format(source_id=source_id))
     except Exception as exc:
         log.debug("Không xoá được tiến độ của %s: %s", source_id, exc)
-    finally:
-        r.close()

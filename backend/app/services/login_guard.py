@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 
+from app.adapters.redis_client import get_redis
 from app.settings import settings
 
 __all__ = ["con_bao_lau", "ghi_that_bai", "xoa_dem"]
@@ -30,13 +31,10 @@ _KHOA = "documind:login:{email}"
 
 
 def _redis():
-    try:
-        import redis
-
-        return redis.from_url(settings.redis_url, socket_connect_timeout=2)
-    except Exception as exc:
-        log.warning("Không dùng được Redis, tạm bỏ chặn dò mật khẩu: %s", exc)
-        return None
+    r = get_redis()
+    if r is None:
+        log.warning("Không dùng được Redis, tạm bỏ chặn dò mật khẩu")
+    return r
 
 
 def con_bao_lau(email: str) -> int:
@@ -53,8 +51,6 @@ def con_bao_lau(email: str) -> int:
     except Exception as exc:
         log.warning("Redis lỗi khi kiểm khoá đăng nhập: %s", exc)
         return 0
-    finally:
-        r.close()
 
 
 def ghi_that_bai(email: str) -> None:
@@ -75,8 +71,6 @@ def ghi_that_bai(email: str) -> None:
                         settings.login_lockout_minutes)
     except Exception as exc:
         log.warning("Redis lỗi khi đếm lần đăng nhập sai: %s", exc)
-    finally:
-        r.close()
 
 
 def xoa_dem(email: str) -> None:
@@ -88,5 +82,3 @@ def xoa_dem(email: str) -> None:
         r.delete(_KHOA.format(email=email.strip().lower()))
     except Exception as exc:
         log.warning("Redis lỗi khi xoá bộ đếm đăng nhập: %s", exc)
-    finally:
-        r.close()

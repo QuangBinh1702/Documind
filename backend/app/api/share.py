@@ -21,7 +21,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -31,10 +31,11 @@ from app.adapters.llm import get_llm_provider
 from app.adapters.rerank import get_rerank_provider
 from app.api.deps import CurrentUser, DbSession, notebook_cua_toi
 from app.models.base import session_scope
-from app.models.knowledge import Source, SourceChunk
+from app.models.knowledge import ShareLink, Source, SourceChunk
 from app.services.chat import ask
+from app.services.rate_limit import RateLimited, kiem_tra
 from app.services.share import ShareError, lay_notebook_chia_se, tao_hoac_lay, thu_hoi
-from app.settings import Mode
+from app.settings import Mode, settings
 
 router = APIRouter(tags=["share"])
 log = logging.getLogger(__name__)
@@ -69,8 +70,6 @@ def tao_lien_ket(
 def xem_lien_ket(
     notebook_id: uuid.UUID, user: CurrentUser, session: DbSession
 ) -> LienKetChiaSe | None:
-    from app.models.knowledge import ShareLink
-
     nb = notebook_cua_toi(session, user, notebook_id)
     lien_ket = session.get(ShareLink, nb.id)
     if lien_ket is None or not lien_ket.con_hieu_luc:
@@ -146,13 +145,26 @@ class HoiChiaSe(BaseModel):
 
 
 @router.post("/shared/{token}/ask", summary="Hỏi trong một notebook được chia sẻ")
-async def hoi_chia_se(token: str, req: HoiChiaSe) -> StreamingResponse:
+async def hoi_chia_se(token: str, req: HoiChiaSe, request: Request) -> StreamingResponse:
     """AC-2 và AC-4 — hỏi được, và mọi chi phí tính cho chủ sở hữu.
 
     Không truyền `session_id`: hội thoại của người xem **không** được ghi vào
     lịch sử của chủ sở hữu. Người chia sẻ tài liệu không đồng nghĩa với việc
     đồng ý cho câu hỏi của người khác nằm lẫn trong lịch sử của mình.
+
+    Có trần số câu hỏi mỗi giờ theo liên kết: endpoint này không đòi đăng nhập
+    mà mỗi lượt lại tốn một lần nhúng, xếp hạng lại và gọi mô hình — tất cả
+    tính vào hạn mức của chủ sở hữu.
     """
+    ip = request.client.host if request.client else "?"
+    try:
+        kiem_tra("share-ask", token, limit=settings.share_asks_per_hour, window_seconds=3600)
+        kiem_tra("share-ask-ip", ip, limit=settings.share_asks_per_hour * 3,
+                 window_seconds=3600)
+    except RateLimited as exc:
+        raise HTTPException(
+            429, str(exc), headers={"Retry-After": str(exc.retry_after)}
+        ) from exc
 
     async def stream() -> AsyncIterator[str]:
         with session_scope() as session:
