@@ -21,6 +21,10 @@ import type { NextConfig } from "next";
  * của giao diện phải nằm trong `allow_origins` — đó là một dòng cấu hình, rẻ
  * hơn nhiều so với việc mất streaming.
  */
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  // `standalone` gói máy chủ Node tối thiểu vào `.next/standalone` để ảnh
+  // production (`Dockerfile.prod`) không phải chép cả `node_modules` vào.
+  output: "standalone",
+};
 
 export default nextConfig;
