@@ -269,10 +269,6 @@ export const VI = {
   "gd.ngonNgu": "Ngôn ngữ",
   "gd.tiengViet": "Tiếng Việt",
   "gd.tiengAnh": "Tiếng Anh",
-  "gd.chiTiet": "Chi tiết kỹ thuật",
-  "gd.hienMoHinh": "Hiện tên mô hình",
-  "gd.hienMoHinhMoTa":
-    "Ghi tên mô hình đã sinh ra câu trả lời ở chân mỗi câu trả lời.",
 } as const;
 
 export type Khoa = keyof typeof VI;
@@ -521,9 +517,6 @@ export const EN: Partial<Record<Khoa, string>> = {
   "gd.ngonNgu": "Language",
   "gd.tiengViet": "Vietnamese",
   "gd.tiengAnh": "English",
-  "gd.chiTiet": "Technical details",
-  "gd.hienMoHinh": "Show model name",
-  "gd.hienMoHinhMoTa": "Print the model that produced each answer beneath it.",
 };
 
 const BANG: Record<NgonNgu, Partial<Record<Khoa, string>>> = { vi: VI, en: EN };

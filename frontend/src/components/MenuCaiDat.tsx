@@ -21,7 +21,6 @@ import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 import { type ChuDe, KHOA_CHU_DE, apDung } from "@/components/NutChuDe";
 import type { NgonNgu } from "@/lib/i18n";
-import { luuTuyChon, useTuyChon } from "@/lib/tuyChon";
 
 const MAT_KHAU_TOI_THIEU = 8;
 
@@ -37,7 +36,6 @@ export function MenuCaiDat({
   const [doiMatKhau, setDoiMatKhau] = useState(false);
   const router = useRouter();
   const { ngonNgu, doi, t } = useNgonNgu();
-  const tuyChon = useTuyChon();
   const khung = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,15 +128,6 @@ export function MenuCaiDat({
             />
           </Muc>
 
-          <Muc nhan={t("gd.chiTiet")}>
-            <CongTac
-              bat={tuyChon.hienMoHinh}
-              onDoi={(v) => luuTuyChon({ hienMoHinh: v })}
-              nhan={t("gd.hienMoHinh")}
-              moTa={t("gd.hienMoHinhMoTa")}
-            />
-          </Muc>
-
           {taiKhoan && (
             <div className="border-t border-vien py-1.5">
               <Link href="/thong-ke" role="menuitem" className="muc-menu" onClick={() => setMo(false)}>
@@ -209,46 +198,6 @@ function NhomLuaChon<T extends string>({
         </button>
       ))}
     </div>
-  );
-}
-
-/** Công tắc hai trạng thái kèm một dòng giải thích. */
-function CongTac({
-  bat,
-  onDoi,
-  nhan,
-  moTa,
-}: {
-  bat: boolean;
-  onDoi: (v: boolean) => void;
-  nhan: string;
-  moTa: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={bat}
-      onClick={() => onDoi(!bat)}
-      className="flex w-full items-start gap-3 rounded-md px-1 py-1 text-left hover:bg-chu/5"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm">{nhan}</span>
-        <span className="mt-0.5 block text-[11px] leading-snug text-mo">{moTa}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        className={`mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-          bat ? "bg-nhan" : "bg-vien"
-        }`}
-      >
-        <span
-          className={`h-4 w-4 rounded-full bg-the shadow-sm transition-transform ${
-            bat ? "translate-x-4" : ""
-          }`}
-        />
-      </span>
-    </button>
   );
 }
 

@@ -42,7 +42,6 @@ import { VanBanTraLoi } from "@/components/VanBanTraLoi";
 import { anhTuClipboard } from "@/lib/anhDan";
 import type { Khoa } from "@/lib/i18n";
 import { hoi, type SuKien } from "@/lib/stream";
-import { useTuyChon } from "@/lib/tuyChon";
 
 /** Bề rộng cột đọc. Danh sách tin nhắn và ô soạn dùng CHUNG con số này —
  *  lệch nhau một chút là ô nhập trông như bị lệch khỏi cuộc hội thoại. */
@@ -97,7 +96,6 @@ type Luot = {
   /** Người dùng bấm dừng giữa chừng — câu trả lời còn dở. */
   daDung: boolean;
   loi: string | null;
-  moHinh: string | null;
   doTreMs: number | null;
 };
 
@@ -111,7 +109,6 @@ const LUOT_TRONG: Omit<Luot, "cauHoi" | "markerChet"> = {
   xong: false,
   daDung: false,
   loi: null,
-  moHinh: null,
   doTreMs: null,
 };
 
@@ -155,17 +152,10 @@ function tuTinNhan(ds: TinNhan[]): Luot[] {
       tuChoi: m.answer_kind === "no_answer",
       ngoai: m.answer_kind === "external" || m.answer_kind === "cached_external",
       xong: true,
-      moHinh: m.model_used,
       doTreMs: m.latency_ms,
     };
   }
   return out;
-}
-
-/** "local:qwen3:8b" → "qwen3:8b"; "ollama-cloud:gemma4:31b" → "gemma4:31b". */
-function tenMoHinh(raw: string | null): string | null {
-  if (!raw) return null;
-  return raw.replace(/^(local|ollama-cloud|gemini):/, "");
 }
 
 type DinhKem = { id: string; file: File; url: string };
@@ -247,7 +237,6 @@ export function CotHoiDap({
   const nguonRef = useRef<Nguon[]>(nguon);
   const huyRef = useRef<AbortController | null>(null);
   const { t } = useNgonNgu();
-  const tuyChon = useTuyChon();
 
   useEffect(() => {
     nguonRef.current = nguon;
@@ -340,9 +329,11 @@ export function CotHoiDap({
               ],
         );
         break;
+      // `meta` mang tên mô hình. Giao diện cố ý không dùng tới: tên nhà cung
+      // cấp và tên mô hình là chuyện bên trong hệ thống, không phải thứ người
+      // đọc câu trả lời cần biết. Số liệu ấy vẫn còn trong cơ sở dữ liệu và ở
+      // trang Thống kê.
       case "meta":
-        capNhat((l) => ({ ...l, moHinh: String(e.model ?? "") || null }));
-        break;
       // `external_call` cố ý KHÔNG hiện gì trong khung chat. Việc dữ liệu đi
       // đâu là thuộc tính của cả không gian làm việc, không phải của từng câu
       // trả lời, nên nó nằm ở nhãn trên thanh tiêu đề.
@@ -780,7 +771,6 @@ export function CotHoiDap({
                 l={l}
                 cuoi={i === luot.length - 1}
                 dangHoi={dangBan}
-                hienMoHinh={tuyChon.hienMoHinh}
                 tuDongNgoai={tuDongNgoai}
                 noiTiep={biNoiTiep(luot, i - 1)}
                 onChonTrichDan={onChonTrichDan}
@@ -1004,7 +994,6 @@ function LuotHoiDap({
   l,
   cuoi,
   dangHoi,
-  hienMoHinh,
   tuDongNgoai,
   noiTiep,
   onChonTrichDan,
@@ -1013,7 +1002,6 @@ function LuotHoiDap({
   l: Luot;
   cuoi: boolean;
   dangHoi: boolean;
-  hienMoHinh: boolean;
   tuDongNgoai: boolean;
   /** Lượt này trả lời hộ một lượt từ chối ngay trước đó — US-032. */
   noiTiep: boolean;
@@ -1094,11 +1082,6 @@ function LuotHoiDap({
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mo">
           {soTrichDan > 0 && <span>{t("chat.soTrichDan", { so: soTrichDan })}</span>}
           {l.daDung && l.traLoi && <span>{t("chat.daDung")}</span>}
-          {/* Tên mô hình là thứ chỉ người vận hành quan tâm — mặc định ẩn,
-              bật lại trong Cài đặt (US-030 AC-3). */}
-          {hienMoHinh && tenMoHinh(l.moHinh) && (
-            <span className="tabular-nums">{tenMoHinh(l.moHinh)}</span>
-          )}
           {l.doTreMs !== null && (
             <span className="tabular-nums">{(l.doTreMs / 1000).toFixed(1)} s</span>
           )}
