@@ -26,29 +26,33 @@
  * của PDF.js ở góc xoay 0 biến điểm PDF (gốc dưới-trái) thành
  * `((x - x0)·s, (H - y)·s)` — mà `H - y` chính là toạ độ trên-trái. Nên phép
  * đổi rút gọn còn nhân với `scale`, không cần lật gì thêm.
+ *
+ * Vừa bề ngang, và vì sao nó là mặc định
+ * ---------------------------------------
+ * Trước đây trình xem mở ở 100% và neo trang ở góc trên bên trái. Với một cột
+ * hẹp thì đó là cách chắc chắn để người dùng bấm một chip trích dẫn và nhìn vào
+ * một khoảng lề trắng — đoạn được tô sáng nằm ngoài khung nhìn, và không có gì
+ * nói cho họ biết phải cuộn đi đâu. Nên mặc định là vừa bề ngang cột, và sau
+ * mỗi lượt vẽ, vùng tô sáng được cuộn vào giữa khung.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GOC_API, goiTho } from "@/lib/api";
+import type { HopToaDo, NguonXem } from "@/lib/nguonXem";
+import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 
-export type HopToaDo = {
-  page: number;
-  x0: number;
-  y0: number;
-  x1: number;
-  y1: number;
-};
+export type { HopToaDo };
 
-const MUC_PHONG = [0.75, 1, 1.25, 1.5, 2, 3];
+/** `null` là "vừa bề ngang" — tính lại mỗi lần cột đổi kích thước. */
+const MUC_PHONG: (number | null)[] = [null, 0.75, 1, 1.25, 1.5, 2, 3];
 
 export function XemPdf({
-  nbId,
+  nguon,
   sourceId,
   trang,
   hop,
 }: {
-  nbId: string;
+  nguon: NguonXem;
   sourceId: string;
   /** Trang cần mở. Đổi giá trị này thì trình xem nhảy tới đó. */
   trang: number | null;
@@ -58,17 +62,21 @@ export function XemPdf({
   const [tep, setTep] = useState<ArrayBuffer | null>(null);
   const [tongTrang, setTongTrang] = useState(0);
   const [trangHienTai, setTrangHienTai] = useState(1);
-  const [phong, setPhong] = useState(1);
+  const [phong, setPhong] = useState<number | null>(null);
+  const [phongThat, setPhongThat] = useState(1);
   const [loi, setLoi] = useState<string | null>(null);
   const [dangVe, setDangVe] = useState(true);
   const [kichThuoc, setKichThuoc] = useState({ rong: 0, cao: 0 });
   const { t } = useNgonNgu();
 
+  const khungRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tepRef = useRef<unknown>(null);
   // Lượt vẽ đang chạy. Đổi trang nhanh sinh ra nhiều lượt chồng nhau, và lượt
   // cũ về sau sẽ vẽ đè lên trang mới.
   const luotVe = useRef(0);
+  // Bề ngang khung nhìn, để tính mức "vừa bề ngang".
+  const [beNgang, setBeNgang] = useState(0);
 
   // ── Tải tệp ─────────────────────────────────────────
   useEffect(() => {
@@ -78,7 +86,7 @@ export function XemPdf({
 
     (async () => {
       try {
-        const r = await goiTho(`/api/notebooks/${nbId}/sources/${sourceId}/file`);
+        const r = await nguon.tep(sourceId);
         if (!r.ok) throw new Error(String(r.status));
         const buf = await r.arrayBuffer();
         if (!huy) setTep(buf);
@@ -90,7 +98,7 @@ export function XemPdf({
     return () => {
       huy = true;
     };
-  }, [nbId, sourceId]);
+  }, [nguon, sourceId]);
 
   // ── Mở tài liệu bằng PDF.js ─────────────────────────
   useEffect(() => {
@@ -129,6 +137,35 @@ export function XemPdf({
     if (trang && trang >= 1) setTrangHienTai(trang);
   }, [trang]);
 
+  // Bề ngang khung nhìn — đổi khi kéo đường phân cách giữa các cột.
+  useEffect(() => {
+    const el = khungRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBeNgang(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /** Cuộn vùng tô sáng vào giữa khung, hoặc về đầu trang nếu trang này không có. */
+  const veDoanTrich = useCallback(() => {
+    const khung = khungRef.current;
+    if (!khung) return;
+    const cua_trang = hop.filter((h) => h.page === trangHienTai);
+    if (cua_trang.length === 0) {
+      khung.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      return;
+    }
+    const dinh = Math.min(...cua_trang.map((h) => h.y0)) * phongThat;
+    const trai = Math.min(...cua_trang.map((h) => h.x0)) * phongThat;
+    khung.scrollTo({
+      // Chừa lại một phần khung phía trên: đoạn được trích dán sát mép trên
+      // đọc như thể nó bắt đầu từ giữa câu.
+      top: Math.max(0, dinh - khung.clientHeight * 0.3),
+      left: Math.max(0, trai - khung.clientWidth * 0.15),
+      behavior: "smooth",
+    });
+  }, [hop, trangHienTai, phongThat]);
+
   // ── Vẽ trang hiện tại ───────────────────────────────
   const ve = useCallback(async () => {
     const doc = tepRef.current as {
@@ -149,10 +186,20 @@ export function XemPdf({
       };
       if (luot !== luotVe.current) return;
 
+      // "Vừa bề ngang" phải đo trang thật rồi mới quy ra tỉ lệ: khổ giấy khác
+      // nhau giữa các tài liệu, và cả giữa các trang của cùng một tài liệu.
+      let tiLe = phong ?? 1;
+      if (phong === null && beNgang > 0) {
+        const goc = page.getViewport({ scale: 1 });
+        // Trừ phần đệm hai bên của khung cuộn.
+        tiLe = Math.max(0.2, (beNgang - 24) / goc.width);
+      }
+      setPhongThat(tiLe);
+
       // Nhân với tỉ lệ điểm ảnh của màn hình rồi thu lại bằng CSS: không có
       // bước này thì chữ trên màn hình HiDPI nhoè hẳn.
       const dpr = window.devicePixelRatio || 1;
-      const viewport = page.getViewport({ scale: phong });
+      const viewport = page.getViewport({ scale: tiLe });
       canvas.width = Math.floor(viewport.width * dpr);
       canvas.height = Math.floor(viewport.height * dpr);
       setKichThuoc({ rong: viewport.width, cao: viewport.height });
@@ -166,23 +213,31 @@ export function XemPdf({
     } finally {
       if (luot === luotVe.current) setDangVe(false);
     }
-  }, [trangHienTai, phong]);
+  }, [trangHienTai, phong, beNgang]);
 
   useEffect(() => {
     void ve();
   }, [ve, tongTrang]);
 
+  // Vẽ xong thì đưa đoạn được trích vào tầm mắt. Không có bước này thì bấm một
+  // chip trỏ tới cuối trang sẽ mở ra một khoảng lề trắng.
+  useEffect(() => {
+    if (!dangVe && kichThuoc.cao > 0) veDoanTrich();
+  }, [dangVe, kichThuoc.cao, veDoanTrich]);
+
   if (loi) return <p className="p-4 text-sm text-canh-bao">{loi}</p>;
 
   const hopTrangNay = hop.filter((h) => h.page === trangHienTai);
+  const trangCoDoanTrich = hop.length > 0 ? hop[0].page : null;
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-vien px-3 py-2 text-xs">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-vien px-3 py-2 text-xs">
         <button
-          onClick={() => setTrangHienTai((t) => Math.max(1, t - 1))}
+          onClick={() => setTrangHienTai((n) => Math.max(1, n - 1))}
           disabled={trangHienTai <= 1}
-          className="rounded border border-vien px-2 py-1 text-mo disabled:opacity-40"
+          aria-label={t("xem.trangTruoc")}
+          className="rounded border border-vien px-2 py-1 text-mo hover:border-nhan hover:text-nhan disabled:opacity-40 disabled:hover:border-vien disabled:hover:text-mo"
         >
           ‹
         </button>
@@ -190,28 +245,46 @@ export function XemPdf({
           {trangHienTai}/{tongTrang || "…"}
         </span>
         <button
-          onClick={() => setTrangHienTai((t) => Math.min(tongTrang || t, t + 1))}
+          onClick={() => setTrangHienTai((n) => Math.min(tongTrang || n, n + 1))}
           disabled={!tongTrang || trangHienTai >= tongTrang}
-          className="rounded border border-vien px-2 py-1 text-mo disabled:opacity-40"
+          aria-label={t("xem.trangSau")}
+          className="rounded border border-vien px-2 py-1 text-mo hover:border-nhan hover:text-nhan disabled:opacity-40 disabled:hover:border-vien disabled:hover:text-mo"
         >
           ›
         </button>
 
+        {/* Đường về. Người dùng cuộn đi đọc phần xung quanh rồi muốn quay lại
+            đúng chỗ được trích — không có nút này thì phải bấm lại chip. */}
+        {trangCoDoanTrich !== null && (
+          <button
+            onClick={() => {
+              if (trangHienTai !== trangCoDoanTrich) setTrangHienTai(trangCoDoanTrich);
+              else veDoanTrich();
+            }}
+            className="ml-1 flex items-center gap-1 rounded border border-vien px-2 py-1 text-mo hover:border-nhan hover:text-nhan"
+          >
+            <Bt.ngam size={12} />
+            {t("xem.veDoanTrich")}
+          </button>
+        )}
+
         <select
-          value={phong}
-          onChange={(e) => setPhong(Number(e.target.value))}
+          value={phong === null ? "vua" : String(phong)}
+          onChange={(e) =>
+            setPhong(e.target.value === "vua" ? null : Number(e.target.value))
+          }
           aria-label={t("xem.mucPhong")}
           className="ml-auto rounded border border-vien bg-the px-1.5 py-1 text-mo"
         >
           {MUC_PHONG.map((m) => (
-            <option key={m} value={m}>
-              {Math.round(m * 100)}%
+            <option key={m ?? "vua"} value={m === null ? "vua" : m}>
+              {m === null ? t("xem.vuaBeNgang") : `${Math.round(m * 100)}%`}
             </option>
           ))}
         </select>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto bg-nen p-3">
+      <div ref={khungRef} className="min-h-0 flex-1 overflow-auto bg-nen p-3">
         <div
           className="relative mx-auto shadow-sm"
           style={{ width: kichThuoc.rong || undefined, height: kichThuoc.cao || undefined }}
@@ -229,10 +302,10 @@ export function XemPdf({
               key={i}
               className="pointer-events-none absolute rounded-[2px]"
               style={{
-                left: h.x0 * phong,
-                top: h.y0 * phong,
-                width: (h.x1 - h.x0) * phong,
-                height: (h.y1 - h.y0) * phong,
+                left: h.x0 * phongThat,
+                top: h.y0 * phongThat,
+                width: (h.x1 - h.x0) * phongThat,
+                height: (h.y1 - h.y0) * phongThat,
                 background: "var(--to-sang)",
                 boxShadow: "inset 0 0 0 1px var(--to-sang-vien)",
                 mixBlendMode: "multiply",
@@ -249,9 +322,4 @@ export function XemPdf({
       </div>
     </div>
   );
-}
-
-/** Đường tải tệp gốc — dùng chung với chỗ hiển thị ảnh. */
-export function duongTep(nbId: string, sourceId: string): string {
-  return `${GOC_API}/api/notebooks/${nbId}/sources/${sourceId}/file`;
 }

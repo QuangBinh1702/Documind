@@ -155,4 +155,23 @@ export const Bt = {
       <circle cx="19" cy="12" r="1.2" fill="currentColor" />
     </Goc>
   ),
+  /** Ngắm về đúng đoạn được trích — dùng cho nút quay lại vị trí trích dẫn. */
+  ngam: (p: Props) => (
+    <Goc {...p}>
+      <circle cx="12" cy="12" r="7" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </Goc>
+  ),
+  chuNghia: (p: Props) => (
+    <Goc {...p}>
+      <path d="M5 6V5h14v1M12 5v14M9 19h6" />
+    </Goc>
+  ),
+  taiLieu: (p: Props) => (
+    <Goc {...p}>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </Goc>
+  ),
 };

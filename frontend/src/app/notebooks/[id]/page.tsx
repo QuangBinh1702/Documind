@@ -13,10 +13,11 @@
  * đẩy sang ngay khi có thay đổi.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, type Nguon, type Notebook, type TrichDan, api, token } from "@/lib/api";
+import { nguonCuaToi } from "@/lib/nguonXem";
 import { theoDoi, type SuKien } from "@/lib/stream";
 import { BaCot, type Tab } from "@/components/BaCot";
 import { CotHoiDap } from "@/components/CotHoiDap";
@@ -89,6 +90,10 @@ export default function ManHinhNotebook() {
   const [thongBao, setThongBao] = useState<string | null>(null);
   const [email, setEmail] = useState<string | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("hoi");
+
+  // Ổn định qua các lượt vẽ: `CotTaiLieu` nhận nguồn này trong mảng phụ thuộc
+  // của một hiệu ứng, nên dựng mới mỗi lượt sẽ thành vòng lặp nạp vô tận.
+  const nguonXem = useMemo(() => nguonCuaToi(id), [id]);
 
   useEffect(() => {
     if (!token.access()) return;
@@ -339,7 +344,7 @@ export default function ManHinhNotebook() {
               }}
             />
           }
-          xemTaiLieu={<CotTaiLieu nbId={id} trichDan={trichDan} />}
+          xemTaiLieu={<CotTaiLieu nguon={nguonXem} trichDan={trichDan} />}
         />
       </div>
     </div>
