@@ -104,12 +104,16 @@ export function MenuCaiDat({
           )}
 
           <Muc nhan={t("gd.ngonNgu")}>
+            {/* Tên ngôn ngữ dịch theo giao diện đang dùng, không viết bằng
+                chính ngôn ngữ đó. Đứng trong giao diện tiếng Việt mà thấy
+                "Tiếng Việt" cạnh "English" thì hai nhãn ấy không cùng một hệ,
+                và người đọc phải tự đoán cái thứ hai nghĩa là gì. */}
             <NhomLuaChon<NgonNgu>
               giaTri={ngonNgu}
               onDoi={doi}
               muc={[
-                ["vi", "Tiếng Việt"],
-                ["en", "English"],
+                ["vi", t("gd.tiengViet")],
+                ["en", t("gd.tiengAnh")],
               ]}
             />
           </Muc>
