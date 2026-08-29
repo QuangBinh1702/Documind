@@ -14,7 +14,7 @@ import uuid
 
 from app.repositories.retrieval import Candidate
 from app.services import prompt as P
-from app.services.answer import _lam_sach_lich_su, _vua_ngan_sach
+from app.services.answer import _vua_ngan_sach, lam_sach_lich_su
 from app.services.retrieval import ScoredChunk
 from app.settings import settings
 
@@ -79,7 +79,7 @@ def test_xoa_marker_cau_tra_loi_cu():
         {"role": "assistant", "content": "Mức thu 12 triệu [1], nộp trong 30 ngày [2]."},
     ]
 
-    sach = _lam_sach_lich_su(history)
+    sach = lam_sach_lich_su(history)
 
     assert sach[0]["content"] == "Học phí bao nhiêu? [1]", "câu người dùng giữ nguyên"
     assert sach[1]["content"] == "Mức thu 12 triệu, nộp trong 30 ngày."
@@ -87,5 +87,5 @@ def test_xoa_marker_cau_tra_loi_cu():
 
 
 def test_lich_su_rong_giu_nguyen():
-    assert _lam_sach_lich_su(None) is None
-    assert _lam_sach_lich_su([]) == []
+    assert lam_sach_lich_su(None) is None
+    assert lam_sach_lich_su([]) == []

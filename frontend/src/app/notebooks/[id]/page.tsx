@@ -328,9 +328,15 @@ export default function ManHinhNotebook() {
           hoiDap={
             <CotHoiDap
               nbId={id}
+              nguon={nguon}
               sanSang={sanSang}
               onChonTrichDan={setTrichDan}
               onTaiTaiLieu={() => setTab("nguon")}
+              onThemNguon={() => {
+                void tai();
+                // Mở lại luồng ngay để thấy tiến độ của ảnh vừa dán.
+                bao.current();
+              }}
             />
           }
           xemTaiLieu={<CotTaiLieu nbId={id} trichDan={trichDan} />}

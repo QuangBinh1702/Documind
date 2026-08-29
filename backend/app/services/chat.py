@@ -30,8 +30,9 @@ from app.ports.rerank import RerankProvider
 from app.repositories import chat as repo
 from app.services.answer import AnswerResult, answer_question
 from app.services.condense import condense_question
+from app.services.external import answer_externally
 
-__all__ = ["ask"]
+__all__ = ["ask", "ask_external"]
 
 log = logging.getLogger(__name__)
 
@@ -121,3 +122,41 @@ async def ask(
             "message_id": str(message.id),
             "session_id": str(chat_session.id),
         }
+
+
+async def ask_external(
+    session: Session,
+    question: str,
+    *,
+    chat_session: ChatSession,
+    user_id: uuid.UUID,
+    embedder: EmbeddingProvider,
+    llm: LLMProvider,
+) -> AsyncIterator[dict[str, Any]]:
+    """Một lượt hỏi ra ngoài tài liệu, có ngữ cảnh hội thoại — US-032, US-019.
+
+    Cùng hình dạng với `ask`, chỉ khác ở chỗ không truy xuất gì: lấy lịch sử,
+    gộp câu hỏi thành dạng đứng một mình, rồi giao cho `answer_externally`.
+
+    Vì sao đường này cũng cần condense: câu người dùng gõ đi thẳng cho mô hình
+    (nó đã có lịch sử để hiểu), nhưng **khoá cache** thì không được phép là
+    *"viết bằng Python"*. Bản ghi cache sống nhiều ngày và dùng chung cho mọi
+    phiên của người đó, nên khoá của nó phải tự nó có nghĩa.
+    """
+    history = repo.recent_turns(session, chat_session.id)
+
+    standalone, condensed = await condense_question(question, history, llm=llm)
+    if condensed:
+        yield {"type": "condensed", "query": standalone}
+
+    async for event in answer_externally(
+        session,
+        question,
+        user_id=user_id,
+        embedder=embedder,
+        llm=llm,
+        chat_session=chat_session,
+        history=history,
+        cache_question=standalone if condensed else None,
+    ):
+        yield event

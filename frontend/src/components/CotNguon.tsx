@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, type Nguon, api, taiLen } from "@/lib/api";
 import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
+import { anhTuClipboard } from "@/lib/anhDan";
 import type { Khoa } from "@/lib/i18n";
 
 const BIEU_TUONG: Record<string, string> = {
@@ -79,33 +80,21 @@ export function CotNguon({
   }
 
   /**
-   * Dán ảnh từ clipboard — US-025 AC-3.
-   *
-   * Ảnh chụp màn hình không có tên tệp: `getAsFile()` trả về một `File` tên
-   * "image.png" hoặc rỗng. Đặt tên theo thời điểm dán để danh sách nguồn còn
-   * phân biệt được nhiều ảnh dán liên tiếp với nhau.
+   * Dán ảnh ở ngoài mọi ô nhập — US-025 AC-3.
    *
    * Nghe ở `window` chứ không ở một ô nhập: người dùng vừa chụp màn hình xong
-   * thì con trỏ đang ở đâu là chuyện ngẫu nhiên. Nhưng bỏ qua khi họ đang gõ,
-   * vì dán chữ vào ô câu hỏi là việc khác hẳn.
+   * thì con trỏ đang ở đâu là chuyện ngẫu nhiên.
+   *
+   * Bỏ qua khi họ đang gõ trong một ô nhập. Đó không phải để né ca dán chữ mà
+   * để **nhường** cho ô soạn câu hỏi: dán ảnh vào đó nghĩa là "hỏi trên ảnh
+   * này", và cột hội thoại tự lo việc đưa ảnh vào nguồn rồi hỏi tiếp.
    */
   useEffect(() => {
     function danh(e: ClipboardEvent) {
       const dich = e.target as HTMLElement | null;
       if (dich?.closest("input, textarea, [contenteditable='true']")) return;
 
-      const anh = Array.from(e.clipboardData?.items ?? [])
-        .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
-        .map((it) => it.getAsFile())
-        .filter((f): f is File => f !== null)
-        .map((f, i) => {
-          const duoi = f.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png";
-          const dau = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-          return new File([f], `anh-dan-${dau}${i ? `-${i + 1}` : ""}.${duoi}`, {
-            type: f.type,
-          });
-        });
-
+      const anh = anhTuClipboard(e.clipboardData);
       if (anh.length) {
         e.preventDefault();
         void tai(anh);
@@ -143,7 +132,6 @@ export function CotNguon({
         <Bt.taiLen size={22} className="mx-auto text-mo" />
         <p className="mt-2 text-sm font-medium">{t("nguon.keoTha")}</p>
         <p className="mt-1 text-xs text-mo">{t("nguon.dinhDang")}</p>
-        <p className="mt-0.5 text-xs text-mo">{t("nguon.danAnh")}</p>
         <button onClick={() => chonTep.current?.click()} className="nut-phu mt-3 h-8 px-3 text-nhan">
           {t("nguon.chonTep")}
         </button>

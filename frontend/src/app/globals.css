@@ -271,11 +271,111 @@ p {
   border: 1px solid var(--vien);
   border-radius: 14px;
   background: var(--the);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--chu) 5%, transparent);
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .o-nhap:focus-within {
   border-color: var(--nhan);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--nhan) 18%, transparent);
+}
+/* Cả khung đã sáng lên khi con trỏ vào ô nhập, nên vòng focus mặc định chỉ vẽ
+   thêm một hình chữ nhật thứ hai nằm lồng bên trong. Trông rõ nhất khi có ảnh
+   đính kèm: khung ngoài cao lên và hai đường viền tách hẳn ra thành hai hộp.
+   Bỏ vòng trong; dấu hiệu focus vẫn còn nguyên ở khung ngoài. */
+.o-nhap textarea:focus-visible {
+  outline: none;
+}
+
+/* Nút gửi — vuông, nằm gọn TRONG khung nhập.
+ *
+ * Không dùng `.nut-chinh`: nút đó có padding của một nút có chữ, nên khi chỉ
+ * chứa một icon nó phình ra khỏi khung và trông như bị rơi ra ngoài. */
+.nut-gui {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--nhan);
+  color: var(--nen);
+  transition: filter 120ms ease, opacity 120ms ease;
+}
+.nut-gui:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.nut-gui:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+/* Dừng dùng màu cảnh báo chứ không phải màu nhấn: nó là hành động ngắt, và
+   phải phân biệt được với "gửi" chỉ bằng liếc mắt, không cần đọc icon. */
+.nut-dung {
+  background: var(--canh-bao);
+}
+
+/* Ảnh dán kèm câu hỏi — US-025. */
+.dinh-kem {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--vien);
+  background: var(--nen);
+}
+.dinh-kem > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dinh-kem-bo {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--chu) 72%, transparent);
+  color: var(--nen);
+}
+.dinh-kem-bo:hover {
+  background: var(--chu);
+}
+
+/* Công tắc nhỏ trên thanh công cụ hội thoại. */
+.cong-tac {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--vien);
+  border-radius: 999px;
+  background: var(--the);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--mo);
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.cong-tac:hover {
+  border-color: var(--mo);
+  color: var(--chu);
+}
+.cong-tac-den {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vien);
+  transition: background-color 120ms ease;
+}
+.cong-tac-bat {
+  border-color: var(--canh-bao);
+  background: var(--canh-bao-nen);
+  color: var(--canh-bao);
+}
+.cong-tac-bat .cong-tac-den {
+  background: var(--canh-bao);
 }
 
 /* Con trỏ nhấp nháy khi câu trả lời đang chảy về. */

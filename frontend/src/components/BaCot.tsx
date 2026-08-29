@@ -143,7 +143,10 @@ export function BaCot({
       </div>
       <ThanhKeo onMouseDown={() => batDauKeo("trai")} nhan={t("cot.keoCotNguon")} />
 
-      <div className="min-w-0 flex-1 overflow-y-auto">{hoiDap}</div>
+      {/* KHÔNG đặt `overflow-y-auto` ở đây: cột hội thoại tự cuộn phần tin nhắn
+          và ghim ô soạn ở đáy. Thêm một tầng cuộn nữa chỉ cho ra hai thanh cuộn
+          lồng nhau và một dải trống bên phải ô nhập. */}
+      <div className="min-w-0 flex-1 overflow-hidden">{hoiDap}</div>
 
       <ThanhKeo onMouseDown={() => batDauKeo("phai")} nhan={t("cot.keoCotTaiLieu")} />
       <div style={{ width: rongPhai }} className="shrink-0 overflow-y-auto border-l border-vien bg-the">

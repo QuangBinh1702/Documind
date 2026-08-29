@@ -293,7 +293,7 @@ def _tach_khang_dinh(answer: str) -> dict[int, list[str]]:
 
 
 async def cham_trich_dan(
-    llm: LLMProvider, answer: str, contexts: list[str], nhip: Nhip
+    llm: LLMProvider, answer: str, doan_theo_marker: dict[int, str], nhip: Nhip
 ) -> float | None:
     """Tỉ lệ lần gắn số trỏ đúng đoạn — US-045.
 
@@ -313,8 +313,20 @@ async def cham_trich_dan(
     đoạn và danh sách khẳng định trích dẫn đoạn ấy, và trả lời từng dòng một —
     việc nhỏ, kiểm được, và số lượt gọi bằng số đoạn được trích chứ không bằng
     số khẳng định.
+
+    Tra đoạn bằng ÁNH XẠ, không bằng vị trí
+    ----------------------------------------
+    `doan_theo_marker` ánh xạ số trong câu trả lời sang nội dung đoạn mà số đó
+    trỏ tới. Bản trước tra bằng `contexts[so - 1]`, tức là ngầm định *"marker n
+    là đoạn thứ n trong danh sách đã rerank"*. Ngầm định đó đã hỏng từ hai phía:
+    ngữ cảnh bị cắt bớt cho vừa cửa sổ token nên danh sách đưa cho mô hình ngắn
+    hơn `decision.chunks`, và từ khi câu trả lời được đánh số lại theo thứ tự
+    đọc (`prompt.renumber_markers`) thì số trong câu trả lời không còn là vị trí
+    nữa. Tra sai đoạn thì bộ chấm kết luận "trích dẫn sai" cho một trích dẫn
+    đúng — và chỉ số duy nhất đo đúng lời hứa của đồ án tụt xuống vì lỗi của
+    chính bộ chấm.
     """
-    if not answer.strip() or not contexts or "[" not in answer:
+    if not answer.strip() or not doan_theo_marker or "[" not in answer:
         return None
 
     theo_doan = _tach_khang_dinh(answer)
@@ -324,7 +336,8 @@ async def cham_trich_dan(
     tong = 0
     dung = 0
     for so, khang_dinh in sorted(theo_doan.items()):
-        if not 1 <= so <= len(contexts):
+        doan = doan_theo_marker.get(so)
+        if doan is None:
             # Marker bịa ra — `strip_invalid_markers` đáng lẽ đã loại, nhưng nếu
             # còn sót thì nó là một trích dẫn SAI, không phải một mẫu bỏ qua.
             tong += len(khang_dinh)
@@ -333,8 +346,7 @@ async def cham_trich_dan(
         danh_sach = "\n".join(f"{i}. {k}" for i, k in enumerate(khang_dinh, 1))
         raw = await _goi(
             llm, CHAM_TRICH_DAN,
-            f"ĐOẠN TÀI LIỆU:\n{contexts[so - 1][:2500]}\n\n"
-            f"CÁC KHẲNG ĐỊNH:\n{danh_sach}",
+            f"ĐOẠN TÀI LIỆU:\n{doan[:2500]}\n\nCÁC KHẲNG ĐỊNH:\n{danh_sach}",
             nhip,
         )
         tra_loi = {int(m.group(1)): m.group(2).upper() for m in _PHAN_HOI_DS.finditer(raw)}
@@ -533,9 +545,18 @@ async def chay_mot_cau(
 
     # ── Chỉ số cần mô hình chấm ────────────────────────
     if not chi_truy_xuat and r.kind == "grounded":
+        # Số trong câu trả lời → nội dung đoạn nó trỏ tới. Đi qua `chunk_id` chứ
+        # không qua vị trí trong `chunks`: đó là thứ duy nhất nối hai bên mà
+        # không phụ thuộc vào cách đánh số ở tầng hiển thị.
+        theo_chunk = {c.candidate.chunk_id: c.candidate.content for c in chunks}
+        doan_theo_marker = {
+            c.marker: theo_chunk.get(c.chunk_id, c.snippet) for c in r.citations
+        }
         kq.faithfulness = await cham_faithfulness(judge, r.answer, kq.contexts, nhip_judge)
         kq.answer_relevancy = await cham_relevancy(judge, cau["question"], r.answer, nhip_judge)
-        kq.citation_accuracy = await cham_trich_dan(judge, r.answer, kq.contexts, nhip_judge)
+        kq.citation_accuracy = await cham_trich_dan(
+            judge, r.answer, doan_theo_marker, nhip_judge
+        )
 
     kq.nhom_loi = phan_loai_loi(kq)
     return kq

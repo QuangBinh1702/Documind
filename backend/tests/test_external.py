@@ -7,6 +7,7 @@ mức — cấu trúc câu SQL, và hành vi thật trên cơ sở dữ liệu.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,11 +17,18 @@ from app.adapters.embedding.fake import FakeEmbeddingProvider
 from app.adapters.llm.fake import FakeLLMProvider
 from app.adapters.rerank.fake import FakeRerankProvider
 from app.models.base import session_scope
-from app.models.chat import ExternalAnswerCache, ExternalCallLog
+from app.models.chat import (
+    ChatMessage,
+    ChatSession,
+    ExternalAnswerCache,
+    ExternalCallLog,
+)
 from app.models.knowledge import Notebook, SourceChunk, User
 from app.repositories import chat as repo
 from app.services.answer import answer_question, final_result
+from app.services.chat import ask_external
 from app.services.external import (
+    EXTERNAL_SYSTEM_PROMPT,
     EXTERNAL_WARNING,
     QuotaExceeded,
     answer_externally,
@@ -175,6 +183,122 @@ async def test_danh_dau_la_khong_chay_cuc_bo(users, emb, llm) -> None:
     user_id, _ = users[OWNER]
     events = await _ask_external("câu hỏi", user_id, emb, llm)
     assert events[0]["external"] is True
+
+
+# ══════════════════════════════════════════════════════
+# Ngữ cảnh hội thoại trên đường hỏi ngoài — US-019 × US-032
+# ══════════════════════════════════════════════════════
+
+
+class _GhiLai:
+    """LLM giả ghi lại từng lượt gọi, trả lời khác nhau cho condense và cho sinh.
+
+    `FakeLLMProvider` không phân biệt được hai vai đó: nó đọc ngữ cảnh đánh số
+    trong prompt, mà đường hỏi ngoài thì không có ngữ cảnh nào.
+    """
+
+    name = "fake-ngoai"
+    is_local = False
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[dict[str, str]]]] = []
+
+    async def stream(self, system, messages, *, temperature=0.0, max_tokens=None):
+        self.calls.append((system, [dict(m) for m in messages]))
+        la_condense = "ĐỘC LẬP" in system
+        yield (
+            "viết chương trình tìm số lớn nhất trong hai số bằng Python"
+            if la_condense
+            else "print(max(a, b))"
+        )
+
+
+def _phien_co_lich_su(nb_id) -> uuid.UUID:
+    """Một phiên đã có một lượt hỏi–đáp về C++."""
+    cau_hoi = "viết code tìm số lớn nhất trong 2 số bằng C++"
+    with session_scope() as s:
+        phien = repo.create_session(s, nb_id, cau_hoi)
+        repo.save_question(s, phien, cau_hoi)
+        s.add(
+            ChatMessage(
+                session_id=phien.id,
+                role="assistant",
+                content="int lon_nhat(int a, int b) { return a > b ? a : b; }",
+                answer_kind="external",
+            )
+        )
+        s.flush()
+        return phien.id
+
+
+async def test_hoi_ngoai_noi_tiep_giu_duoc_mach_hoi_thoai(users, emb) -> None:
+    """Câu hỏi nối tiếp phải hiểu được — lỗi đã gặp thật.
+
+    Nhánh hỏi ngoài trước đây gửi mỗi câu hỏi tới mô hình một mình. Sau một lượt
+    hỏi về C++, câu *"viết bằng Python"* tới nơi trần trụi và mô hình đáp lại
+    bằng cách hỏi ngược người dùng muốn viết chương trình gì — rồi tự chọn đại
+    một bài toán khác hẳn.
+    """
+    user_id, nb_id = users[OWNER]
+    phien_id = _phien_co_lich_su(nb_id)
+    llm = _GhiLai()
+
+    with session_scope() as s:
+        phien = s.get(ChatSession, phien_id)
+        events = [
+            e
+            async for e in ask_external(
+                s,
+                "viết bằng Python",
+                chat_session=phien,
+                user_id=user_id,
+                embedder=emb,
+                llm=llm,
+            )
+        ]
+
+    sinh = next((c for c in llm.calls if c[0] == EXTERNAL_SYSTEM_PROMPT), None)
+    assert sinh is not None, "không có lượt gọi nào sinh câu trả lời"
+
+    messages = sinh[1]
+    assert "C++" in " ".join(m["content"] for m in messages), (
+        "lịch sử hội thoại không tới được mô hình"
+    )
+    assert messages[-1]["content"] == "viết bằng Python", (
+        "câu hỏi đưa cho mô hình phải là câu người dùng gõ, không phải bản viết lại"
+    )
+    assert any(e["type"] == "condensed" for e in events)
+
+
+async def test_khoa_cache_la_cau_dung_mot_minh(users, emb) -> None:
+    """Bản ghi cache sống nhiều ngày, nên khoá của nó phải tự nó có nghĩa.
+
+    Lưu nguyên văn *"viết bằng Python"* thì một câu hỏi nối tiếp khác của ngày
+    mai — về một chủ đề chẳng liên quan — sẽ khớp vào đúng bản ghi này.
+    """
+    user_id, nb_id = users[OWNER]
+    phien_id = _phien_co_lich_su(nb_id)
+
+    with session_scope() as s:
+        phien = s.get(ChatSession, phien_id)
+        _ = [
+            e
+            async for e in ask_external(
+                s,
+                "viết bằng Python",
+                chat_session=phien,
+                user_id=user_id,
+                embedder=emb,
+                llm=_GhiLai(),
+            )
+        ]
+
+    with session_scope() as s:
+        entry = s.scalar(
+            select(ExternalAnswerCache).where(ExternalAnswerCache.user_id == user_id)
+        )
+    assert entry is not None
+    assert "số lớn nhất" in entry.question
 
 
 # ══════════════════════════════════════════════════════

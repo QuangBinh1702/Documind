@@ -34,9 +34,9 @@ from app.models.base import session_scope
 from app.models.chat import ChatMessage, ChatSession
 from app.models.knowledge import Notebook, Source, SourceChunk
 from app.repositories import chat as chat_repo
-from app.services.chat import ask
+from app.services.chat import ask, ask_external
 from app.services.export import KhongCoFont, xuat
-from app.services.external import QuotaExceeded, answer_externally
+from app.services.external import QuotaExceeded
 from app.settings import Mode, settings
 
 router = APIRouter(tags=["chat"])
@@ -159,10 +159,17 @@ async def chat_ask(req: AskRequest, user: CurrentUser) -> StreamingResponse:
 
 @router.post("/chat/ask-external", summary="Hỏi bằng kiến thức ngoài tài liệu")
 async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> StreamingResponse:
-    """US-032 — chỉ chạy khi người dùng chủ động bấm nút.
+    """US-032 — chỉ chạy sau khi người dùng đã opt-in.
 
-    Không có đường nào tự động gọi tới endpoint này; hệ thống chỉ hiển thị nút
-    mời sau khi cổng ngưỡng kết luận tài liệu không đủ căn cứ.
+    Không có đường nào tự động gọi tới endpoint này. Giao diện đi tới đây theo
+    đúng hai cách, cả hai đều bắt đầu bằng một cú bấm của người dùng:
+
+    * bấm nút *"Hỏi bằng kiến thức ngoài tài liệu"* dưới một câu trả lời bị cổng
+      ngưỡng từ chối;
+    * bật công tắc *"tự động hỏi ra ngoài"* của hội thoại — sau đó mỗi lượt bị
+      từ chối được nối tiếp ra đây mà không phải bấm lại. Công tắc mặc định
+      **tắt**, nên khi chưa ai bật nó thì US-032 AC-2 vẫn đúng nguyên văn:
+      không có request nào ra ngoài.
     """
     user_id = user.id
 
@@ -194,13 +201,13 @@ async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> Streamin
                             "title": chat_session.title})
 
             try:
-                async for event in answer_externally(
+                async for event in ask_external(
                     session,
                     req.question,
+                    chat_session=chat_session,
                     user_id=user_id,
                     embedder=get_embedding_provider(),
                     llm=get_llm_provider("fast"),
-                    chat_session=chat_session,
                 ):
                     yield _sse(event)
             except QuotaExceeded as exc:

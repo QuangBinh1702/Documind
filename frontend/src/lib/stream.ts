@@ -23,12 +23,22 @@ export async function hoi(
   than: Record<string, unknown>,
   onSuKien: (e: SuKien) => void,
   duong = "/api/chat/ask",
+  signal?: AbortSignal,
 ): Promise<void> {
-  const r = await goiTho(duong, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(than),
-  });
+  let r: Response;
+  try {
+    r = await goiTho(duong, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(than),
+      signal,
+    });
+  } catch (err) {
+    // Người dùng bấm dừng trước khi máy chủ kịp trả về dòng đầu tiên. Đó là
+    // một kết thúc bình thường, không phải lỗi cần hiện trong khung chat.
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    throw err;
+  }
 
   if (!r.ok || !r.body) {
     onSuKien({

@@ -80,7 +80,6 @@ export const VI = {
   "nguon.tieuDe": "Nguồn",
   "nguon.keoTha": "Kéo thả tệp vào đây",
   "nguon.dinhDang": "PDF · DOCX · TXT · MD · ảnh",
-  "nguon.danAnh": "hoặc dán ảnh bằng Ctrl+V",
   "nguon.chonTep": "Chọn tệp",
   "nguon.chuaCo": "Chưa có tài liệu nào. Tải một tệp lên để bắt đầu hỏi.",
   "nguon.khongTaiDuoc": "Không tải được {ten}.",
@@ -123,6 +122,21 @@ export const VI = {
   "chat.phienMoi": "Hội thoại mới…",
   "chat.phienKhongTen": "(không tên)",
   "chat.goiYPhim": "Enter để gửi · Shift+Enter xuống dòng",
+  "chat.goiYPhimThem": " · ↑ lấy lại câu đã hỏi · Ctrl+V dán ảnh để hỏi trên ảnh đó",
+  "chat.dung": "Dừng",
+  "chat.daDung": "đã dừng giữa chừng",
+  "chat.daDungTruocKhiTraLoi": "Đã dừng trước khi có câu trả lời.",
+  "chat.khongCoTrongTaiLieu":
+    "Tài liệu của bạn không có thông tin này — dưới đây là câu trả lời từ mô hình ngoài.",
+  "chat.tuDongNgoai": "Tự động hỏi ra ngoài",
+  "chat.tuDongNgoaiMoTa":
+    "Khi tài liệu không có câu trả lời, hỏi thẳng dịch vụ bên ngoài mà không phải bấm thêm. Chỉ áp dụng cho lần mở trang này; tắt lại khi bạn tải lại trang.",
+  "chat.boDinhKem": "Bỏ ảnh này",
+  "chat.dangTaiAnh": "Đang tải {ten} lên…",
+  "chat.dangXuLyAnh": "Đang đọc chữ trong ảnh — hỏi được ngay khi xong…",
+  "chat.anhKhongTaiDuoc": "Không tải được ảnh lên. Thử lại.",
+  "chat.anhHong": "Không đọc được ảnh này. Xem lý do ở cột nguồn.",
+  "chat.anhLau": "Ảnh chưa xử lý xong. Đợi thêm một chút rồi hỏi lại.",
 
   "buoc.reading": "đang đọc tài liệu",
   "buoc.retrieving": "đang tìm trong tài liệu",
@@ -243,6 +257,10 @@ export const VI = {
   "gd.toi": "Tối",
   "gd.theoMay": "Tự động",
   "gd.ngonNgu": "Ngôn ngữ",
+  "gd.chiTiet": "Chi tiết kỹ thuật",
+  "gd.hienMoHinh": "Hiện tên mô hình",
+  "gd.hienMoHinhMoTa":
+    "Ghi tên mô hình đã sinh ra câu trả lời ở chân mỗi câu trả lời.",
 } as const;
 
 export type Khoa = keyof typeof VI;
@@ -309,7 +327,6 @@ export const EN: Partial<Record<Khoa, string>> = {
   "nguon.tieuDe": "Sources",
   "nguon.keoTha": "Drop files here",
   "nguon.dinhDang": "PDF · DOCX · TXT · MD · images",
-  "nguon.danAnh": "or paste an image with Ctrl+V",
   "nguon.chonTep": "Choose files",
   "nguon.chuaCo": "No documents yet. Upload one to start asking.",
   "nguon.khongTaiDuoc": "Could not upload {ten}.",
@@ -351,6 +368,22 @@ export const EN: Partial<Record<Khoa, string>> = {
   "chat.phienMoi": "New conversation…",
   "chat.phienKhongTen": "(untitled)",
   "chat.goiYPhim": "Enter to send · Shift+Enter for a new line",
+  "chat.goiYPhimThem":
+    " · ↑ for an earlier question · Ctrl+V to paste an image and ask about it",
+  "chat.dung": "Stop",
+  "chat.daDung": "stopped part-way",
+  "chat.daDungTruocKhiTraLoi": "Stopped before the answer started.",
+  "chat.khongCoTrongTaiLieu":
+    "Your documents do not hold this — below is an answer from an outside model.",
+  "chat.tuDongNgoai": "Auto-ask outside",
+  "chat.tuDongNgoaiMoTa":
+    "When your documents do not hold the answer, ask the external service straight away instead of waiting for another click. Applies to this page visit only; it turns off when you reload.",
+  "chat.boDinhKem": "Remove this image",
+  "chat.dangTaiAnh": "Uploading {ten}…",
+  "chat.dangXuLyAnh": "Reading the text in the image — ready to ask in a moment…",
+  "chat.anhKhongTaiDuoc": "Could not upload the image. Try again.",
+  "chat.anhHong": "This image could not be read. See why in the sources column.",
+  "chat.anhLau": "The image is still processing. Wait a moment and ask again.",
 
   "buoc.reading": "reading the documents",
   "buoc.retrieving": "searching your documents",
@@ -464,6 +497,9 @@ export const EN: Partial<Record<Khoa, string>> = {
   "gd.toi": "Dark",
   "gd.theoMay": "Auto",
   "gd.ngonNgu": "Language",
+  "gd.chiTiet": "Technical details",
+  "gd.hienMoHinh": "Show model name",
+  "gd.hienMoHinhMoTa": "Print the model that produced each answer beneath it.",
 };
 
 const BANG: Record<NgonNgu, Partial<Record<Khoa, string>>> = { vi: VI, en: EN };

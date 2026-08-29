@@ -111,6 +111,35 @@ def test_giu_nguyen_khi_moi_marker_hop_le() -> None:
     assert dropped == []
 
 
+def test_danh_so_lai_theo_thu_tu_doc() -> None:
+    """Người đọc thấy 1, 2, 3 chứ không phải 14, 15, 22.
+
+    Số của mô hình là vị trí đoạn trong ngữ cảnh. Đường tóm tắt nạp 12 đoạn mỗi
+    tài liệu, nên một bản tóm tắt hai tài liệu mở đầu bằng [14] là chuyện bình
+    thường — và người đọc đi tìm mười ba trích dẫn không tồn tại.
+    """
+    doi, anh_xa = P.renumber_markers("Bước 1 [14]. Bước 2 [15] và [14]. Bước 3 [22].")
+    assert doi == "Bước 1 [1]. Bước 2 [2] và [1]. Bước 3 [3]."
+    assert anh_xa == {14: 1, 15: 2, 22: 3}
+
+
+def test_danh_so_lai_khong_dong_gi_khi_khong_co_marker() -> None:
+    text = "Không tìm thấy thông tin này trong tài liệu của bạn."
+    assert P.renumber_markers(text) == (text, {})
+
+
+def test_danh_so_lai_lam_hai_lan_khong_doi_them() -> None:
+    """Phép biến đổi phải luỹ đẳng.
+
+    Câu trả lời cũ trong lịch sử đã mang số 1..k rồi; chạy lại trên chúng mà đổi
+    số nữa thì mỗi lần tải lại trang là một cách đánh số khác.
+    """
+    mot_lan, _ = P.renumber_markers("A [7]. B [3]. C [7].")
+    hai_lan, anh_xa = P.renumber_markers(mot_lan)
+    assert hai_lan == mot_lan
+    assert anh_xa == {1: 1, 2: 2}
+
+
 # ══════════════════════════════════════════════════════
 # Dựng prompt và chống prompt injection — US-061
 # ══════════════════════════════════════════════════════
@@ -302,6 +331,45 @@ async def test_marker_bia_bi_loai_trong_luong_that(seeded, providers) -> None:
     assert 99 in result.dropped_markers
     assert "[99]" not in result.answer
     assert all(c.marker != 99 for c in result.citations)
+
+
+@pytest.mark.db
+async def test_marker_trong_cau_tra_loi_lien_tuc_tu_mot(seeded, providers) -> None:
+    """Người đọc thấy 1, 2, 3 — không nhảy cóc, không bắt đầu từ giữa.
+
+    Số của mô hình là vị trí đoạn trong ngữ cảnh, và nó phản ánh thứ hạng rerank
+    chứ không phản ánh gì người đọc quan tâm.
+    """
+    events = await _ask("thời gian đào tạo trình độ đại học là bao lâu", seeded, providers)
+    result = final_result(events)
+    assert result.kind == "grounded"
+
+    trong_van_ban = P.used_markers(result.answer)
+    assert trong_van_ban, "câu trả lời grounded phải có ít nhất một marker"
+    assert trong_van_ban == list(range(1, len(trong_van_ban) + 1)), (
+        f"marker phải là 1..k theo thứ tự đọc, nhận được {trong_van_ban}"
+    )
+    assert [c.marker for c in result.citations] == trong_van_ban
+
+
+@pytest.mark.db
+async def test_van_ban_tren_man_hinh_khop_voi_ban_duoc_luu(seeded, providers) -> None:
+    """Thứ người dùng đang đọc phải đúng bằng thứ được lưu lại.
+
+    Hai bước hậu xử lý sửa câu trả lời sau khi mô hình đã gõ xong: loại marker
+    bịa, rồi đánh số lại. Không phát `replace` thì màn hình giữ bản cũ, và câu
+    trả lời tự đổi số dưới chân người dùng ở lần tải trang sau.
+    """
+    emb, rr, _ = providers
+    llm = FakeLLMProvider(forced_reply="Theo tài liệu [1] và cả [99] nữa.")
+    events = await _ask("thời gian đào tạo", seeded, (emb, rr, llm))
+    result = final_result(events)
+
+    tren_man_hinh = collect_text(events)
+    for e in events:
+        if e["type"] == "replace":
+            tren_man_hinh = e["text"]
+    assert tren_man_hinh == result.answer
 
 
 @pytest.mark.db

@@ -47,7 +47,13 @@ from app.services.verifier import STRICTER_HINT, verify_answer
 from app.settings import settings
 from app.text.language import nhan_dien as nhan_dien_ngon_ngu
 
-__all__ = ["AnswerEvent", "AnswerResult", "Citation", "answer_question"]
+__all__ = [
+    "AnswerEvent",
+    "AnswerResult",
+    "Citation",
+    "answer_question",
+    "lam_sach_lich_su",
+]
 
 log = logging.getLogger(__name__)
 
@@ -132,17 +138,29 @@ def _ten_nguon(session: Session, chunks: list[ScoredChunk]) -> dict[uuid.UUID, s
     return {sid: ten for sid, ten in rows}
 
 
-def _citations_for(blocks: list[P.ContextBlock], markers: list[int]) -> list[Citation]:
+def _citations_for(
+    blocks: list[P.ContextBlock], anh_xa: dict[int, int]
+) -> list[Citation]:
+    """Trích dẫn cho các marker đã dùng, mang **số hiển thị** mới.
+
+    `anh_xa` là ánh xạ *số của đoạn trong ngữ cảnh* → *số trong câu trả lời*, do
+    `P.renumber_markers` dựng. Đây là chỗ duy nhất hai hệ đánh số gặp nhau, và
+    cũng là lý do việc đánh số lại không làm hỏng gì: `Citation.marker` là con
+    số người đọc thấy, còn `chunk_id` bên trong vẫn trỏ về đúng đoạn của số cũ.
+
+    Danh sách trả về xếp theo số mới, tức là theo thứ tự xuất hiện trong câu
+    trả lời — cũng là thứ tự các sự kiện `citation` đi ra.
+    """
     by_marker = {b.marker: b for b in blocks}
     out: list[Citation] = []
-    for m in markers:
-        block = by_marker.get(m)
+    for cu, moi in sorted(anh_xa.items(), key=lambda kv: kv[1]):
+        block = by_marker.get(cu)
         if block is None:  # pragma: no cover — đã lọc ở strip_invalid_markers
             continue
         c = block.chunk.candidate
         out.append(
             Citation(
-                marker=m,
+                marker=moi,
                 chunk_id=c.chunk_id,
                 source_id=c.source_id,
                 page_no=c.page_no,
@@ -179,7 +197,7 @@ async def answer_question(
     viết lại thành tiếng Việt và được trả lời bằng tiếng Việt.
     """
     started = time.perf_counter()
-    history = _lam_sach_lich_su(history)
+    history = lam_sach_lich_su(history)
 
     # US-037 — ngôn ngữ trả lời đi theo ngôn ngữ CÂU HỎI, không theo ngôn ngữ
     # tài liệu. Người hỏi bằng tiếng Anh về một quy chế tiếng Việt vẫn phải nhận
@@ -286,7 +304,10 @@ async def answer_question(
             raw = "".join(pieces).strip()
             valid = {b.marker for b in blocks}
             cleaned, dropped = P.strip_invalid_markers(raw, valid)
-            citations = _citations_for(blocks, P.used_markers(cleaned))
+            cleaned, so_moi = P.renumber_markers(cleaned)
+            citations = _citations_for(blocks, so_moi)
+            if cleaned != raw:
+                yield {"type": "replace", "text": cleaned}
             for c in citations:
                 yield c.as_event()
 
@@ -467,7 +488,18 @@ async def answer_question(
     if dropped:
         log.warning("Mô hình bịa ra marker không tồn tại: %s", dropped)
 
-    citations = _citations_for(blocks, P.used_markers(cleaned))
+    # Đánh số lại về 1, 2, 3… theo thứ tự đọc. Số của mô hình là vị trí đoạn
+    # trong ngữ cảnh, và nó nhảy cóc theo thứ hạng rerank.
+    cleaned, so_moi = P.renumber_markers(cleaned)
+    citations = _citations_for(blocks, so_moi)
+
+    # Giao diện đang hiện `raw` — bản mô hình vừa gõ ra, còn nguyên marker bịa
+    # và còn đánh số theo ngữ cảnh. Không gửi bản thay thế thì thứ người dùng
+    # đọc trên màn hình khác với thứ được lưu, và sau khi tải lại trang câu trả
+    # lời tự đổi số dưới chân họ.
+    if cleaned != raw:
+        yield {"type": "replace", "text": cleaned}
+
     for c in citations:
         yield c.as_event()
 
@@ -530,12 +562,16 @@ def _vua_ngan_sach(
     return giu, len(chunks) - len(giu)
 
 
-def _lam_sach_lich_su(history: list[Message] | None) -> list[Message] | None:
+def lam_sach_lich_su(history: list[Message] | None) -> list[Message] | None:
     """Xoá marker `[n]` khỏi các câu trả lời cũ trong lịch sử.
 
     Số marker chỉ có nghĩa trong lượt đã sinh ra nó. Để nguyên thì mô hình
     chép lại `[2]` của lượt trước, và ở lượt này `[2]` là một đoạn khác —
     marker "hợp lệ" mà trỏ sai, `strip_invalid_markers` không bắt được.
+
+    Công khai vì đường hỏi ra ngoài (`app/services/external.py`) cũng đưa lịch
+    sử cho mô hình, và ở đó marker cũ còn vô nghĩa hơn: lượt hỏi ngoài không có
+    trích dẫn nào để `[2]` trỏ tới.
     """
     if not history:
         return history

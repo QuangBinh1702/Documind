@@ -35,11 +35,18 @@ from sqlalchemy.orm import Session
 
 from app.models.chat import ChatMessage, ChatSession
 from app.ports.embedding import EmbeddingProvider
-from app.ports.llm import LLMProvider
+from app.ports.llm import LLMProvider, Message
 from app.repositories import chat as repo
+from app.services.answer import lam_sach_lich_su
 from app.settings import settings
 
-__all__ = ["EXTERNAL_WARNING", "ExternalResult", "QuotaExceeded", "answer_externally"]
+__all__ = [
+    "EXTERNAL_SYSTEM_PROMPT",
+    "EXTERNAL_WARNING",
+    "ExternalResult",
+    "QuotaExceeded",
+    "answer_externally",
+]
 
 log = logging.getLogger(__name__)
 
@@ -57,9 +64,12 @@ của họ, nên không cần nhắc lại điều đó.
 
 QUY TẮC
 1. Trả lời ngắn gọn, đi thẳng vào câu hỏi.
-2. Nếu không chắc chắn, hãy nói rõ là không chắc thay vì đoán.
-3. KHÔNG tạo ra số trích dẫn dạng [1], [2] — không có tài liệu nào để trỏ tới.
-4. Trả lời bằng tiếng Việt."""
+2. Bám vào mạch hội thoại phía trên. Câu hỏi nối tiếp như "viết bằng Python đi" \
+hay "ngắn hơn được không" nói về đúng việc vừa bàn ở lượt trước — KHÔNG hỏi lại \
+người dùng xem họ muốn gì khi lịch sử đã trả lời điều đó.
+3. Nếu không chắc chắn, hãy nói rõ là không chắc thay vì đoán.
+4. KHÔNG tạo ra số trích dẫn dạng [1], [2] — không có tài liệu nào để trỏ tới.
+5. Trả lời bằng ngôn ngữ của câu hỏi cuối; mặc định là tiếng Việt."""
 
 
 class QuotaExceeded(RuntimeError):
@@ -97,6 +107,8 @@ async def answer_externally(
     llm: LLMProvider,
     use_cache: bool = True,
     chat_session: ChatSession | None = None,
+    history: list[Message] | None = None,
+    cache_question: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Hỏi mô hình ngoài, có tra cache trước.
 
@@ -106,8 +118,19 @@ async def answer_externally(
     Có `chat_session` thì câu hỏi và câu trả lời được ghi vào lịch sử phiên với
     `answer_kind` là `external`/`cached_external` — để tải lại trang vẫn thấy,
     và để thống kê US-041 đếm được. Không trích dẫn nào được ghi, vì không có.
+
+    `history` là các lượt trước của phiên, đưa cho mô hình để câu hỏi nối tiếp
+    còn hiểu được (US-019). Không có nó thì *"viết bằng Python"* sau một lượt
+    hỏi về C++ là một câu vô nghĩa, và mô hình đáp lại bằng cách hỏi ngược người
+    dùng xem họ muốn viết chương trình gì — đúng lỗi đã gặp thật.
+
+    `cache_question` là dạng **đứng một mình** của câu hỏi, dùng cho việc nhúng
+    và cho khoá cache. Nhúng nguyên văn *"viết bằng Python"* cho ra một vector
+    chẳng đại diện cho điều gì, nên bản ghi cache vừa vô dụng vừa nguy hiểm: một
+    câu hỏi nối tiếp khác của ngày mai sẽ khớp vào đúng nó.
     """
     started = time.perf_counter()
+    cau_doc_lap = cache_question or question
 
     yield {"type": "meta", "model": llm.name, "is_local": llm.is_local, "external": True}
     yield {"type": "warning", "text": EXTERNAL_WARNING}
@@ -117,7 +140,7 @@ async def answer_externally(
 
     # Nhúng là việc chặn (CPU hoặc HTTP đồng bộ) — đẩy ra luồng khác để không
     # treo event loop của mọi request khác trong lúc chờ.
-    vector = await asyncio.to_thread(embedder.embed_query, question)
+    vector = await asyncio.to_thread(embedder.embed_query, cau_doc_lap)
 
     # ── Tra cache trước khi tiêu một lượt quota ─────────
     if use_cache:
@@ -160,10 +183,18 @@ async def answer_externally(
 
     yield {"type": "status", "stage": "calling_external"}
 
+    # Marker `[n]` của các lượt grounded trước bị bóc khỏi lịch sử: ở lượt hỏi
+    # ngoài không có trích dẫn nào để chúng trỏ tới, nên để nguyên chỉ dạy mô
+    # hình chép lại một con số dẫn đi đâu không ai biết (US-033 AC-3).
+    messages: list[Message] = [
+        *(lam_sach_lich_su(history) or []),
+        {"role": "user", "content": question},
+    ]
+
     pieces: list[str] = []
     async for piece in llm.stream(
         EXTERNAL_SYSTEM_PROMPT,
-        [{"role": "user", "content": question}],
+        messages,
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
     ):
@@ -174,7 +205,9 @@ async def answer_externally(
 
     # 🔴 INV-3: ghi vào external_answer_cache, KHÔNG BAO GIỜ vào source_chunks.
     if answer and use_cache:
-        repo.store_cached_answer(session, user_id, question, vector, answer, llm.name)
+        repo.store_cached_answer(
+            session, user_id, cau_doc_lap, vector, answer, llm.name
+        )
     repo.log_external_call(session, user_id, from_cache=False)
     session.flush()
 

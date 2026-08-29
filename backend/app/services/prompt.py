@@ -33,6 +33,10 @@ __all__ = [
     "build_user_prompt",
     "is_no_answer",
     "no_answer_text",
+    "renumber_markers",
+    "strip_all_markers",
+    "strip_invalid_markers",
+    "used_markers",
 ]
 
 # Câu từ chối. Phải là một chuỗi CỐ ĐỊNH, không để mô hình tự diễn đạt: bộ
@@ -253,6 +257,37 @@ def used_markers(answer: str) -> list[int]:
         if n not in seen:
             seen.append(n)
     return seen
+
+
+def renumber_markers(answer: str) -> tuple[str, dict[int, int]]:
+    """Đánh số lại marker về 1, 2, 3… theo thứ tự xuất hiện trong câu trả lời.
+
+    Trả về ``(câu trả lời đã đánh số lại, ánh xạ số cũ → số mới)``.
+
+    Vì sao cần
+    ----------
+    Số trong prompt là **vị trí của đoạn trong ngữ cảnh**, không phải một mã có
+    ý nghĩa với người đọc. Đường tóm tắt (US-069) nạp tới 12 đoạn mở đầu cho mỗi
+    tài liệu, nên một bản tóm tắt hai tài liệu bắt đầu bằng ``[14]`` là chuyện
+    bình thường — và người đọc thấy ``[14]`` đầu tiên sẽ đi tìm mười ba trích dẫn
+    không hề tồn tại. Đường có căn cứ đỡ hơn (``rerank_top_k`` = 8) nhưng vẫn
+    nhảy cóc: đoạn hạng 3 và hạng 7 cho ra ``[3]`` rồi ``[7]``.
+
+    Đây là phép biến đổi **thuần hiển thị**. Ánh xạ trả về là thứ giữ cho đường
+    về `chunk_id` không đứt: `Citation` mang số mới, còn bên trong nó vẫn trỏ
+    đúng đoạn của số cũ.
+
+    Phải chạy SAU `strip_invalid_markers`. Chạy trước thì một số bịa ra sẽ chiếm
+    mất một chỗ trong dãy mới, và dãy lại thủng đúng như thứ hàm này đi sửa.
+    """
+    thu_tu = used_markers(answer)
+    if not thu_tu:
+        return answer, {}
+
+    anh_xa = {cu: moi for moi, cu in enumerate(thu_tu, start=1)}
+    # Mọi marker khớp `_MARKER` đều nằm trong `thu_tu` — `used_markers` quét
+    # cùng biểu thức trên cùng chuỗi — nên tra thẳng, không cần giá trị dự phòng.
+    return _MARKER.sub(lambda m: f"[{anh_xa[int(m.group(1))]}]", answer), anh_xa
 
 
 def strip_all_markers(text: str) -> str:

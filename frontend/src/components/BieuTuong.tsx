@@ -59,6 +59,18 @@ export const Bt = {
       <path d="M5 12h14M13 6l6 6-6 6" />
     </Goc>
   ),
+  /** Ô vuông đặc — quy ước "dừng" quen thuộc, khác hẳn hình mũi tên "gửi". */
+  dung: (p: Props) => (
+    <Goc {...p}>
+      <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" />
+    </Goc>
+  ),
+  toanCau: (p: Props) => (
+    <Goc {...p}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z" />
+    </Goc>
+  ),
   chep: (p: Props) => (
     <Goc {...p}>
       <rect x="9" y="9" width="11" height="11" rx="2" />
