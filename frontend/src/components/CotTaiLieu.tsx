@@ -5,31 +5,30 @@
  *
  * Bấm một chip trích dẫn mở thẳng **tài liệu tại đúng chỗ được trích**: PDF
  * dựng bằng PDF.js kèm vùng tô sáng theo toạ độ, tài liệu văn bản hiện toàn văn
- * với đoạn được tô, ảnh hiện bản gốc cạnh chữ đọc được.
+ * đã dựng định dạng với đoạn được tô, ảnh hiện bản gốc cạnh chữ đọc được.
  *
- * Vì sao mặc định là cả tài liệu chứ không phải mỗi đoạn văn
- * -----------------------------------------------------------
- * Bản trước mở ở mức "đoạn": một khối chữ trần, và muốn thấy nó nằm ở đâu trong
- * tài liệu thì phải bấm thêm một nút nữa. Cách ấy rẻ hơn — dựng một trang PDF
- * tốn vài trăm mili giây và tải tệp gốc tốn nhiều hơn thế — nhưng nó trả lời
- * sai câu hỏi. Người ta bấm chip để hỏi *"câu này lấy ở đâu ra"*, và một đoạn
- * văn tách khỏi trang giấy chứa nó thì không trả lời được câu đó: không thấy
- * tiêu đề mục, không thấy bảng bên cạnh, không kiểm chứng được gì. Đó cũng
- * đúng là bậc 1 trong thang giảm cấp của US-015 AC-5, và hạ tầng cho nó đã
- * sẵn sàng từ M2.
+ * Không có nút chuyển sang "chỉ đoạn trích"
+ * -----------------------------------------
+ * Đã từng có, và nó là một lựa chọn giả. Người ta bấm chip để hỏi *"câu này lấy
+ * ở đâu ra"*, và câu trả lời cho việc đó luôn là trang tài liệu chứ không phải
+ * một khối chữ rời. Một nút chuyển chỉ bắt người dùng quyết định một việc mà
+ * họ không có lý do gì để quyết định, và nó chiếm mất chỗ trên thanh tiêu đề
+ * vốn đã hẹp của cột này.
  *
- * Mức "chỉ đoạn trích" vẫn còn, ngay cạnh đó, cho lúc mạng chậm hoặc tệp gốc
- * không còn trên máy chủ (nguồn nạp bằng CLI). Đó là bậc 3 của cùng thang ấy.
+ * Mức "chỉ đoạn trích" vẫn còn, nhưng là **đường lùi tự động**: khi tệp gốc
+ * không mở được — nguồn nạp bằng CLI không có bản lưu, hoặc tệp đã mất trên
+ * kho — thì hiện nguyên văn đoạn trích kèm một dòng nói rõ vì sao. Đó là bậc 3
+ * trong thang giảm cấp của US-015 AC-5, và nó phải tới mà không cần ai bấm gì.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { type TrichDan } from "@/lib/api";
 import { type ChiTietTrichDan, type NguonXem } from "@/lib/nguonXem";
 import { XemPdf } from "@/components/XemPdf";
 import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
-
-type Muc = "doan" | "tai-lieu";
 
 export function CotTaiLieu({
   nguon,
@@ -41,8 +40,12 @@ export function CotTaiLieu({
   const [chiTiet, setChiTiet] = useState<ChiTietTrichDan | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
   const [dangTai, setDangTai] = useState(false);
-  const [muc, setMuc] = useState<Muc>("tai-lieu");
+  const [khongMoDuoc, setKhongMoDuoc] = useState(false);
   const { t } = useNgonNgu();
+
+  // Ổn định qua các lượt vẽ: trình xem giữ nó trong mảng phụ thuộc của hiệu
+  // ứng tải tệp, nên một hàm mới mỗi lượt sẽ thành vòng lặp tải lại.
+  const baoKhongMoDuoc = useCallback(() => setKhongMoDuoc(true), []);
 
   useEffect(() => {
     if (!trichDan) {
@@ -52,9 +55,7 @@ export function CotTaiLieu({
     let huy = false;
     setDangTai(true);
     setLoi(null);
-    // Mỗi trích dẫn mới quay về mức mặc định: người dùng vừa hỏi một câu khác,
-    // giữ nguyên lựa chọn của câu trước là giữ sai ngữ cảnh.
-    setMuc("tai-lieu");
+    setKhongMoDuoc(false);
 
     nguon
       .trichDan(trichDan.chunk_id)
@@ -74,11 +75,10 @@ export function CotTaiLieu({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-vien px-4 py-2.5">
+      <div className="flex shrink-0 items-center border-b border-vien px-4 py-3">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-mo">
           {t("xem.doanTrichDan")}
         </h2>
-        {chiTiet && <ChonMuc muc={muc} doi={setMuc} />}
       </div>
 
       {!trichDan ? (
@@ -97,10 +97,14 @@ export function CotTaiLieu({
         <>
           <TheNguon chiTiet={chiTiet} />
           <div className="min-h-0 flex-1">
-            {muc === "tai-lieu" ? (
-              <XemTaiLieu nguon={nguon} chiTiet={chiTiet} />
-            ) : (
+            {khongMoDuoc ? (
               <DoanTrich chiTiet={chiTiet} />
+            ) : (
+              <XemTaiLieu
+                nguon={nguon}
+                chiTiet={chiTiet}
+                onKhongMoDuoc={baoKhongMoDuoc}
+              />
             )}
           </div>
         </>
@@ -110,41 +114,7 @@ export function CotTaiLieu({
 }
 
 /**
- * Chuyển giữa hai mức xem.
- *
- * Hai nút cạnh nhau chứ không phải một nút bật/tắt: nút bật/tắt bắt người đọc
- * suy ra mình đang ở đâu từ nhãn của thứ mình sắp đi tới, và bản trước đúng là
- * đã sai kiểu đó — nhãn *"Mở cả tài liệu"* nằm ngay cạnh tiêu đề *"Đoạn được
- * trích dẫn"*, không có gì đánh dấu mức hiện tại.
- */
-function ChonMuc({ muc, doi }: { muc: Muc; doi: (m: Muc) => void }) {
-  const { t } = useNgonNgu();
-  const nut = (m: Muc, icon: React.ReactNode, nhan: string) => (
-    <button
-      onClick={() => doi(m)}
-      aria-pressed={muc === m}
-      title={nhan}
-      className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${
-        muc === m
-          ? "bg-nen text-chu shadow-sm"
-          : "text-mo hover:text-chu"
-      }`}
-    >
-      {icon}
-      <span className="hidden xl:inline">{nhan}</span>
-    </button>
-  );
-
-  return (
-    <div className="ml-auto flex rounded-md border border-vien bg-the p-0.5">
-      {nut("tai-lieu", <Bt.taiLieu size={13} />, t("xem.trongTaiLieu"))}
-      {nut("doan", <Bt.chuNghia size={13} />, t("xem.chiDoanTrich"))}
-    </div>
-  );
-}
-
-/**
- * Tài liệu nào, trang nào, mục nào — luôn hiện, ở cả hai mức xem.
+ * Tài liệu nào, trang nào, mục nào.
  *
  * Đây là câu trả lời ngắn cho *"câu này lấy ở đâu ra"*, và nó phải đọc được
  * ngay cả khi tệp gốc còn đang tải.
@@ -154,40 +124,54 @@ function TheNguon({ chiTiet }: { chiTiet: ChiTietTrichDan }) {
   const Icon = chiTiet.source.kind === "image" ? Bt.anh : Bt.tep;
 
   return (
-    <div className="shrink-0 border-b border-vien bg-the px-4 py-2.5">
+    <div className="shrink-0 border-b border-vien bg-the px-4 py-3">
       <div className="flex items-start gap-2">
-        <Icon size={14} className="mt-0.5 shrink-0 text-mo" />
+        <Icon size={14} className="mt-[3px] shrink-0 text-mo" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium" title={chiTiet.source.title}>
+          <p
+            className="text-sm font-medium leading-snug"
+            title={chiTiet.source.title}
+          >
             {chiTiet.source.title}
           </p>
-          <p className="mt-0.5 text-xs text-mo">
-            {chiTiet.page_no
-              ? t("xem.trangSo", { so: chiTiet.page_no })
-              : t("xem.khongRoTrang")}
-            {chiTiet.source.pages ? ` / ${chiTiet.source.pages}` : ""}
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-mo">
+            <span>
+              {chiTiet.page_no
+                ? t("xem.trangSo", { so: chiTiet.page_no })
+                : t("xem.khongRoTrang")}
+              {chiTiet.source.pages ? ` / ${chiTiet.source.pages}` : ""}
+            </span>
+            {chiTiet.heading_path && (
+              <>
+                <span aria-hidden="true" className="opacity-50">
+                  ·
+                </span>
+                <span className="truncate" title={chiTiet.heading_path}>
+                  {chiTiet.heading_path}
+                </span>
+              </>
+            )}
           </p>
         </div>
       </div>
-      {chiTiet.heading_path && (
-        <p
-          className="mt-1.5 truncate text-xs text-mo"
-          title={chiTiet.heading_path}
-        >
-          {chiTiet.heading_path}
-        </p>
-      )}
     </div>
   );
 }
 
-/** Bậc 3 của thang giảm cấp US-015 AC-5 — chỉ nguyên văn đoạn được trích. */
+/**
+ * Bậc 3 của thang giảm cấp US-015 AC-5 — chỉ nguyên văn đoạn được trích.
+ *
+ * Chỉ tới khi tệp gốc không mở được, và nói thẳng lý do: một khối chữ hiện ra
+ * mà không giải thích gì sẽ bị đọc là giao diện hỏng.
+ */
 function DoanTrich({ chiTiet }: { chiTiet: ChiTietTrichDan }) {
+  const { t } = useNgonNgu();
   return (
     <div className="h-full overflow-y-auto px-4 py-4">
-      <blockquote className="border-l-2 border-nhan pl-3 text-[13px] leading-relaxed whitespace-pre-wrap">
-        {chiTiet.content}
-      </blockquote>
+      <p className="mb-3 rounded-md border border-vien bg-nen px-3 py-2 text-xs text-mo">
+        {t("xem.khongMoDuocDungDoan")}
+      </p>
+      <Md text={chiTiet.content} />
     </div>
   );
 }
@@ -196,9 +180,11 @@ function DoanTrich({ chiTiet }: { chiTiet: ChiTietTrichDan }) {
 function XemTaiLieu({
   nguon,
   chiTiet,
+  onKhongMoDuoc,
 }: {
   nguon: NguonXem;
   chiTiet: ChiTietTrichDan;
+  onKhongMoDuoc: () => void;
 }) {
   if (chiTiet.source.kind === "pdf") {
     return (
@@ -207,13 +193,16 @@ function XemTaiLieu({
         sourceId={chiTiet.source.id}
         trang={chiTiet.page_no}
         hop={chiTiet.bbox ?? []}
+        onKhongMoDuoc={onKhongMoDuoc}
       />
     );
   }
   if (chiTiet.source.kind === "image") {
     return <XemAnh nguon={nguon} chiTiet={chiTiet} />;
   }
-  return <XemVanBan nguon={nguon} chiTiet={chiTiet} />;
+  return (
+    <XemVanBan nguon={nguon} chiTiet={chiTiet} onKhongMoDuoc={onKhongMoDuoc} />
+  );
 }
 
 /**
@@ -228,7 +217,7 @@ function XemAnh({ nguon, chiTiet }: { nguon: NguonXem; chiTiet: ChiTietTrichDan 
   const { t } = useNgonNgu();
 
   return (
-    <div className="h-full overflow-y-auto p-3">
+    <div className="h-full overflow-y-auto p-4">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -239,12 +228,12 @@ function XemAnh({ nguon, chiTiet }: { nguon: NguonXem; chiTiet: ChiTietTrichDan 
       ) : (
         <div className="h-48 animate-pulse rounded-md bg-vien" />
       )}
-      <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-mo">
+      <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-mo">
         {t("xem.chuTuAnh")}
       </p>
-      <blockquote className="mt-1.5 border-l-2 border-nhan pl-3 text-[13px] leading-relaxed whitespace-pre-wrap">
-        {chiTiet.content}
-      </blockquote>
+      <div className="mt-2 khoi-to-sang">
+        <Md text={chiTiet.content} />
+      </div>
     </div>
   );
 }
@@ -252,15 +241,33 @@ function XemAnh({ nguon, chiTiet }: { nguon: NguonXem; chiTiet: ChiTietTrichDan 
 /**
  * Toàn văn tài liệu, tô sáng đúng đoạn được trích — AC-2.
  *
- * Cắt theo `char_start`/`char_end` chứ không đi tìm lại chuỗi trong văn bản.
- * Đó là toàn bộ giá trị của bất biến INV-1: offset dựng lên lúc trích xuất và
- * dùng lại được nguyên vẹn ở đây. Tìm lại bằng `indexOf` sẽ trỏ nhầm ngay khi
- * một đoạn xuất hiện hai lần trong tài liệu.
+ * Hai điều đáng nói.
+ *
+ * **Dựng định dạng, không hiện chữ thô.** AC-2 đòi tài liệu DOCX/TXT/MD hiện ở
+ * dạng Markdown *có định dạng*. Bản trước đổ toàn văn vào một thẻ `<pre>` phông
+ * đơn cách, nên `## Bước 6` và `# Checklist` nằm nguyên trên màn hình dưới dạng
+ * dấu thăng, và một tài liệu hướng dẫn bình thường đọc như tệp cấu hình.
+ *
+ * **Cắt theo `char_start`/`char_end`, không đi tìm lại chuỗi.** Đó là toàn bộ
+ * giá trị của bất biến INV-1: offset dựng lên lúc trích xuất và dùng lại được
+ * nguyên vẹn ở đây. Tìm lại bằng `indexOf` sẽ trỏ nhầm ngay khi một đoạn xuất
+ * hiện hai lần trong tài liệu.
+ *
+ * Ranh giới tô sáng được **nới ra tới đầu và cuối dòng** trước khi vẽ. Việc này
+ * chỉ ảnh hưởng tới phần hiển thị, không đụng tới offset đã lưu, và nó cần
+ * thiết vì ba mảnh được dựng Markdown riêng: cắt giữa dòng sẽ chẻ đôi một tiêu
+ * đề hoặc một dấu `**`, và mảnh sau sẽ hiện ra ký hiệu Markdown thô.
  */
-function XemVanBan({ nguon, chiTiet }: { nguon: NguonXem; chiTiet: ChiTietTrichDan }) {
+function XemVanBan({
+  nguon,
+  chiTiet,
+  onKhongMoDuoc,
+}: {
+  nguon: NguonXem;
+  chiTiet: ChiTietTrichDan;
+  onKhongMoDuoc: () => void;
+}) {
   const [text, setText] = useState<string | null>(null);
-  const [loi, setLoi] = useState(false);
-  const { t } = useNgonNgu();
 
   useEffect(() => {
     let huy = false;
@@ -270,46 +277,72 @@ function XemVanBan({ nguon, chiTiet }: { nguon: NguonXem; chiTiet: ChiTietTrichD
         if (!huy) setText(d.full_text);
       })
       .catch(() => {
-        if (!huy) setLoi(true);
+        if (!huy) onKhongMoDuoc();
       });
     return () => {
       huy = true;
     };
-  }, [nguon, chiTiet.source.id]);
+  }, [nguon, chiTiet.source.id, onKhongMoDuoc]);
+
+  const phan = useMemo(() => {
+    if (text === null) return null;
+    const dau =
+      chiTiet.char_start === 0
+        ? 0
+        : text.lastIndexOf("\n", chiTiet.char_start - 1) + 1;
+    const sauDo = text.indexOf("\n", chiTiet.char_end);
+    const cuoi = sauDo === -1 ? text.length : sauDo;
+    return {
+      truoc: text.slice(0, dau),
+      giua: text.slice(dau, cuoi),
+      sau: text.slice(cuoi),
+    };
+  }, [text, chiTiet.char_start, chiTiet.char_end]);
 
   useEffect(() => {
-    if (text) {
+    if (phan) {
       document
         .getElementById("doan-duoc-trich")
         ?.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-  }, [text]);
+  }, [phan]);
 
-  if (loi)
-    return <p className="p-4 text-sm text-canh-bao">{t("xem.khongTaiDuocNoiDung")}</p>;
-  if (text === null) {
+  if (phan === null) {
     return (
-      <div className="space-y-2 p-4">
-        {Array.from({ length: 8 }, (_, i) => (
-          <div key={i} className="h-3 animate-pulse rounded bg-vien" />
+      <div className="space-y-2.5 p-4">
+        {Array.from({ length: 10 }, (_, i) => (
+          <div
+            key={i}
+            className="h-3 animate-pulse rounded bg-vien"
+            style={{ width: `${70 + ((i * 13) % 30)}%` }}
+          />
         ))}
       </div>
     );
   }
 
-  const truoc = text.slice(0, chiTiet.char_start);
-  const giua = text.slice(chiTiet.char_start, chiTiet.char_end);
-  const sau = text.slice(chiTiet.char_end);
-
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <pre className="whitespace-pre-wrap text-[13px] leading-relaxed">
-        {truoc}
-        <mark id="doan-duoc-trich" className="to-sang">
-          {giua}
-        </mark>
-        {sau}
-      </pre>
+    <div className="h-full overflow-y-auto px-4 py-4">
+      <Md text={phan.truoc} />
+      <div id="doan-duoc-trich" className="khoi-to-sang">
+        <Md text={phan.giua} />
+      </div>
+      <Md text={phan.sau} />
+    </div>
+  );
+}
+
+/**
+ * Một mảnh Markdown của tài liệu nguồn.
+ *
+ * Không có `rehype-raw`, nên HTML thô nằm trong tài liệu người dùng tải lên
+ * được hiển thị như chữ chứ không chạy — cùng lý do với `VanBanTraLoi`.
+ */
+function Md({ text }: { text: string }) {
+  if (!text.trim()) return null;
+  return (
+    <div className="prose-tra-loi prose-tai-lieu">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
   );
 }

@@ -148,8 +148,6 @@ export const VI = {
 
   // ── Cột tài liệu ───────────────────────────────────
   "xem.doanTrichDan": "Đoạn được trích dẫn",
-  "xem.trongTaiLieu": "Trong tài liệu",
-  "xem.chiDoanTrich": "Chỉ đoạn trích",
   "xem.veDoanTrich": "Về đoạn trích",
   "xem.chuaChon": "Chưa chọn trích dẫn nào",
   "xem.khongRoTrang": "Không rõ trang",
@@ -162,7 +160,8 @@ export const VI = {
   "xem.vuaBeNgang": "Vừa bề ngang",
   "xem.khongMoDuoc": "Không mở được tệp gốc của tài liệu này.",
   "xem.khongDocDuocPdf": "Tệp PDF này không đọc được.",
-  "xem.khongTaiDuocNoiDung": "Không tải được nội dung tài liệu.",
+  "xem.khongMoDuocDungDoan":
+    "Không mở được tệp gốc, nên đây là nguyên văn đoạn được trích thay vì trang tài liệu.",
   "xem.khongTaiDuocTrichDan":
     "Không tải được đoạn trích dẫn. Nguồn có thể đã bị xoá.",
 
@@ -405,8 +404,6 @@ export const EN: Partial<Record<Khoa, string>> = {
   "buoc.calling_external": "asking the external service",
 
   "xem.doanTrichDan": "Cited passage",
-  "xem.trongTaiLieu": "In document",
-  "xem.chiDoanTrich": "Passage only",
   "xem.veDoanTrich": "Back to passage",
   "xem.chuaChon": "No citation selected",
   "xem.khongRoTrang": "Page unknown",
@@ -419,7 +416,8 @@ export const EN: Partial<Record<Khoa, string>> = {
   "xem.vuaBeNgang": "Fit width",
   "xem.khongMoDuoc": "Could not open the original file.",
   "xem.khongDocDuocPdf": "This PDF could not be read.",
-  "xem.khongTaiDuocNoiDung": "Could not load the document content.",
+  "xem.khongMoDuocDungDoan":
+    "The original file could not be opened, so this is the cited passage itself rather than the page it came from.",
   "xem.khongTaiDuocTrichDan":
     "Could not load the cited passage. The source may have been deleted.",
 

@@ -51,6 +51,7 @@ export function XemPdf({
   sourceId,
   trang,
   hop,
+  onKhongMoDuoc,
 }: {
   nguon: NguonXem;
   sourceId: string;
@@ -58,6 +59,12 @@ export function XemPdf({
   trang: number | null;
   /** Vùng cần tô sáng, theo hệ toạ độ trang PDF. */
   hop: HopToaDo[];
+  /**
+   * Tệp gốc không lấy được. Chỗ gọi lùi về hiện nguyên văn đoạn trích, thay vì
+   * để lại một khung trống kèm một câu báo lỗi — người dùng bấm chip là để đọc
+   * một đoạn văn, và đoạn văn ấy vẫn còn, chỉ là trang giấy quanh nó thì không.
+   */
+  onKhongMoDuoc?: () => void;
 }) {
   const [tep, setTep] = useState<ArrayBuffer | null>(null);
   const [tongTrang, setTongTrang] = useState(0);
@@ -91,14 +98,16 @@ export function XemPdf({
         const buf = await r.arrayBuffer();
         if (!huy) setTep(buf);
       } catch {
-        if (!huy) setLoi(t("xem.khongMoDuoc"));
+        if (huy) return;
+        setLoi(t("xem.khongMoDuoc"));
+        onKhongMoDuoc?.();
       }
     })();
 
     return () => {
       huy = true;
     };
-  }, [nguon, sourceId]);
+  }, [nguon, sourceId, onKhongMoDuoc]);
 
   // ── Mở tài liệu bằng PDF.js ─────────────────────────
   useEffect(() => {

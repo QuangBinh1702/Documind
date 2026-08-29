@@ -528,6 +528,32 @@ p {
   padding: 1px 2px;
 }
 
+/* Cùng việc, nhưng cho một vùng nhiều đoạn văn.
+   `<mark>` bao quanh chữ nhiều dòng vẽ ra một hình chữ nhật cho MỖI dòng, nên
+   một đoạn trích dài biến thành một chồng vệt vàng so le, ngắt quãng ở chỗ
+   xuống dòng — trông như lỗi hiển thị chứ không như một vùng được đánh dấu.
+   Ở mức khối thì nó là một mảng liền, có gờ nhấn bên trái để mắt bắt được ngay
+   khi cuộn qua. */
+.khoi-to-sang {
+  background: var(--to-sang);
+  border-left: 3px solid var(--to-sang-vien);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 14px;
+  margin: 14px 0;
+  scroll-margin-block: 25vh;
+}
+
+/* Toàn văn tài liệu nguồn: cùng bộ chữ với câu trả lời, nhưng nhỏ hơn một bậc
+   và giãn dòng rộng hơn — đây là thứ để đọc lướt tìm ngữ cảnh, trong một cột
+   hẹp, chứ không phải để đọc kỹ từng câu. */
+.prose-tai-lieu {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.prose-tai-lieu + .prose-tai-lieu {
+  margin-top: 0.7em;
+}
+
 /* Khung xương lúc chờ dữ liệu — US-042 AC-2. */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse {
