@@ -79,8 +79,10 @@ SentenceTransformer('BAAI/bge-m3'); CrossEncoder('BAAI/bge-reranker-v2-m3')"
 ## Interface
 
 - Giao diện: `https://$DOMAIN/`. API docs: `https://$DOMAIN/api/docs`.
-- Liên kết chia sẻ: `https://$DOMAIN/xem/<token>` — không cần đăng nhập, bị
-  giới hạn `SHARE_ASKS_PER_HOUR` câu hỏi mỗi giờ cho mỗi liên kết.
+- Liên kết chia sẻ: `https://$DOMAIN/xem/<token>` — mở ra một đoạn hội thoại
+  kèm nguồn của nó. **Đọc** không cần đăng nhập; **hỏi** thì cần, và bị giới
+  hạn `SHARE_ASKS_PER_HOUR` câu hỏi mỗi giờ cho mỗi liên kết (và gấp ba con số
+  đó cho mỗi địa chỉ IP). Xem `docs/decisions/0004-…` về lý do.
 - CLI nạp tài liệu hàng loạt: `docker compose ... exec worker python -m app.cli --help`.
 
 ## Runtime Evidence
@@ -110,11 +112,12 @@ không sao lưu — tải lại được.
 ## Validation
 
 - Bộ test backend (cần hạ tầng dev): `cd backend && pytest -m "not perf and not ml"`
-  — 581 test xanh ở thời điểm viết.
+  — 598 test xanh ở thời điểm viết.
 - Giao diện: `cd frontend && npm run typecheck && npm run lint && npm run build`.
 - Hành trình thật: đăng ký → tạo notebook → tải một PDF → đợi *sẵn sàng* →
-  hỏi → bấm số trích dẫn thấy đúng đoạn được tô sáng → xuất PDF → tạo liên
-  kết chia sẻ và mở ở cửa sổ ẩn danh.
+  hỏi → bấm số trích dẫn thấy đúng trang tài liệu mở ra với đoạn được tô sáng →
+  xuất PDF → tạo liên kết chia sẻ, mở ở cửa sổ ẩn danh và **thấy lại đúng đoạn
+  hội thoại đó**, bấm được chip trích dẫn, còn ô nhập thì mời đăng nhập.
 - Mốc hiệu năng trên máy đích: `pytest -m perf` với `PERF_ASSERTIONS_ENABLED=true`.
 
 ## Unknowns

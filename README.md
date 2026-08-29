@@ -23,7 +23,7 @@ chủ động chọn như vậy.
 | **Chống bịa** | Cổng ngưỡng τ đứng **trước** lượt gọi mô hình; không đủ căn cứ thì từ chối chứ không đoán |
 | **Trích dẫn** | Marker `[n]` → chunk → trang → vùng toạ độ; marker mô hình bịa ra bị loại trước khi hiển thị |
 | **Quyền riêng tư** | Privacy Mode chạy mô hình cục bộ, không có gì rời khỏi máy. Fast Mode gọi dịch vụ ngoài và **nói rõ điều đó** |
-| **Chia sẻ** | Liên kết chỉ đọc: người nhận xem và hỏi được, không sửa hay xoá được gì |
+| **Chia sẻ** | Liên kết chỉ đọc tới **một đoạn hội thoại**, kèm nguồn của nó. Đọc không cần tài khoản; hỏi thêm thì phải đăng nhập, và câu hỏi vào lịch sử của người hỏi |
 | **Xuất** | Hội thoại ra Markdown hoặc PDF, kèm danh mục trích dẫn |
 | **Giao diện** | Tiếng Việt và tiếng Anh, chế độ sáng/tối, ba cột kéo được |
 
