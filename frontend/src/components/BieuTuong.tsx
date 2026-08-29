@@ -155,6 +155,12 @@ export const Bt = {
       <circle cx="19" cy="12" r="1.2" fill="currentColor" />
     </Goc>
   ),
+  but: (p: Props) => (
+    <Goc {...p}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </Goc>
+  ),
   /** Ngắm về đúng đoạn được trích — dùng cho nút quay lại vị trí trích dẫn. */
   ngam: (p: Props) => (
     <Goc {...p}>

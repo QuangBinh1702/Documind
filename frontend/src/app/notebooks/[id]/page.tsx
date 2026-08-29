@@ -30,8 +30,20 @@ import { NutChiaSe } from "@/components/NutChiaSe";
 import { Bt } from "@/components/BieuTuong";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 
-/** Menu "⋯" của notebook: đổi tên, xoá. Việc phá hoại nằm sau một lớp bấm. */
-function MenuNotebook({ onXoa, onDoiTen }: { onXoa: () => void; onDoiTen: () => void }) {
+/**
+ * Menu "⋯" của notebook.
+ *
+ * Chỉ còn **xoá**. Trước đây menu này có thêm một mục *"Bấm để đổi tên"*, mà
+ * bấm vào chỉ làm đúng một việc: mở ô sửa tên — thứ mà bấm thẳng vào tiêu đề đã
+ * làm được rồi. Hai đường dẫn tới cùng một hành động, và đường nằm trong menu
+ * lại là đường khó thấy hơn, nên nó chỉ tổ dạy người dùng đi tìm trong menu một
+ * việc vốn nằm ngay trước mắt. Cách sửa đúng không phải là giữ cả hai mà là làm
+ * cho tiêu đề **trông rõ là bấm được** — xem cây bút ở thanh tiêu đề bên dưới.
+ *
+ * Việc phá hoại thì vẫn nằm sau một lớp bấm, và đó là lý do menu này còn tồn
+ * tại dù chỉ có một mục.
+ */
+function MenuNotebook({ onXoa }: { onXoa: () => void }) {
   const [mo, setMo] = useState(false);
   const { t } = useNgonNgu();
   return (
@@ -50,16 +62,6 @@ function MenuNotebook({ onXoa, onDoiTen }: { onXoa: () => void; onDoiTen: () => 
         <>
           <div className="fixed inset-0 z-20" onClick={() => setMo(false)} />
           <div role="menu" className="menu-noi absolute right-0 z-30 mt-2 w-48 py-1.5">
-            <button
-              role="menuitem"
-              className="muc-menu w-full"
-              onClick={() => {
-                setMo(false);
-                onDoiTen();
-              }}
-            >
-              {t("nb.doiTen")}
-            </button>
             <button
               role="menuitem"
               className="muc-menu w-full text-canh-bao"
@@ -256,12 +258,19 @@ export default function ManHinhNotebook() {
             className="rounded-md border border-nhan bg-the px-2 py-1 font-medium outline-none"
           />
         ) : (
+          // Cây bút hiện khi rê chuột hoặc khi nút được focus bằng bàn phím.
+          // Đây là thứ thay cho mục "đổi tên" đã bỏ khỏi menu "⋯": nó nói rằng
+          // tiêu đề bấm được, ngay tại chỗ hành động sẽ xảy ra.
           <button
             onClick={() => setDangSuaTen(true)}
             title={t("nb.doiTen")}
-            className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-[15px] font-semibold tracking-tight hover:bg-chu/5"
+            className="group flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[15px] font-semibold tracking-tight hover:bg-chu/5"
           >
-            {nb?.title ?? "…"}
+            <span className="truncate">{nb?.title ?? "…"}</span>
+            <Bt.but
+              size={13}
+              className="shrink-0 text-mo opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+            />
           </button>
         )}
 
@@ -287,7 +296,6 @@ export default function ManHinhNotebook() {
                 setThongBao(t("loi.khongLuuDuoc"));
               }
             }}
-            onDoiTen={() => setDangSuaTen(true)}
           />
           <MenuCaiDat email={email} />
         </div>
