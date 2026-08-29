@@ -43,12 +43,21 @@ TITLE_CHARS = 60
 def create_session(
     session: Session,
     notebook_id: uuid.UUID,
+    user_id: uuid.UUID,
     first_question: str,
     scope_source_ids: list[uuid.UUID] | None = None,
 ) -> ChatSession:
+    """Phiên mới trong `notebook_id`, thuộc về `user_id`.
+
+    Hai id này **không** luôn trỏ về cùng một người: ai mở một liên kết chia sẻ
+    rồi hỏi sẽ tạo phiên trong notebook của người khác, và phiên ấy thuộc về họ.
+    """
     title = " ".join(first_question.split())[:TITLE_CHARS] or "Phiên mới"
     obj = ChatSession(
-        notebook_id=notebook_id, title=title, scope_source_ids=scope_source_ids
+        notebook_id=notebook_id,
+        user_id=user_id,
+        title=title,
+        scope_source_ids=scope_source_ids,
     )
     session.add(obj)
     session.flush()

@@ -195,6 +195,7 @@ export function CotHoiDap({
   onChonTrichDan,
   onTaiTaiLieu,
   onThemNguon,
+  onDoiPhien,
 }: {
   nbId: string;
   /** Danh sách nguồn hiện tại — dùng để biết ảnh vừa dán đã xử lý xong chưa. */
@@ -205,6 +206,9 @@ export function CotHoiDap({
   onTaiTaiLieu: () => void;
   /** Báo cho trang cha nạp lại danh sách nguồn và mở lại luồng theo dõi. */
   onThemNguon: () => void;
+  /** Phiên đang mở đã đổi. Nút Chia sẻ trên thanh tiêu đề cần biết để chia sẻ
+   *  đúng đoạn hội thoại người dùng đang nhìn — xem quyết định 0004. */
+  onDoiPhien?: (id: string | null) => void;
 }) {
   const [luot, setLuot] = useState<Luot[]>([]);
   const [cauHoi, setCauHoi] = useState("");
@@ -249,10 +253,14 @@ export function CotHoiDap({
     nguonRef.current = nguon;
   }, [nguon]);
 
-  const datPhien = useCallback((id: string | null) => {
-    phienIdRef.current = id;
-    setPhienId(id);
-  }, []);
+  const datPhien = useCallback(
+    (id: string | null) => {
+      phienIdRef.current = id;
+      setPhienId(id);
+      onDoiPhien?.(id);
+    },
+    [onDoiPhien],
+  );
 
   const taiPhien = useCallback(
     async (id: string) => {

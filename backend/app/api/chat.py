@@ -126,7 +126,14 @@ async def chat_ask(req: AskRequest, user: CurrentUser) -> StreamingResponse:
             chat_session = None
             if req.session_id:
                 chat_session = session.get(ChatSession, req.session_id)
-                if chat_session is None or chat_session.notebook_id != nb.id:
+                # Kiểm cả chủ phiên: từ migration 0004, một notebook chứa được
+                # phiên của nhiều người, nên "phiên nằm trong notebook của tôi"
+                # không còn đồng nghĩa với "phiên của tôi".
+                if (
+                    chat_session is None
+                    or chat_session.notebook_id != nb.id
+                    or chat_session.user_id != user_id
+                ):
                     yield _sse(
                         {"type": "error", "code": "SESSION_NOT_FOUND",
                          "message": "Phiên hội thoại không tồn tại."}
@@ -143,6 +150,7 @@ async def chat_ask(req: AskRequest, user: CurrentUser) -> StreamingResponse:
                     reranker=get_rerank_provider(),
                     llm=get_llm_provider(req.mode),
                     owner_id=user_id,
+                    asker_id=user_id,
                     source_ids=req.source_ids,
                 ):
                     yield _sse(event)
@@ -193,10 +201,16 @@ async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> Streamin
             chat_session = None
             if req.session_id:
                 chat_session = session.get(ChatSession, req.session_id)
-                if chat_session is None or chat_session.notebook_id != nb.id:
+                if (
+                    chat_session is None
+                    or chat_session.notebook_id != nb.id
+                    or chat_session.user_id != user_id
+                ):
                     chat_session = None
             if chat_session is None:
-                chat_session = chat_repo.create_session(session, nb.id, req.question)
+                chat_session = chat_repo.create_session(
+                    session, nb.id, user_id, req.question
+                )
                 yield _sse({"type": "session", "session_id": str(chat_session.id),
                             "title": chat_session.title})
 
@@ -229,13 +243,15 @@ async def chat_ask_external(req: ExternalRequest, user: CurrentUser) -> Streamin
 def _phien_cua_toi(session, session_id: uuid.UUID, user_id: uuid.UUID) -> ChatSession:
     """Phiên hội thoại của chính người đăng nhập, hoặc 404.
 
-    Đi qua `notebooks` để về `users`: `chat_sessions` không mang `user_id`, chủ
-    sở hữu của nó là chủ sở hữu của notebook chứa nó.
+    Lọc thẳng trên `chat_sessions.user_id` chứ **không** đi vòng qua notebook.
+    Từ migration 0004, chủ notebook và chủ phiên là hai người khác nhau được:
+    ai mở liên kết chia sẻ rồi hỏi sẽ có phiên riêng nằm trong notebook của
+    người khác. Nối qua `notebooks` sẽ cho chủ notebook đọc những phiên ấy.
     """
     phien = session.scalar(
-        select(ChatSession)
-        .join(Notebook, Notebook.id == ChatSession.notebook_id)
-        .where(ChatSession.id == session_id, Notebook.user_id == user_id)
+        select(ChatSession).where(
+            ChatSession.id == session_id, ChatSession.user_id == user_id
+        )
     )
     if phien is None:
         raise HTTPException(404, "Không tìm thấy phiên hội thoại.")
@@ -281,7 +297,12 @@ def list_sessions(
     _notebook_cua(session, notebook_id, user.id)
     sessions = session.scalars(
         select(ChatSession)
-        .where(ChatSession.notebook_id == notebook_id)
+        .where(
+            ChatSession.notebook_id == notebook_id,
+            # Notebook của tôi vẫn có thể chứa phiên của người khác, nếu tôi đã
+            # chia sẻ nó và họ đăng nhập rồi hỏi — xem migration 0004.
+            ChatSession.user_id == user.id,
+        )
         .order_by(ChatSession.updated_at.desc())
     ).all()
     return [

@@ -168,19 +168,27 @@ export const VI = {
 
   // ── Chia sẻ ────────────────────────────────────────
   "chiaSe.nut": "Chia sẻ",
-  "chiaSe.tieuDe": "Chia sẻ chỉ đọc",
+  "chiaSe.tieuDe": "Chia sẻ đoạn hội thoại này",
+  "chiaSe.chuaCoHoiThoai":
+    "Hãy hỏi một câu trước đã. Liên kết chia sẻ mang theo đúng đoạn hội thoại đang mở, nên phải có gì đó để gửi đi.",
   "chiaSe.chuaCoMoTa":
-    "Tạo một liên kết để người khác đọc tài liệu và hỏi đáp trong notebook này. Thu hồi được bất cứ lúc nào.",
+    "Tạo một liên kết để người khác đọc đúng đoạn hội thoại này cùng các tài liệu nguồn của nó. Những hội thoại khác trong notebook vẫn riêng tư, và bạn thu hồi được bất cứ lúc nào.",
   "chiaSe.daCoMoTa":
-    "Ai có liên kết này đều xem tài liệu và hỏi đáp được, kể cả khi chưa đăng nhập. Họ không sửa hay xoá được gì.",
+    "Ai có liên kết này đều đọc được đoạn hội thoại và mở được tài liệu nguồn, kể cả khi chưa đăng nhập. Họ không sửa hay xoá được gì.",
   "chiaSe.tao": "Tạo liên kết",
   "chiaSe.chep": "Chép liên kết",
   "chiaSe.daChep": "Đã chép",
   "chiaSe.thuHoi": "Thu hồi",
-  "chiaSe.hanMuc": "Lượt hỏi của người xem tính vào hạn mức của bạn.",
+  "chiaSe.muonHoiPhaiDangNhap":
+    "Muốn hỏi thêm thì người xem phải đăng nhập, và câu hỏi của họ vào lịch sử của chính họ.",
   "chiaSe.chiDoc": "chỉ đọc",
   "chiaSe.hetHieuLuc": "Liên kết này không tồn tại hoặc đã bị thu hồi.",
   "chiaSe.xinLienKetMoi": "Hỏi người đã gửi liên kết để nhận một liên kết mới.",
+  "chiaSe.dangNhapDeHoi": "Đăng nhập để hỏi tiếp",
+  "chiaSe.dangNhapMoTa":
+    "Bạn đang đọc một đoạn hội thoại được chia sẻ. Đăng nhập để hỏi thêm về chính những tài liệu này — câu hỏi của bạn sẽ nằm trong lịch sử của bạn.",
+  "chiaSe.hoiThemCuaToi": "Bạn đã hỏi thêm",
+  "chiaSe.hoiThoaiGoc": "Đoạn hội thoại được chia sẻ",
 
   // ── Thống kê ───────────────────────────────────────
   "tk.tieuDe": "Số liệu hệ thống",
@@ -416,19 +424,27 @@ export const EN: Partial<Record<Khoa, string>> = {
     "Could not load the cited passage. The source may have been deleted.",
 
   "chiaSe.nut": "Share",
-  "chiaSe.tieuDe": "Read-only sharing",
+  "chiaSe.tieuDe": "Share this conversation",
+  "chiaSe.chuaCoHoiThoai":
+    "Ask something first. A share link carries the conversation you have open, so there has to be one to send.",
   "chiaSe.chuaCoMoTa":
-    "Create a link so others can read the documents and ask questions in this notebook. You can revoke it at any time.",
+    "Create a link so others can read this exact conversation along with the sources behind it. Your other conversations in this notebook stay private, and you can revoke the link at any time.",
   "chiaSe.daCoMoTa":
-    "Anyone with this link can read the documents and ask questions, even without signing in. They cannot change or delete anything.",
+    "Anyone with this link can read the conversation and open the source documents, even without signing in. They cannot change or delete anything.",
   "chiaSe.tao": "Create link",
   "chiaSe.chep": "Copy link",
   "chiaSe.daChep": "Copied",
   "chiaSe.thuHoi": "Revoke",
-  "chiaSe.hanMuc": "Questions asked through this link count against your quota.",
+  "chiaSe.muonHoiPhaiDangNhap":
+    "To ask follow-up questions, viewers must sign in, and their questions go into their own history.",
   "chiaSe.chiDoc": "read-only",
   "chiaSe.hetHieuLuc": "This link does not exist or has been revoked.",
   "chiaSe.xinLienKetMoi": "Ask whoever sent it for a new link.",
+  "chiaSe.dangNhapDeHoi": "Sign in to ask",
+  "chiaSe.dangNhapMoTa":
+    "You are reading a shared conversation. Sign in to ask your own questions about these same documents — they will go into your history.",
+  "chiaSe.hoiThemCuaToi": "Your follow-up questions",
+  "chiaSe.hoiThoaiGoc": "Shared conversation",
 
   "tk.tieuDe": "System statistics",
   "tk.khoTriThuc": "Knowledge base",

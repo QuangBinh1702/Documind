@@ -213,11 +213,11 @@ class _GhiLai:
         )
 
 
-def _phien_co_lich_su(nb_id) -> uuid.UUID:
+def _phien_co_lich_su(nb_id, user_id) -> uuid.UUID:
     """Một phiên đã có một lượt hỏi–đáp về C++."""
     cau_hoi = "viết code tìm số lớn nhất trong 2 số bằng C++"
     with session_scope() as s:
-        phien = repo.create_session(s, nb_id, cau_hoi)
+        phien = repo.create_session(s, nb_id, user_id, cau_hoi)
         repo.save_question(s, phien, cau_hoi)
         s.add(
             ChatMessage(
@@ -240,7 +240,7 @@ async def test_hoi_ngoai_noi_tiep_giu_duoc_mach_hoi_thoai(users, emb) -> None:
     một bài toán khác hẳn.
     """
     user_id, nb_id = users[OWNER]
-    phien_id = _phien_co_lich_su(nb_id)
+    phien_id = _phien_co_lich_su(nb_id, user_id)
     llm = _GhiLai()
 
     with session_scope() as s:
@@ -277,7 +277,7 @@ async def test_khoa_cache_la_cau_dung_mot_minh(users, emb) -> None:
     mai — về một chủ đề chẳng liên quan — sẽ khớp vào đúng bản ghi này.
     """
     user_id, nb_id = users[OWNER]
-    phien_id = _phien_co_lich_su(nb_id)
+    phien_id = _phien_co_lich_su(nb_id, user_id)
 
     with session_scope() as s:
         phien = s.get(ChatSession, phien_id)

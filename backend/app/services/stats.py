@@ -76,8 +76,20 @@ class ThongKe:
 
 
 def _cua_toi(user_id: uuid.UUID):
-    """Điều kiện lọc dùng lại — mọi truy vấn đều phải đi qua nó (INV-4)."""
+    """Điều kiện lọc cho dữ liệu treo vào notebook (INV-4)."""
     return Notebook.user_id == user_id
+
+
+def _phien_cua_toi(user_id: uuid.UUID):
+    """Điều kiện lọc cho dữ liệu treo vào phiên hội thoại (INV-4).
+
+    Tách khỏi `_cua_toi` từ migration 0004. Một notebook chứa được phiên của
+    nhiều người — của chủ, và của những ai mở liên kết chia sẻ rồi đăng nhập
+    hỏi. Lọc hội thoại theo chủ notebook sẽ sai theo **cả hai chiều**: thổi
+    phồng số liệu của chủ bằng câu hỏi của người khác, và đánh mất câu hỏi mà
+    chính người dùng đã đặt trong notebook được chia sẻ cho họ.
+    """
+    return ChatSession.user_id == user_id
 
 
 def tinh_thong_ke(session: Session, user_id: uuid.UUID) -> ThongKe:
@@ -144,9 +156,8 @@ def tinh_thong_ke(session: Session, user_id: uuid.UUID) -> ThongKe:
         )
         .select_from(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.session_id)
-        .join(Notebook, Notebook.id == ChatSession.notebook_id)
         .where(
-            _cua_toi(user_id),
+            _phien_cua_toi(user_id),
             ChatMessage.role == "assistant",
             ChatMessage.latency_ms.isnot(None),
             # Câu từ chối không gọi mô hình nào, nên đưa vào sẽ kéo trung bình
@@ -169,8 +180,7 @@ def tinh_thong_ke(session: Session, user_id: uuid.UUID) -> ThongKe:
         select(ChatMessage.answer_kind, func.count())
         .select_from(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.session_id)
-        .join(Notebook, Notebook.id == ChatSession.notebook_id)
-        .where(_cua_toi(user_id), ChatMessage.answer_kind.isnot(None))
+        .where(_phien_cua_toi(user_id), ChatMessage.answer_kind.isnot(None))
         .group_by(ChatMessage.answer_kind)
     ).all():
         tk.phan_bo_answer_kind[str(kind)] = int(n)
@@ -184,9 +194,8 @@ def tinh_thong_ke(session: Session, user_id: uuid.UUID) -> ThongKe:
         )
         .select_from(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.session_id)
-        .join(Notebook, Notebook.id == ChatSession.notebook_id)
         .where(
-            _cua_toi(user_id),
+            _phien_cua_toi(user_id),
             ChatMessage.role == "user",
             ChatMessage.created_at >= tu_ngay,
         )

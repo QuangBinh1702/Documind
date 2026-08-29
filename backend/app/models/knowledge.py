@@ -189,12 +189,17 @@ class SourceChunk(Base):
 
 
 class ShareLink(Base):
-    """Liên kết chia sẻ chỉ đọc của một notebook — US-039.
+    """Liên kết chia sẻ chỉ đọc — US-039.
 
-    Khoá chính là `notebook_id`, nên **một notebook có tối đa một liên kết**.
-    Đó là lựa chọn của lược đồ và nó đúng cho phạm vi đồ án: thu hồi trở thành
-    một thao tác dứt khoát, thay vì phải hỏi "thu hồi cái nào" giữa một danh
-    sách liên kết mà người dùng không nhớ đã phát cho ai.
+    Một liên kết chia sẻ **một phiên hội thoại** (`session_id`), vì đó là thứ
+    người dùng thực sự muốn gửi đi: một đoạn hỏi đáp cụ thể, kèm các nguồn đứng
+    sau nó. `session_id` để trống nghĩa là chia sẻ cả notebook mà không kèm hội
+    thoại nào — hình thái duy nhất tồn tại trước migration 0004, vẫn giữ được
+    cho những liên kết đã phát đi.
+
+    Ràng buộc duy nhất nằm ở hai chỉ mục từng phần chứ không ở khoá chính: tối
+    đa một liên kết cho mỗi phiên, và tối đa một liên kết mức notebook cho mỗi
+    notebook. Xem migration 0004 về lý do không gộp chúng thành một ràng buộc.
 
     Thu hồi bằng cách đặt `revoked_at` chứ không xoá hàng: giữ lại thì còn trả
     lời được câu "liên kết này đã từng tồn tại và bị thu hồi lúc nào".
@@ -202,9 +207,15 @@ class ShareLink(Base):
 
     __tablename__ = "share_links"
 
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     notebook_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE"),
-        primary_key=True,
+        UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE")
+    )
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=True,
     )
     token: Mapped[str] = mapped_column(Text, unique=True)
     created_at: Mapped[datetime] = mapped_column(

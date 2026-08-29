@@ -48,7 +48,9 @@ def _phien(s, email: str = TOI) -> ChatSession:
     """Một phiên có ba lượt: có căn cứ, hỏi ra ngoài, và từ chối."""
     user = repo.get_or_create_user(s, email)
     nb = repo.get_or_create_notebook(s, user, "Quy chế đào tạo")
-    phien = ChatSession(notebook_id=nb.id, title="Hỏi về điều kiện tốt nghiệp")
+    phien = ChatSession(
+        notebook_id=nb.id, user_id=user.id, title="Hỏi về điều kiện tốt nghiệp"
+    )
     s.add(phien)
     s.flush()
 

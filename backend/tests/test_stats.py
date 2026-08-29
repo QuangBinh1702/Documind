@@ -50,7 +50,7 @@ def _du_lieu(s, email: str, *, luot: list[tuple[str, str, int]]) -> uuid.UUID:
     """
     user = repo.get_or_create_user(s, email)
     nb = repo.get_or_create_notebook(s, user, "so-tay")
-    phien = ChatSession(notebook_id=nb.id, title="phiên thử")
+    phien = ChatSession(notebook_id=nb.id, user_id=user.id, title="phiên thử")
     s.add(phien)
     s.flush()
 

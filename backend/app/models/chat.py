@@ -41,6 +41,12 @@ class ChatSession(Base):
     notebook_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("notebooks.id", ondelete="CASCADE")
     )
+    # Chủ phiên KHÔNG suy ra được từ notebook — xem migration 0004. Người mở một
+    # liên kết chia sẻ hỏi trong notebook của người khác, và hội thoại ấy thuộc
+    # về họ. Mọi phép lọc "hội thoại của tôi" phải đi qua cột này.
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE")
+    )
     title: Mapped[str] = mapped_column(Text)
     # US-038 AC-4 — lựa chọn phạm vi được giữ theo từng phiên.
     scope_source_ids: Mapped[list[uuid.UUID] | None] = mapped_column(

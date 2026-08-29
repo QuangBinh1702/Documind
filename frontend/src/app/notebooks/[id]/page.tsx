@@ -92,6 +92,9 @@ export default function ManHinhNotebook() {
   const [thongBao, setThongBao] = useState<string | null>(null);
   const [email, setEmail] = useState<string | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("hoi");
+  // Phiên hội thoại đang mở, do cột giữa báo lên. Nút Chia sẻ cần nó để phát
+  // liên kết trỏ đúng đoạn người dùng đang nhìn — xem quyết định 0004.
+  const [phienId, setPhienId] = useState<string | null>(null);
 
   // Ổn định qua các lượt vẽ: `CotTaiLieu` nhận nguồn này trong mảng phụ thuộc
   // của một hiệu ứng, nên dựng mới mỗi lượt sẽ thành vòng lặp nạp vô tận.
@@ -285,7 +288,7 @@ export default function ManHinhNotebook() {
 
         <div className="ml-auto flex items-center gap-1">
           <NhanQuyenRiengTu />
-          <NutChiaSe nbId={id} />
+          <NutChiaSe nbId={id} phienId={phienId} />
           <MenuNotebook
             onXoa={async () => {
               if (!nb || !confirm(t("nb.xoaHoi", { ten: nb.title }))) return;
@@ -350,6 +353,7 @@ export default function ManHinhNotebook() {
                 // Mở lại luồng ngay để thấy tiến độ của ảnh vừa dán.
                 bao.current();
               }}
+              onDoiPhien={setPhienId}
             />
           }
           xemTaiLieu={<CotTaiLieu nguon={nguonXem} trichDan={trichDan} />}

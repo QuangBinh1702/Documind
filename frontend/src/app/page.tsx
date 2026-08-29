@@ -8,10 +8,15 @@
  *
  * Kiểm tra đầu vào chạy **trước khi gọi API** (US-002 AC-3): gõ sai định dạng
  * email thì thấy lỗi ngay, không phải đợi một vòng mạng để biết.
+ *
+ * Tham số `?tiep=` nói nơi cần quay lại sau khi đăng nhập. Người mở một liên
+ * kết chia sẻ rồi bấm *"Đăng nhập để hỏi"* phải được trả về đúng đoạn hội thoại
+ * họ đang đọc; đưa họ về danh sách notebook là bắt họ tự tìm lại đường link.
+ * Chỉ chấp nhận đường **nội bộ** — xem `noiBo()`.
  */
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, api, token } from "@/lib/api";
 import { MenuCaiDat } from "@/components/MenuCaiDat";
 import { useNgonNgu } from "@/components/NgonNguProvider";
@@ -19,8 +24,30 @@ import { useNgonNgu } from "@/components/NgonNguProvider";
 const EMAIL_HOP_LE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAT_KHAU_TOI_THIEU = 8;
 
+/**
+ * Đích quay lại, nếu nó an toàn.
+ *
+ * Chỉ nhận đường bắt đầu bằng đúng một dấu `/`. Không có phép kiểm này thì
+ * `?tiep=https://…` hay `?tiep=//…` biến trang đăng nhập thành một bàn đạp
+ * chuyển hướng mở: kẻ tấn công gửi một đường link trỏ tới đúng tên miền thật
+ * của ứng dụng, người dùng đăng nhập, rồi bị đẩy sang trang giả của họ.
+ */
+function noiBo(tiep: string | null): string {
+  return tiep && /^\/(?!\/)/.test(tiep) ? tiep : "/notebooks";
+}
+
 export default function TrangDangNhap() {
+  // `useSearchParams` bắt buộc nằm trong một biên `Suspense` khi build tĩnh.
+  return (
+    <Suspense fallback={null}>
+      <FormDangNhap />
+    </Suspense>
+  );
+}
+
+function FormDangNhap() {
   const router = useRouter();
+  const tiep = noiBo(useSearchParams().get("tiep"));
   const [dangKy, setDangKy] = useState(false);
   const [email, setEmail] = useState("");
   const [matKhau, setMatKhau] = useState("");
@@ -37,12 +64,12 @@ export default function TrangDangNhap() {
     }
     api
       .toiLaAi()
-      .then(() => router.replace("/notebooks"))
+      .then(() => router.replace(tiep))
       .catch(() => {
         token.xoa();
         setDangKiemTra(false);
       });
-  }, [router]);
+  }, [router, tiep]);
 
   const loiEmail =
     email && !EMAIL_HOP_LE.test(email) ? t("auth.emailSai") : null;
@@ -61,7 +88,7 @@ export default function TrangDangNhap() {
     try {
       const cap = await (dangKy ? api.dangKy : api.dangNhap)(email, matKhau);
       token.luu(cap);
-      router.replace("/notebooks");
+      router.replace(tiep);
     } catch (err) {
       setLoi(err instanceof ApiError ? err.message : t("auth.khongKetNoi"));
       setDangGui(false);

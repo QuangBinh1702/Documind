@@ -205,6 +205,8 @@ export type LienKetChiaSe = {
   token: string;
   duong_dan: string;
   con_hieu_luc: boolean;
+  /** Phiên được chia sẻ. `null` là liên kết mức notebook, không kèm hội thoại. */
+  session_id: string | null;
 };
 
 export type PhienHoiThoai = {
@@ -230,6 +232,9 @@ export type TinNhan = {
   }[];
 };
 
+/** Tin nhắn nhìn từ phía người xem — không kèm chi tiết vận hành. */
+export type TinNhanChiaSe = Omit<TinNhan, "model_used" | "latency_ms">;
+
 export type NotebookChiaSe = {
   title: string;
   nguon: {
@@ -239,6 +244,9 @@ export type NotebookChiaSe = {
     page_count: number | null;
     status: string;
   }[];
+  phien_id: string | null;
+  phien_tieu_de: string | null;
+  tin_nhan: TinNhanChiaSe[];
 };
 
 // ── Các lời gọi cụ thể ─────────────────────────────────
@@ -326,14 +334,24 @@ export const api = {
 
   thongKe: () => goi<ThongKe>("/api/stats"),
 
-  lienKetChiaSe: (nbId: string) =>
-    goi<LienKetChiaSe | null>(`/api/notebooks/${nbId}/share`),
+  // Ba lời gọi dưới đây mang `session_id` vì một notebook có nhiều hội thoại,
+  // và mỗi hội thoại có liên kết riêng — xem quyết định 0004.
+  lienKetChiaSe: (nbId: string, phienId: string | null) =>
+    goi<LienKetChiaSe | null>(
+      `/api/notebooks/${nbId}/share${phienId ? `?session_id=${phienId}` : ""}`,
+    ),
 
-  taoLienKetChiaSe: (nbId: string) =>
-    goi<LienKetChiaSe>(`/api/notebooks/${nbId}/share`, { method: "POST" }),
+  taoLienKetChiaSe: (nbId: string, phienId: string | null) =>
+    goi<LienKetChiaSe>(`/api/notebooks/${nbId}/share`, {
+      method: "POST",
+      body: JSON.stringify({ session_id: phienId }),
+    }),
 
-  thuHoiLienKetChiaSe: (nbId: string) =>
-    goi<void>(`/api/notebooks/${nbId}/share`, { method: "DELETE" }),
+  thuHoiLienKetChiaSe: (nbId: string, phienId: string | null) =>
+    goi<void>(
+      `/api/notebooks/${nbId}/share${phienId ? `?session_id=${phienId}` : ""}`,
+      { method: "DELETE" },
+    ),
 
   /** Đường của người xem — cố ý KHÔNG đi qua `goi()` vì nó không cần token. */
   notebookChiaSe: (token: string) =>
@@ -341,6 +359,13 @@ export const api = {
       if (!r.ok) throw new ApiError(r.status, "Liên kết không còn hiệu lực.");
       return (await r.json()) as NotebookChiaSe;
     }),
+
+  /** Hội thoại của chính người đang đăng nhập, đặt ra qua liên kết này. */
+  phienCuaToiTrongChiaSe: (token: string) =>
+    goi<PhienHoiThoai[]>(`/api/shared/${token}/my-sessions`),
+
+  tinNhanCuaToiTrongChiaSe: (token: string, phienId: string) =>
+    goi<TinNhanChiaSe[]>(`/api/shared/${token}/my-sessions/${phienId}/messages`),
 
   trichDan: (chunkId: number) =>
     goi<{

@@ -354,10 +354,12 @@ def _ngat_dong(doan: str, chu, co: float, rong: float) -> list[str]:
 def xuat(session: Session, phien_id: uuid.UUID, user_id: uuid.UUID,
          dinh_dang: DinhDang) -> KetQuaXuat:
     """Xuất phiên của chính người đăng nhập. Ném `LookupError` nếu không phải."""
+    # Lọc trên `chat_sessions.user_id`, không nối qua notebook: chủ notebook
+    # không phải chủ mọi phiên trong đó — xem migration 0004.
     phien = session.scalar(
-        select(ChatSession)
-        .join(Notebook, Notebook.id == ChatSession.notebook_id)
-        .where(ChatSession.id == phien_id, Notebook.user_id == user_id)
+        select(ChatSession).where(
+            ChatSession.id == phien_id, ChatSession.user_id == user_id
+        )
     )
     if phien is None:
         raise LookupError("Không tìm thấy phiên hội thoại.")

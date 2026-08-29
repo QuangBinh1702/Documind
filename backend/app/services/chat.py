@@ -47,16 +47,23 @@ async def ask(
     reranker: RerankProvider,
     llm: LLMProvider,
     owner_id: uuid.UUID | None = None,
+    asker_id: uuid.UUID | None = None,
     source_ids: list[uuid.UUID] | None = None,
     luu_lich_su: bool = True,
 ) -> AsyncIterator[dict[str, Any]]:
     """Chạy một lượt hỏi đáp đầy đủ, phát sự kiện cho giao diện.
 
-    `luu_lich_su=False` dành cho đường chia sẻ chỉ đọc (US-039): người xem hỏi
-    được, nhưng câu hỏi của họ **không** đi vào lịch sử hội thoại của chủ sở
-    hữu. Chia sẻ tài liệu không đồng nghĩa với đồng ý cho câu hỏi của người lạ
-    nằm lẫn trong lịch sử của mình — và cũng không có lượt nào trước đó để gộp
-    ngữ cảnh, nên bước condense bị bỏ qua luôn.
+    `owner_id` và `asker_id` trả lời hai câu hỏi khác nhau, và đường chia sẻ là
+    chỗ chúng tách đôi:
+
+    * `owner_id` — **được đọc tài liệu của ai**. Đây là hàng rào của tầng truy
+      xuất (`repositories/retrieval.py`), và nó luôn là chủ sở hữu notebook.
+    * `asker_id` — **hội thoại này thuộc về ai**. Người mở một liên kết chia sẻ
+      rồi hỏi sẽ đọc tài liệu của chủ notebook, nhưng phiên sinh ra là của họ.
+
+    `luu_lich_su=False` chạy một lượt không để lại dấu vết nào: không phiên,
+    không tin nhắn, và cũng không có lượt nào trước đó để gộp nên bước condense
+    bị bỏ qua luôn.
     """
     if not luu_lich_su:
         async for event in answer_question(
@@ -73,7 +80,11 @@ async def ask(
         return
 
     if chat_session is None:
-        chat_session = repo.create_session(session, notebook_id, question, source_ids)
+        if asker_id is None:
+            raise ValueError("Lưu lịch sử thì phải biết phiên mới thuộc về ai.")
+        chat_session = repo.create_session(
+            session, notebook_id, asker_id, question, source_ids
+        )
         yield {
             "type": "session",
             "session_id": str(chat_session.id),

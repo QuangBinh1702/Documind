@@ -93,8 +93,20 @@ def chu(khach: TestClient) -> tuple[TestClient, dict, str]:
     return c, headers, nb
 
 
-def _chia_se(c: TestClient, headers: dict, nb: str) -> str:
-    r = c.post(f"/api/notebooks/{nb}/share", headers=headers)
+@pytest.fixture
+def nguoi_xem(khach: TestClient) -> dict:
+    """Một tài khoản khác chủ sở hữu — người nhận liên kết, đã đăng nhập."""
+    r = khach.post("/api/auth/register", json={"email": NGUOI_LA, "password": MAT_KHAU})
+    assert r.status_code == 201, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def _chia_se(c: TestClient, headers: dict, nb: str, phien: str | None = None) -> str:
+    r = c.post(
+        f"/api/notebooks/{nb}/share",
+        headers=headers,
+        json={"session_id": phien} if phien else None,
+    )
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
@@ -103,6 +115,17 @@ def _events(response) -> list[dict]:
     return [
         json.loads(b[6:]) for b in response.text.split("\n\n") if b.startswith("data: ")
     ]
+
+
+def _hoi(c: TestClient, headers: dict, nb: str, cau_hoi: str) -> str:
+    """Một lượt hỏi của chủ sở hữu. Trả về id phiên vừa sinh ra."""
+    r = c.post(
+        "/api/chat/ask",
+        json={"question": cau_hoi, "notebook_id": nb},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    return next(e for e in _events(r) if e["type"] == "session")["session_id"]
 
 
 # ══════════════════════════════════════════════════════
@@ -188,16 +211,92 @@ def test_nguoi_xem_khong_thay_chi_tiet_ky_thuat(chu, khach) -> None:
         assert cam not in nguon, f"lộ trường {cam} cho người xem"
 
 
-def test_nguoi_xem_hoi_duoc_va_co_trich_dan(chu, khach) -> None:
+def test_nguoi_xem_doc_duoc_doan_chat_da_chia_se(chu, khach) -> None:
+    """Lý do tồn tại của liên kết: người nhận thấy đúng đoạn hỏi đáp đã gửi.
+
+    Đây từng là ca hỏng nặng nhất của tính năng — liên kết mở ra một màn hình
+    trống, và không có gì trên giao diện nói được vì sao.
+    """
+    c, headers, nb = chu
+    phien = _hoi(c, headers, nb, "nghỉ học tạm thời tối đa bao lâu")
+    token = _chia_se(c, headers, nb, phien)
+
+    d = khach.get(f"/api/shared/{token}").json()
+    assert d["phien_id"] == phien
+    assert d["phien_tieu_de"]
+
+    vai = [m["role"] for m in d["tin_nhan"]]
+    assert vai == ["user", "assistant"], vai
+    assert d["tin_nhan"][0]["content"] == "nghỉ học tạm thời tối đa bao lâu"
+    assert d["tin_nhan"][1]["content"]
+
+
+def test_chip_trich_dan_van_bam_duoc_qua_lien_ket(chu, khach) -> None:
+    """US-018 AC-3 nhìn từ phía người xem: chip phải mở ra được đoạn gốc."""
+    c, headers, nb = chu
+    phien = _hoi(c, headers, nb, "nghỉ học tạm thời tối đa bao lâu")
+    token = _chia_se(c, headers, nb, phien)
+
+    tra_loi = khach.get(f"/api/shared/{token}").json()["tin_nhan"][1]
+    assert tra_loi["citations"], "câu trả lời có căn cứ mà không kèm trích dẫn nào"
+
+    chunk_id = tra_loi["citations"][0]["chunk_id"]
+    chi_tiet = khach.get(f"/api/shared/{token}/citations/{chunk_id}")
+    assert chi_tiet.status_code == 200
+    assert chi_tiet.json()["content"]
+
+
+def test_lien_ket_chi_mo_dung_phien_da_chia_se(chu, khach) -> None:
+    """Chia sẻ một hội thoại không được kéo theo những hội thoại khác."""
+    c, headers, nb = chu
+    phien = _hoi(c, headers, nb, "thời gian đào tạo")
+    _hoi(c, headers, nb, "nghỉ học tạm thời tối đa bao lâu")
+    token = _chia_se(c, headers, nb, phien)
+
+    tin_nhan = khach.get(f"/api/shared/{token}").json()["tin_nhan"]
+    assert [m["content"] for m in tin_nhan if m["role"] == "user"] == [
+        "thời gian đào tạo"
+    ]
+
+
+def test_khong_chia_se_duoc_phien_cua_notebook_khac(chu) -> None:
+    """Thiếu phép kiểm này, một `session_id` đoán được là đọc được mọi hội thoại."""
+    c, headers, nb = chu
+    nb2 = c.post("/api/notebooks", json={"title": "Riêng tư"}, headers=headers).json()["id"]
+    c.post(
+        f"/api/notebooks/{nb2}/sources",
+        headers=headers,
+        files={"file": ("rieng.txt", io.BytesIO(TAI_LIEU.encode()), "text/plain")},
+    )
+    phien_rieng = _hoi(c, headers, nb2, "thời gian đào tạo")
+
+    r = c.post(
+        f"/api/notebooks/{nb}/share",
+        headers=headers,
+        json={"session_id": phien_rieng},
+    )
+    assert r.status_code == 404, r.text
+
+
+def test_moi_phien_co_lien_ket_rieng(chu) -> None:
+    """Một notebook nhiều hội thoại thì mỗi hội thoại một token."""
+    c, headers, nb = chu
+    a = _chia_se(c, headers, nb, _hoi(c, headers, nb, "thời gian đào tạo"))
+    b = _chia_se(c, headers, nb, _hoi(c, headers, nb, "nghỉ học tạm thời"))
+    assert a != b
+
+
+def test_nguoi_xem_da_dang_nhap_hoi_duoc(chu, khach, nguoi_xem) -> None:
     """AC-2 — hỏi được là điểm khác biệt so với "gửi một tệp PDF"."""
     c, headers, nb = chu
-    token = _chia_se(c, headers, nb)
+    token = _chia_se(c, headers, nb, _hoi(c, headers, nb, "thời gian đào tạo"))
 
     r = khach.post(
         f"/api/shared/{token}/ask",
         json={"question": "nghỉ học tạm thời tối đa bao lâu"},
+        headers=nguoi_xem,
     )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     events = _events(r)
     assert any(e["type"] == "token" for e in events)
 
@@ -207,15 +306,104 @@ def test_nguoi_xem_hoi_duoc_va_co_trich_dan(chu, khach) -> None:
     assert chi_tiet.json()["content"]
 
 
-def test_cau_hoi_cua_nguoi_xem_khong_vao_lich_su_chu_so_huu(chu, khach) -> None:
-    """Chia sẻ tài liệu không đồng nghĩa với cho người lạ ghi vào lịch sử của mình."""
+def test_chua_dang_nhap_thi_doc_duoc_nhung_khong_hoi_duoc(chu, khach) -> None:
+    """Ranh giới của tính năng, trong một test.
+
+    Đọc không cần tài khoản — đó là thứ làm liên kết có ích. Hỏi thì cần, vì
+    câu hỏi phải thuộc về một ai đó và tiêu hạn mức của người ấy.
+    """
     c, headers, nb = chu
-    token = _chia_se(c, headers, nb)
+    token = _chia_se(c, headers, nb, _hoi(c, headers, nb, "thời gian đào tạo"))
 
-    khach.post(f"/api/shared/{token}/ask", json={"question": "thời gian đào tạo"})
+    assert khach.get(f"/api/shared/{token}").status_code == 200
+    r = khach.post(f"/api/shared/{token}/ask", json={"question": "nghỉ học"})
+    assert r.status_code == 401, r.text
 
-    phien = c.get(f"/api/sessions?notebook_id={nb}", headers=headers).json()
-    assert phien == [], "hội thoại của người xem không được lưu"
+
+def test_cau_hoi_cua_nguoi_xem_khong_vao_lich_su_chu_so_huu(chu, khach, nguoi_xem) -> None:
+    """Chia sẻ tài liệu không đồng nghĩa với cho người khác ghi vào lịch sử của mình."""
+    c, headers, nb = chu
+    cua_chu = _hoi(c, headers, nb, "thời gian đào tạo")
+    token = _chia_se(c, headers, nb, cua_chu)
+
+    khach.post(
+        f"/api/shared/{token}/ask",
+        json={"question": "nghỉ học tạm thời tối đa bao lâu"},
+        headers=nguoi_xem,
+    )
+
+    cua_toi = c.get(f"/api/sessions?notebook_id={nb}", headers=headers).json()
+    assert [p["id"] for p in cua_toi] == [cua_chu], (
+        "hội thoại của người xem lọt vào danh sách phiên của chủ notebook"
+    )
+
+
+def test_cau_hoi_cua_nguoi_xem_vao_lich_su_cua_chinh_ho(chu, khach, nguoi_xem) -> None:
+    """Người xem quay lại thì đọc lại được thứ chính mình đã hỏi."""
+    c, headers, nb = chu
+    token = _chia_se(c, headers, nb, _hoi(c, headers, nb, "thời gian đào tạo"))
+
+    khach.post(
+        f"/api/shared/{token}/ask",
+        json={"question": "nghỉ học tạm thời tối đa bao lâu"},
+        headers=nguoi_xem,
+    )
+
+    phien = khach.get(f"/api/shared/{token}/my-sessions", headers=nguoi_xem).json()
+    assert len(phien) == 1, phien
+
+    tin_nhan = khach.get(
+        f"/api/shared/{token}/my-sessions/{phien[0]['id']}/messages", headers=nguoi_xem
+    ).json()
+    assert tin_nhan[0]["content"] == "nghỉ học tạm thời tối đa bao lâu"
+
+
+def test_nguoi_xem_khong_doc_duoc_phien_cua_nguoi_khac(chu, khach, nguoi_xem) -> None:
+    """Cùng một notebook, hai người — mỗi người chỉ thấy hội thoại của mình."""
+    c, headers, nb = chu
+    cua_chu = _hoi(c, headers, nb, "thời gian đào tạo")
+    token = _chia_se(c, headers, nb, cua_chu)
+
+    assert khach.get(
+        f"/api/shared/{token}/my-sessions", headers=nguoi_xem
+    ).json() == []
+    assert (
+        khach.get(
+            f"/api/shared/{token}/my-sessions/{cua_chu}/messages", headers=nguoi_xem
+        ).status_code
+        == 404
+    )
+
+
+def test_chu_notebook_khong_doc_duoc_phien_cua_nguoi_xem(chu, khach, nguoi_xem) -> None:
+    """Chiều ngược lại, và là chiều dễ bị bỏ quên.
+
+    Chủ notebook sở hữu tài liệu, không sở hữu câu hỏi người khác đặt ra về
+    chúng. Trước migration 0004 điều này không diễn đạt được ở tầng SQL.
+    """
+    c, headers, nb = chu
+    token = _chia_se(c, headers, nb, _hoi(c, headers, nb, "thời gian đào tạo"))
+
+    r = khach.post(
+        f"/api/shared/{token}/ask",
+        json={"question": "nghỉ học tạm thời tối đa bao lâu"},
+        headers=nguoi_xem,
+    )
+    cua_ho = next(e for e in _events(r) if e["type"] == "session")["session_id"]
+
+    assert c.get(f"/api/sessions/{cua_ho}/messages", headers=headers).status_code == 404
+    assert c.get(f"/api/sessions/{cua_ho}/export", headers=headers).status_code == 404
+
+
+def test_nguoi_xem_mo_duoc_tai_lieu_de_kiem_chung(chu, khach) -> None:
+    """US-015 — trích dẫn chỉ kiểm chứng được khi mở ra được ngữ cảnh quanh nó."""
+    c, headers, nb = chu
+    token = _chia_se(c, headers, nb, _hoi(c, headers, nb, "thời gian đào tạo"))
+    src = khach.get(f"/api/shared/{token}").json()["nguon"][0]["id"]
+
+    r = khach.get(f"/api/shared/{token}/sources/{src}/text")
+    assert r.status_code == 200, r.text
+    assert "Nghỉ học tạm thời" in r.json()["full_text"]
 
 
 # ══════════════════════════════════════════════════════
@@ -261,3 +449,8 @@ def test_lien_ket_khong_mo_duoc_doan_cua_notebook_khac(chu, khach) -> None:
     assert (
         khach.get(f"/api/shared/{token}/citations/{chunk_rieng}").status_code == 404
     ), "liên kết của notebook này không được mở đoạn của notebook khác"
+
+    # Và điều đó phải đúng cho cả đường đọc tài liệu, không chỉ đường trích dẫn.
+    src_rieng = c.get(f"/api/notebooks/{nb2}/sources", headers=headers).json()[0]["id"]
+    assert khach.get(f"/api/shared/{token}/sources/{src_rieng}/text").status_code == 404
+    assert khach.get(f"/api/shared/{token}/sources/{src_rieng}/file").status_code == 404
