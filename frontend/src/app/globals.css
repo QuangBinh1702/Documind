@@ -223,6 +223,20 @@ p {
   font-weight: 600;
   transition: transform 120ms ease, filter 120ms ease;
 }
+/* Nút chính khi nó nằm TRONG một khung `.o-nhap`, cạnh ô nhập.
+ *
+ * `.nut-chinh` viết ngoài mọi `@layer` nên padding của nó thắng các utility
+ * `py-*` của Tailwind: gắn `py-1.5` lên nút không ăn gì cả, nút vẫn cao gần
+ * bằng cả khung và trông như đang phình ra khỏi mép. Bỏ hẳn padding dọc rồi
+ * để flexbox kéo nút cao bằng đúng ô nhập bên cạnh; khoảng đệm quanh nút khi
+ * ấy do padding của khung lo, nên nó đều nhau ở cả bốn phía. */
+.nut-chinh.trong-khung {
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-inline: 16px;
+  border-radius: 10px;
+}
+
 .nut-chinh:hover:not(:disabled) {
   filter: brightness(1.08);
 }

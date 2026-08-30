@@ -73,14 +73,16 @@ export default function TrangNotebook() {
         <MenuCaiDat email={email} />
       </header>
 
-      <form onSubmit={tao} className="o-nhap mt-7 flex items-center gap-2 pr-1.5">
+      {/* `items-stretch`: nút cao bằng đúng ô nhập, và padding của khung là
+          khoảng đệm duy nhất quanh nó — đều nhau bốn phía. */}
+      <form onSubmit={tao} className="o-nhap mt-7 flex items-stretch gap-2 p-1.5">
         <input
           value={tieuDe}
           onChange={(e) => setTieuDe(e.target.value)}
           placeholder={t("nb.tenMoi")}
-          className="flex-1 bg-transparent px-4 py-2.5 text-[15px] outline-none placeholder:text-mo/70"
+          className="flex-1 bg-transparent px-2.5 py-2 text-[15px] outline-none placeholder:text-mo/70"
         />
-        <button type="submit" disabled={!tieuDe.trim()} className="nut-chinh py-1.5">
+        <button type="submit" disabled={!tieuDe.trim()} className="nut-chinh trong-khung">
           {t("nb.tao")}
         </button>
       </form>
