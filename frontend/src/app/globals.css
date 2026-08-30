@@ -295,8 +295,12 @@ p {
 /* Cả khung đã sáng lên khi con trỏ vào ô nhập, nên vòng focus mặc định chỉ vẽ
    thêm một hình chữ nhật thứ hai nằm lồng bên trong. Trông rõ nhất khi có ảnh
    đính kèm: khung ngoài cao lên và hai đường viền tách hẳn ra thành hai hộp.
-   Bỏ vòng trong; dấu hiệu focus vẫn còn nguyên ở khung ngoài. */
-.o-nhap textarea:focus-visible {
+   Bỏ vòng trong; dấu hiệu focus vẫn còn nguyên ở khung ngoài.
+
+   Phải kể cả `input`, không riêng `textarea`: ô đặt tên notebook là một
+   `input`, và ở đó hai hình chữ nhật lồng nhau lộ rõ nhất vì khung chỉ cao
+   bằng đúng một dòng. */
+.o-nhap :is(input, textarea):focus-visible {
   outline: none;
 }
 
