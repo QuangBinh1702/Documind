@@ -9,8 +9,12 @@
  * nên thanh tiêu đề lúc nào cũng đông và không có gì nổi bật. Giờ thanh tiêu đề
  * chỉ giữ thứ thuộc về notebook; mọi tuỳ chọn nằm sau một bánh răng.
  *
- * `taiKhoan=false` cho trang chưa đăng nhập và trang xem chia sẻ: vẫn đổi được
- * ngôn ngữ và giao diện, không có phần tài khoản.
+ * `taiKhoan=false` cho trang xem chia sẻ khi người đọc chưa đăng nhập: vẫn đổi
+ * được ngôn ngữ và giao diện, không có phần tài khoản.
+ *
+ * Trang đăng nhập thì không có nút này. Một bánh răng đứng cạnh ô email đọc ra
+ * thành "cài đặt tài khoản" trong khi người dùng còn chưa có tài khoản nào để
+ * cài, nên nó chỉ làm rối màn hình đầu tiên.
  */
 
 import { useEffect, useRef, useState } from "react";

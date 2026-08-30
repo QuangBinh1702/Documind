@@ -18,7 +18,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, api, token } from "@/lib/api";
-import { MenuCaiDat } from "@/components/MenuCaiDat";
 import { useNgonNgu } from "@/components/NgonNguProvider";
 
 const EMAIL_HOP_LE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -128,10 +127,7 @@ function FormDangNhap() {
 
       <div className="grid place-items-center px-6 py-10">
       <div className="w-full max-w-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">DocuMind</h1>
-          <MenuCaiDat taiKhoan={false} />
-        </div>
+        <h1 className="text-xl font-semibold tracking-tight">DocuMind</h1>
         <p className="mt-1 text-sm text-mo">{t("auth.gioiThieu")}</p>
 
         <form onSubmit={gui} className="mt-8 space-y-4" noValidate>
